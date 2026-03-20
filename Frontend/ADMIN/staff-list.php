@@ -1,7 +1,7 @@
 ﻿<?php
 session_start();
 if (!isset($_SESSION['user'])) {
-  header("Location: ../../Frontend/lockscreen.html"); // Send them back if not logged in
+  header("Location: ../../Frontend/lockscreen.html"); 
   exit();
 }
 ?>
