@@ -25,7 +25,7 @@ if (isset($_POST['save_user'])) {
     $stmt->bind_param("ssss", $name, $email, $hashed_password, $position);
 
     if ($stmt->execute()) {
-        header("Location: ../Frontend/staff-list.php?success=1");
+        header("Location: ../Frontend/ADMIN/staff-list.php");
         exit();
     } else {
         echo "Error: " . $stmt->error;
