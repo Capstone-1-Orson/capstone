@@ -8,3 +8,6 @@ session_destroy();
 header("Location: ../Frontend/lockscreen.html");
 exit();
 ?>
+
+
+ADMIN/staff-list.php"
