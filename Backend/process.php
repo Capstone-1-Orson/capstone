@@ -8,6 +8,7 @@ if (isset($_POST['save_user'])) {
     $email = trim($_POST['email']);
     $password = $_POST['password'];
     $position = trim($_POST['position']);
+    
 
     $hashed_password = password_hash($password, PASSWORD_DEFAULT);
 
@@ -34,4 +35,4 @@ if (isset($_POST['save_user'])) {
     $stmt->close();
     $conn->close();
 }
-?>
+?>  

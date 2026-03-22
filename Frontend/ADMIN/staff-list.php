@@ -244,7 +244,7 @@ if (!isset($_SESSION['user'])) {
                           <td><?php echo $row['id']; ?></td>
                           <td><?php echo $row['name']; ?></td>
                           <td><?php echo $row['email']; ?></td>
-                          <td><?php echo $row['password']; ?></td>
+                          <td>****   </td>
                           <td><?php echo $row['position']; ?></td>
                           <td>
                             <button class="btn btn-sm btn-primary">View</button>
@@ -287,8 +287,11 @@ if (!isset($_SESSION['user'])) {
           </div>
           <div class="form-group">
             <label>Position</label>
-            <input type="text" name="position" class="form-control" required>
-          </div>
+            <!-- Shows "staff" visually but cannot be edited -->
+            <input type="text" class="form-control" value="staff" readonly>
+            <!-- Sends "staff" as the actual form value -->
+            <input type="hidden" name="position" value="staff">
+        </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>

@@ -1,38 +1,32 @@
 <?php
-session_start(); 
+session_start();
 include('conn.php');
 
-if (isset($_POST['pass'])) {
-    
-    $email = "admin";
-    $pass = $_POST['pass'];
-    
-    $sql = "SELECT * FROM users WHERE email='$email' AND password='$pass'";
-    $result = $conn->query($sql);
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-    if ($result->num_rows > 0) {
-        $_SESSION['user'] = $email; 
-        header("Location: ../Frontend/ADMIN/index2.php");
-        
-    } else {
-        echo "Invalid password";
+    $email = "Admin";
+    $pass  = trim($_POST['pass'] ?? '');
+
+    // Input validation
+    if (empty($pass) || strlen($pass) < 8 || strlen($pass) > 72 || !preg_match('/^[\x20-\x7E]+$/', $pass)) {
+        die("Invalid password.");
     }
-}
 
-if (isset($_POST['pass'])) {
-    
-    $email = "admin";
-    $pass = $_POST['pass'];
-    
-    $sql = "SELECT * FROM users WHERE email='$email' AND password='$pass'";
-    $result = $conn->query($sql);
+    $sql = "SELECT password FROM users WHERE email = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("s", $email);
+    $stmt->execute();
+    $stmt->bind_result($db_pass);
+    $stmt->fetch();
+    $stmt->close();
 
-    if ($result->num_rows > 0) {
-        $_SESSION['user'] = $email; 
+    // ✅ Direct plain text comparison
+    if ($db_pass && $pass === $db_pass) {
+        session_regenerate_id(true);
+        $_SESSION['user'] = $email;
         header("Location: ../Frontend/ADMIN/index2.php");
-        
-    } else {
-        echo "Invalid password";
+        exit();
     }
+
+    echo "Invalid password.";
 }
-?>
