@@ -24,6 +24,8 @@ if (!isset($_SESSION['user'])) {
 
     <link rel="stylesheet" href="../plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
     <link rel="stylesheet" href="../dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="../dist/css/empress-cafe-theme.css">
+
 </head>
 <style>
     body,
@@ -75,10 +77,11 @@ if (!isset($_SESSION['user'])) {
 
         <aside class="main-sidebar sidebar-dark-primary elevation-4">
 
-            <a href="index2.php" class="brand-link">
-                <img src="../dist/img/AdminLTELogo.png" class="brand-image img-circle elevation-3">
-                <span class="brand-text font-weight-light">OPERLYTICS</span>
-            </a>
+            <a href="#" class="brand-link">
+        <img src="../dist/img/Empress' Cafe Boracay.jpg" alt="AdminLTE Logo" class="brand-image img-circle elevation-3"
+          style="opacity: .8">
+        <span class="brand-text font-weight-light">Empress' Cafe</span>
+      </a>
 
             <div class="sidebar">
 

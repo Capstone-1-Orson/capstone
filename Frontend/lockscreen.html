@@ -1,68 +1,188 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OPERlYTICS | Lockscreen</title>
+  <title>OPERLYTICS | Lockscreen</title>
 
-  <!-- Google Font: Source Sans Pro -->
-  <link rel="stylesheet"
-    href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
-  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
   <link rel="stylesheet" href="plugins/fontawesome-free/css/all.min.css">
-  <!-- Theme style -->
   <link rel="stylesheet" href="dist/css/adminlte.min.css">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body.lockscreen {
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      background-color: #fdf0f5;
+      background-image:
+        linear-gradient(rgba(212,74,122,0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(212,74,122,0.07) 1px, transparent 1px);
+      background-size: 40px 40px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 2rem 1rem; position: relative; overflow: hidden;
+    }
+    body::before {
+      content: ''; position: fixed;
+      width: 600px; height: 600px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(212,74,122,0.10) 0%, transparent 70%);
+      top: 50%; left: 50%; transform: translate(-50%,-50%); pointer-events: none;
+    }
+
+    .lock-wrap {
+      position: relative; z-index: 10; width: 100%; max-width: 360px;
+      display: flex; flex-direction: column; align-items: center;
+    }
+
+    .brand-name { font-size: 1.15rem; font-weight: 700; letter-spacing: 0.06em; color: #2d1a25; margin-bottom: 1.8rem; }
+    .brand-name span { color: #D44A7A; }
+
+    .lock-avatar {
+      width: 76px; height: 76px; border-radius: 50%;
+      border: 3px solid rgba(212,74,122,0.22);
+      object-fit: cover; margin-bottom: 0.9rem;
+      box-shadow: 0 4px 18px rgba(212,74,122,0.18);
+    }
+    .lock-name { font-size: 1rem; font-weight: 600; color: #2d1a25; margin-bottom: 0.25rem; }
+    .lock-role {
+      font-size: 0.70rem; letter-spacing: 0.15em; text-transform: uppercase;
+      color: rgba(90,30,60,0.38); margin-bottom: 1.8rem;
+    }
+
+    .lock-card {
+      width: 100%; background: #fff;
+      border: 1px solid rgba(212,74,122,0.15); border-radius: 16px;
+      padding: 1.8rem 1.8rem 1.6rem;
+      box-shadow: 0 4px 6px rgba(212,74,122,0.06), 0 20px 40px rgba(212,74,122,0.10);
+    }
+
+    .lock-hint { font-size: 0.80rem; color: rgba(90,30,60,0.42); text-align: center; margin-bottom: 1.2rem; }
+
+    .alert-box {
+      display: none; align-items: center; gap: 9px;
+      background: #fff0f4; border: 1px solid rgba(212,74,122,0.25);
+      border-radius: 10px; padding: 0.65rem 0.9rem;
+      font-size: 0.80rem; color: #b8305e; margin-bottom: 1rem;
+    }
+    .alert-box.show { display: flex; }
+    .alert-box i { flex-shrink: 0; font-size: 12px; }
+
+    .pass-wrap { margin-bottom: 1.2rem; }
+    .pass-wrap input {
+      width: 100%; background: #fdf5f8 !important;
+      border: 1px solid rgba(212,74,122,0.20) !important;
+      border-radius: 10px !important; padding: 0.80rem 1rem !important;
+      font-size: 0.88rem !important; color: #2d1a25 !important;
+      font-family: 'Inter', sans-serif !important; outline: none !important;
+      box-shadow: none !important;
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s !important;
+    }
+    .pass-wrap input::placeholder { color: rgba(180,100,130,0.40) !important; }
+    .pass-wrap input:focus {
+      border-color: #D44A7A !important;
+      box-shadow: 0 0 0 3px rgba(212,74,122,0.12) !important;
+      background: #fff !important;
+    }
+    .pass-wrap input.is-error { border-color: rgba(212,74,122,0.55) !important; }
+
+    .btn-unlock {
+      width: 100%; background: linear-gradient(135deg, #D44A7A 0%, #C11C84 100%);
+      color: #fff; border: none; border-radius: 10px; padding: 0.88rem;
+      font-family: 'Inter', sans-serif; font-size: 0.90rem; font-weight: 600;
+      letter-spacing: 0.04em; cursor: pointer;
+      transition: opacity 0.18s, transform 0.18s, box-shadow 0.18s;
+      box-shadow: 0 4px 18px rgba(212,74,122,0.40);
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn-unlock:hover { opacity: 0.92; transform: translateY(-1px); box-shadow: 0 8px 26px rgba(212,74,122,0.50); }
+    .btn-unlock:active { transform: translateY(0); opacity: 1; }
+    .btn-unlock:disabled { opacity: 0.60; cursor: not-allowed; transform: none !important; }
+
+    .spinner {
+      display: none; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff;
+      border-radius: 50%; animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .lock-footer { margin-top: 1.2rem; text-align: center; font-size: 0.78rem; color: rgba(90,30,60,0.38); }
+    .lock-footer a { color: #D44A7A; text-decoration: none; font-weight: 500; transition: color 0.18s; }
+    .lock-footer a:hover { color: #b83868; }
+  </style>
 </head>
 
 <body class="hold-transition lockscreen">
-  <!-- Automatic element centering -->
-  <div class="lockscreen-wrapper">
-    <div class="lockscreen-logo">
-      <a href="../Frontend/ADMIN/index2.html"><b>OPERLYTICS</b></a>
-    </div>
-    <!-- User name -->
-    <div class="lockscreen-name">ADMIN</div>
 
-    <!-- START LOCK SCREEN ITEM -->
-    <div class="lockscreen-item">
-      <!-- lockscreen image -->
-      <div class="lockscreen-image">
-        <img src="dist/img/user1-128x128.jpg" alt="User Image">
+  <div class="lock-wrap">
+
+    <div class="brand-name">OPER<span>LYTICS</span></div>
+
+    <img src="dist/img/user1-128x128.jpg" alt="Admin" class="lock-avatar"
+         onerror="this.style.display='none'">
+    <div class="lock-name">ADMIN</div>
+    <div class="lock-role">Administrator</div>
+
+    <div class="lock-card">
+
+      <p class="lock-hint">Enter your password to unlock the dashboard</p>
+
+      <div class="alert-box" id="alertBox">
+        <i class="fas fa-circle-exclamation"></i>
+        <span id="alertText">Incorrect password. Please try again.</span>
       </div>
-      <!-- /.lockscreen-image -->
 
-      <!-- lockscreen credentials (contains the form) -->
-      <form class="lockscreen-credentials" action="../Backend/login.php" method="POST">
-        <div class="input-group">
+      <!-- ✅ Posts "pass" to login.php — matches the lockscreen branch in login.php -->
+      <form action="../Backend/login.php" method="POST" id="lockForm">
 
-          <input type="password" class="form-control" placeholder="password" name="pass" required>
-
-          <div class="input-group-append">
-            <button type="submit" name="submit" class="btn">
-              <i class="fas fa-arrow-right text-muted"></i>
-            </button>
-          </div>
+        <div class="pass-wrap">
+          <input type="password" id="passInput" name="pass"
+            placeholder="••••••••" required autocomplete="current-password">
         </div>
-      </form>
-      <!-- /.lockscreen credentials -->
 
-    </div>
-    <!-- /.lockscreen-item -->
-    <div class="help-block text-center">
-      Enter your password to retrieve your session
-    </div>
-    <div class="text-center">
-      <a href="../Frontend/login-v2.html">Or sign in as a different user</a>
+        <button type="submit" class="btn-unlock" id="submitBtn">
+          <span class="spinner" id="spinner"></span>
+          <span id="btnText"><i class="fas fa-unlock-keyhole"></i>&nbsp; Unlock</span>
+        </button>
+
+      </form>
+
+      <div class="lock-footer" style="margin-top:1.2rem;">
+        <a href="login-v2.html">Sign in as a different user</a>
+      </div>
+
     </div>
 
   </div>
-  <!-- /.center -->
 
-  <!-- jQuery -->
-  <script src="plugins/jquery/jquery.min.js"></script>
-  <!-- Bootstrap 4 -->
-  <script src="plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="plugins/jquery/jquery.min.js"></script>
+<script src="plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script>
+  const params     = new URLSearchParams(window.location.search);
+  const errorParam = params.get('error');
+  if (errorParam) {
+    const box  = document.getElementById('alertBox');
+    const text = document.getElementById('alertText');
+    const msgs = {
+      'invalid'      : 'Incorrect password. Please try again.',
+      'unauthorized' : 'This account does not have admin access.',
+    };
+    text.textContent = msgs[errorParam] ?? 'Something went wrong. Please try again.';
+    box.classList.add('show');
+    document.getElementById('passInput').classList.add('is-error');
+  }
+
+  document.getElementById('lockForm').addEventListener('submit', function () {
+    const btn = document.getElementById('submitBtn');
+    document.getElementById('spinner').style.display = 'block';
+    document.getElementById('btnText').textContent   = 'Unlocking…';
+    btn.disabled = true;
+  });
+
+  document.getElementById('passInput').addEventListener('input', function () {
+    this.classList.remove('is-error');
+    document.getElementById('alertBox').classList.remove('show');
+  });
+</script>
 </body>
-
 </html>

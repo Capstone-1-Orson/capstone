@@ -24,6 +24,8 @@ if (!isset($_SESSION['user'])) {
   <!-- Theme style -->
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
 
+<link rel="stylesheet" href="../dist/css/empress-cafe-theme.css">
+
   <style>
     body,
     .main-header.navbar {
@@ -61,9 +63,6 @@ if (!isset($_SESSION['user'])) {
         </li>
         <li class="nav-item d-none d-sm-inline-block">
           <a href="index2.php" class="nav-link">Home</a>
-        </li>
-        <li class="nav-item d-none d-sm-inline-block">
-          <a href="#" class="nav-link">Contact</a>
         </li>
       </ul>
 
@@ -111,9 +110,9 @@ if (!isset($_SESSION['user'])) {
     <aside class="main-sidebar sidebar-dark-primary elevation-4">
       <!-- Brand Logo -->
       <a href="#" class="brand-link">
-        <img src="../dist/img/AdminLTELogo.png" alt="AdminLTE Logo" class="brand-image img-circle elevation-3"
+        <img src="../dist/img/Empress' Cafe Boracay.jpg" alt="AdminLTE Logo" class="brand-image img-circle elevation-3"
           style="opacity: .8">
-        <span class="brand-text font-weight-light">Cafe Shop</span>
+        <span class="brand-text font-weight-light">Empress' Cafe</span>
       </a>
 
       <!-- Sidebar -->
@@ -229,7 +228,6 @@ if (!isset($_SESSION['user'])) {
                   <span class="info-box-text">Daily Customers Served</span>
                   <span class="info-box-number">
                     150
-                    <small>customers</small>
                   </span>
                 </div>
               </div>

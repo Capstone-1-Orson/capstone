@@ -24,6 +24,7 @@ if (!isset($_SESSION['user'])) {
 
   <link rel="stylesheet" href="../plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="../dist/css/empress-cafe-theme.css">
  
 </head>
 <style>
@@ -77,11 +78,11 @@ if (!isset($_SESSION['user'])) {
 
     <aside class="main-sidebar sidebar-dark-primary elevation-4">
 
-      <a href="index2.php" class="brand-link">
-        <img src="../dist/img/AdminLTELogo.png" class="brand-image img-circle elevation-3">
-        <span class="brand-text font-weight-light">OPERLYTICS</span>
+      <a href="#" class="brand-link">
+        <img src="../dist/img/Empress' Cafe Boracay.jpg" alt="AdminLTE Logo" class="brand-image img-circle elevation-3"
+          style="opacity: .8">
+        <span class="brand-text font-weight-light">Empress' Cafe</span>
       </a>
-
       <div class="sidebar">
 
         <div class="user-panel mt-3 pb-3 mb-3 d-flex">
@@ -368,12 +369,29 @@ if (!isset($_SESSION['user'])) {
                 <input type="url" class="form-control" id="itemImage" placeholder="https://via.placeholder.com/50/...">
               </div>
 
+              <div class="form-group">
+                <label>Ingredients</label>
+                <div class="input-group mb-2">
+                  <input type="text" class="form-control" id="ingredientInput" placeholder="e.g. Cheese, Tomato Sauce, Basil…">
+                  <div class="input-group-append">
+                    <button type="button" class="btn btn-success btn-sm px-3" id="addIngredientBtn">
+                      <i class="fas fa-plus"></i> Add
+                    </button>
+                  </div>
+                </div>
+                <div id="ingredientTags" style="display:flex;flex-wrap:wrap;gap:6px;min-height:38px;padding:7px 10px;border:1px solid rgba(233,30,140,0.25);border-radius:8px;background:rgba(233,30,140,0.04);">
+                  <span id="ingredientPlaceholder" style="color:#aaa;font-size:12px;align-self:center;font-style:italic;">No ingredients added yet</span>
+                </div>
+                <input type="hidden" id="itemIngredients">
+                <small class="text-muted mt-1 d-block">Press <kbd>Enter</kbd> or click <strong>Add</strong> after each ingredient. Click a tag to remove it.</small>
+              </div>
+
             </form>
           </div>
 
           <div class="modal-footer">
             <button class="btn btn-default" data-dismiss="modal">Close</button>
-            <button class="btn btn-success">Save Item</button>
+            <button class="btn btn-success" id="saveMenuBtn">Save Item</button>
           </div>
 
         </div>
@@ -449,6 +467,111 @@ if (!isset($_SESSION['user'])) {
           $(this).find('i').removeClass('clicked');
         }, 300);
       });
+    });
+  </script>
+  <!-- Ingredient Tag Input -->
+  <script>
+    $(function () {
+
+      var ingredients = [];
+
+      function renderTags() {
+        var container = $('#ingredientTags');
+        container.empty();
+        if (ingredients.length === 0) {
+          container.append('<span id="ingredientPlaceholder" style="color:#aaa;font-size:12px;align-self:center;font-style:italic;">No ingredients added yet</span>');
+        } else {
+          $.each(ingredients, function (i, ing) {
+            var tag = $('<span>')
+              .css({
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '4px 10px',
+                borderRadius: '20px',
+                background: 'rgba(233,30,140,0.12)',
+                border: '1px solid rgba(233,30,140,0.35)',
+                color: 'var(--pink, #e91e8c)',
+                fontSize: '12.5px',
+                fontWeight: '500',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              })
+              .attr('title', 'Click to remove')
+              .html('<i class="fas fa-circle-dot" style="font-size:8px;opacity:0.6"></i> ' + $('<div>').text(ing).html() + ' <i class="fas fa-times" style="font-size:9px;opacity:0.7;margin-left:2px"></i>')
+              .on('click', function () {
+                ingredients.splice(i, 1);
+                renderTags();
+                updateHidden();
+              })
+              .on('mouseenter', function () {
+                $(this).css('background', 'rgba(233,30,140,0.22)');
+              })
+              .on('mouseleave', function () {
+                $(this).css('background', 'rgba(233,30,140,0.12)');
+              });
+            container.append(tag);
+          });
+        }
+      }
+
+      function addIngredient() {
+        var val = $('#ingredientInput').val().trim();
+        if (!val) return;
+        // Support comma-separated: "Cheese, Basil, Tomato"
+        var parts = val.split(',');
+        $.each(parts, function (_, part) {
+          var p = part.trim();
+          if (p && !ingredients.includes(p)) {
+            ingredients.push(p);
+          }
+        });
+        $('#ingredientInput').val('');
+        renderTags();
+        updateHidden();
+      }
+
+      function updateHidden() {
+        $('#itemIngredients').val(ingredients.join(', '));
+      }
+
+      $('#addIngredientBtn').on('click', addIngredient);
+
+      $('#ingredientInput').on('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          addIngredient();
+        }
+      });
+
+      // Clear ingredients when modal is hidden
+      $('#addMenuModal').on('hidden.bs.modal', function () {
+        ingredients = [];
+        renderTags();
+        updateHidden();
+        $('#ingredientInput').val('');
+      });
+
+      // On Save — log the ingredients (extend with your AJAX/backend here)
+      $('#saveMenuBtn').on('click', function () {
+        var name  = $('#itemName').val().trim();
+        var price = $('#itemPrice').val().trim();
+        if (!name || !price) {
+          alert('Item Name and Price are required.');
+          return;
+        }
+        console.log('Saving item:', {
+          name:        name,
+          category:    $('#itemCategory').val(),
+          price:       price,
+          status:      $('#itemStatus').val(),
+          image:       $('#itemImage').val(),
+          ingredients: $('#itemIngredients').val()
+        });
+        // TODO: replace console.log with your $.ajax() call to the backend
+        $('#addMenuModal').modal('hide');
+      });
+
     });
   </script>
 

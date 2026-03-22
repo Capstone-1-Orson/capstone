@@ -23,6 +23,8 @@ if (!isset($_SESSION['user'])) {
   <link rel="stylesheet" href="../plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
   <!-- Theme style -->
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
+
+  <link rel="stylesheet" href="../dist/css/empress-cafe-theme.css">
 </head>
 <style>
   body,
@@ -62,9 +64,6 @@ if (!isset($_SESSION['user'])) {
         </li>
         <li class="nav-item d-none d-sm-inline-block">
           <a href="index2.php" class="nav-link">Home</a>
-        </li>
-        <li class="nav-item d-none d-sm-inline-block">
-          <a href="#" class="nav-link">Staff</a>
         </li>
       </ul>
 
@@ -109,11 +108,12 @@ if (!isset($_SESSION['user'])) {
     <!-- Main Sidebar Container -->
     <aside class="main-sidebar sidebar-dark-primary elevation-4">
       <!-- Brand Logo -->
-      <a href="index3.php" class="brand-link">
-        <img src="../dist/img/AdminLTELogo.png" alt="AdminLTE Logo" class="brand-image img-circle elevation-3"
+      <a href="#" class="brand-link">
+        <img src="../dist/img/Empress' Cafe Boracay.jpg" alt="AdminLTE Logo" class="brand-image img-circle elevation-3"
           style="opacity: .8">
-        <span class="brand-text font-weight-light">OPERLYTICS</span>
+        <span class="brand-text font-weight-light">Empress' Cafe</span>
       </a>
+
 
       <!-- Sidebar -->
       <div class="sidebar">
@@ -339,7 +339,7 @@ if (!isset($_SESSION['user'])) {
               </div>
               <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                <button type="submit" name="save_user" class="btn btn-primary">Save User</button>
+                <button type="submit" name="save_user" class="btn btn-primary">Save Staff</button>
               </div>
             </form>
           </div>
