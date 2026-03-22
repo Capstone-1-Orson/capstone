@@ -144,11 +144,11 @@ if (!isset($_SESSION['user'])) {
 
                         <!-- Settings (Bonus addition) -->
                         <li class="nav-item mt-auto">
-                            <a href="./settings.php" class="nav-link">
+                            <a href="../../Backend/logout.php" class="nav-link">
                                 <i class="nav-icon fas fa-cog"></i>
-                                <p>Settings</p>
+                                <p>Log Out</p>
                             </a>
-                        </li>
+                            </li>
 
                     </ul>
                 </nav>

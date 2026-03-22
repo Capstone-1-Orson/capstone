@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         die("Invalid password.");
     }
 
-    $sql = "SELECT password FROM users WHERE email = ?";
+    $sql = "SELECT password FROM user WHERE email = ?";
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("s", $email);
     $stmt->execute();
