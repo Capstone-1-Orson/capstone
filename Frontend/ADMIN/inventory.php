@@ -1,11 +1,37 @@
 <?php
 session_start();
 if (!isset($_SESSION['user'])) {
-    header("Location: ../../Frontend/lockscreen.html"); // Send them back if not logged in
+    header("Location: ../../Frontend/lockscreen.html");
     exit();
 }
-?>
 
+
+// DB: operlytics | table: ingredients
+// columns: id, name, unit, stock_qty, low_stock_threshold, created_at, updated_at
+require_once '../../Backend/conn.php';
+
+// ── Stats ─────────────────────────────────────────────────────
+$total     = $conn->query("SELECT COUNT(*) AS c FROM ingredients")->fetch_assoc()['c'] ?? 0;
+$in_stock  = $conn->query("SELECT COUNT(*) AS c FROM ingredients WHERE stock_qty > low_stock_threshold")->fetch_assoc()['c'] ?? 0;
+$low_stock = $conn->query("SELECT COUNT(*) AS c FROM ingredients WHERE stock_qty > 0 AND stock_qty <= low_stock_threshold")->fetch_assoc()['c'] ?? 0;
+$out_stock = $conn->query("SELECT COUNT(*) AS c FROM ingredients WHERE stock_qty = 0")->fetch_assoc()['c'] ?? 0;
+
+// ── Fetch all ingredients ─────────────────────────────────────
+$items = [];
+$res = $conn->query("SELECT * FROM ingredients ORDER BY name ASC");
+while ($row = $res->fetch_assoc()) {
+    $items[] = $row;
+}
+
+// ── Low stock alert list (stock <= threshold, not zero) ───────
+$low_alerts = [];
+$res2 = $conn->query("SELECT name, stock_qty, unit FROM ingredients WHERE stock_qty <= low_stock_threshold ORDER BY stock_qty ASC LIMIT 8");
+while ($row = $res2->fetch_assoc()) {
+    $low_alerts[] = $row;
+}
+
+$conn->close();
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -14,623 +40,591 @@ if (!isset($_SESSION['user'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>OPERLYTICS | Inventory Tracking</title>
 
-    <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,400i,700&display=fallback">
     <link rel="stylesheet" href="../plugins/fontawesome-free/css/all.min.css">
-
     <link rel="stylesheet" href="../plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
     <link rel="stylesheet" href="../plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
     <link rel="stylesheet" href="../plugins/datatables-buttons/css/buttons.bootstrap4.min.css">
-
     <link rel="stylesheet" href="../plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
     <link rel="stylesheet" href="../dist/css/adminlte.min.css">
-  <link rel="stylesheet" href="../dist/css/empress-cafe-theme.css">
-
+    <link rel="stylesheet" href="../dist/css/empress-cafe-theme.css">
 </head>
+
 <style>
-    body,
-    .main-header.navbar {
-        transition: background-color 0.5s ease, color 0.5s ease;
-    }
-
-    #darkModeToggle {
-        transition: box-shadow 0.3s ease;
-    }
-
-    #darkModeToggle i {
-        transition: transform 0.3s ease;
-    }
-
-    #darkModeToggle.clicked {
-        box-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
-    }
-
-    #darkModeToggle.clicked i {
-        transform: rotate(180deg) scale(1.2);
-    }
+    body, .main-header.navbar { transition: background-color 0.5s ease, color 0.5s ease; }
+    #darkModeToggle { transition: box-shadow 0.3s ease; }
+    #darkModeToggle i { transition: transform 0.3s ease; }
+    #darkModeToggle.clicked { box-shadow: 0 0 15px rgba(255,255,255,0.8); }
+    #darkModeToggle.clicked i { transform: rotate(180deg) scale(1.2); }
 </style>
 
 <body class="hold-transition dark-mode sidebar-mini layout-fixed layout-navbar-fixed layout-footer-fixed">
-    <div class="wrapper">
+<div class="wrapper">
 
-        <nav class="main-header navbar navbar-expand navbar-dark">
-            <ul class="navbar-nav">
-                <li class="nav-item">
-                    <a class="nav-link" data-widget="pushmenu"><i class="fas fa-bars"></i></a>
-                </li>
-                <li class="nav-item d-none d-sm-inline-block">
-                    <a href="index2.php" class="nav-link">Home</a>
-                </li>
-            </ul>
+    <!-- ── Navbar ─────────────────────────────────────────────── -->
+    <nav class="main-header navbar navbar-expand navbar-dark">
+        <ul class="navbar-nav">
+            <li class="nav-item">
+                <a class="nav-link" data-widget="pushmenu"><i class="fas fa-bars"></i></a>
+            </li>
+            <li class="nav-item d-none d-sm-inline-block">
+                <a href="index2.php" class="nav-link">Home</a>
+            </li>
+        </ul>
+        <ul class="navbar-nav ml-auto">
+            <li class="nav-item">
+                <a class="nav-link" data-widget="fullscreen"><i class="fas fa-expand-arrows-alt"></i></a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" id="darkModeToggle" href="#" role="button">
+                    <i class="fas fa-moon"></i>
+                </a>
+            </li>
+        </ul>
+    </nav>
 
-            <ul class="navbar-nav ml-auto">
-                <li class="nav-item">
-                    <a class="nav-link" data-widget="fullscreen"><i class="fas fa-expand-arrows-alt"></i></a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" id="darkModeToggle" href="#" role="button">
-                        <i class="fas fa-moon"></i>
-                    </a>
-                </li>
-            </ul>
-        </nav>
-
-        <aside class="main-sidebar sidebar-dark-primary elevation-4">
-
-            <a href="#" class="brand-link">
-        <img src="../dist/img/Empress' Cafe Boracay.jpg" alt="AdminLTE Logo" class="brand-image img-circle elevation-3"
-          style="opacity: .8">
-        <span class="brand-text font-weight-light">Empress' Cafe</span>
-      </a>
-
-            <div class="sidebar">
-
-                <div class="user-panel mt-3 pb-3 mb-3 d-flex">
-                    <div class="image">
-                        <img src="../dist/img/user2-160x160.jpg" class="img-circle elevation-2">
-                    </div>
-                    <div class="info">
-                        <a href="#" class="d-block">Manager</a>
-                    </div>
+    <!-- ── Sidebar ────────────────────────────────────────────── -->
+    <aside class="main-sidebar sidebar-dark-primary elevation-4">
+        <a href="#" class="brand-link">
+            <img src="../dist/img/Empress' Cafe Boracay.jpg" alt="Logo" class="brand-image img-circle elevation-3" style="opacity:.8">
+            <span class="brand-text font-weight-light">Empress' Cafe</span>
+        </a>
+        <div class="sidebar">
+            <div class="user-panel mt-3 pb-3 mb-3 d-flex">
+                <div class="image">
+                    <img src="../dist/img/user2-160x160.jpg" class="img-circle elevation-2">
                 </div>
-
-                <nav class="mt-2">
-                    <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview">
-
-                        <li class="nav-item">
-                            <a href="index2.php" class="nav-link">
-                                <i class="nav-icon fas fa-tachometer-alt"></i>
-                                <p>Overview</p>
-                            </a>
-                        </li>
-
-                        <li class="nav-item">
-                            <a href="./menu-management.php" class="nav-link">
-                                <i class="nav-icon fas fa-utensils"></i>
-                                <p>Menu Management</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="./inventory.php" class="nav-link active">
-                                <i class="nav-icon fas fa-boxes"></i>
-                                <p>Inventory Tracking</p>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="./suppliers.php" class="nav-link">
-                                <i class="nav-icon fas fa-truck"></i>
-                                <p>Suppliers Orders</p>
-                            </a>
-                        </li>
-
-                        <!-- Staff Management (NEW SECTION) -->
-                        <li class="nav-item">
-                            <a href="./staff-list.php" class="nav-link">
-                                <i class="far fa-user nav-icon"></i>
-                                <p>Staff List</p>
-                            </a>
-                        </li>
-
-                        <li class="nav-item">
-                            <a href="sale_revenue.php" class="nav-link">
-                                <i class="nav-icon fas fa-chart-line"></i>
-                                <p>Sales & Revenue</p>
-                            </a>
-                        </li>
-
-                        <li class="nav-item">
-                            <a href="report.php" class="nav-link">
-                                <i class="nav-icon fas fa-file-alt"></i>
-                                <p>Reports</p>
-                            </a>
-                        </li>
-
-                        <!-- Settings (Bonus addition) -->
-                        <li class="nav-item mt-auto">
-                            <a href="../../Backend/logout.php" class="nav-link">
-                                <i class="nav-icon fas fa-cog"></i>
-                                <p>Log Out</p>
-                            </a>
-                            </li>
-
-                    </ul>
-                </nav>
+                <div class="info">
+                    <a href="#" class="d-block">Manager</a>
+                </div>
             </div>
-        </aside>
+            <nav class="mt-2">
+                <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview">
+                    <li class="nav-item">
+                        <a href="index2.php" class="nav-link">
+                            <i class="nav-icon fas fa-tachometer-alt"></i><p>Overview</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="./menu-management.php" class="nav-link">
+                            <i class="nav-icon fas fa-utensils"></i><p>Menu Management</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="./inventory.php" class="nav-link active">
+                            <i class="nav-icon fas fa-boxes"></i><p>Inventory Tracking</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="./suppliers.php" class="nav-link">
+                            <i class="nav-icon fas fa-truck"></i><p>Suppliers Orders</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="./staff-list.php" class="nav-link">
+                            <i class="far fa-user nav-icon"></i><p>Staff List</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="sale_revenue.php" class="nav-link">
+                            <i class="nav-icon fas fa-chart-line"></i><p>Sales & Revenue</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="report.php" class="nav-link">
+                            <i class="nav-icon fas fa-file-alt"></i><p>Reports</p>
+                        </a>
+                    </li>
+                    <li class="nav-item mt-auto">
+                        <a href="../../Backend/logout.php" class="nav-link">
+                            <i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    </aside>
 
+    <!-- ── Content Wrapper ───────────────────────────────────── -->
+    <div class="content-wrapper">
 
-        <div class="content-wrapper">
+        <!-- Flash messages -->
+        <?php if (!empty($_SESSION['success'])): ?>
+          <div class="alert alert-success alert-dismissible fade show mx-3 mt-3" role="alert">
+            <i class="fas fa-check-circle mr-2"></i><?= htmlspecialchars($_SESSION['success']) ?>
+            <button type="button" class="close" data-dismiss="alert">&times;</button>
+          </div>
+          <?php unset($_SESSION['success']); ?>
+        <?php endif; ?>
+        <?php if (!empty($_SESSION['error'])): ?>
+          <div class="alert alert-danger alert-dismissible fade show mx-3 mt-3" role="alert">
+            <i class="fas fa-exclamation-circle mr-2"></i><?= htmlspecialchars($_SESSION['error']) ?>
+            <button type="button" class="close" data-dismiss="alert">&times;</button>
+          </div>
+          <?php unset($_SESSION['error']); ?>
+        <?php endif; ?>
 
-            <div class="content-header">
-                <div class="container-fluid">
-                    <div class="row mb-2">
-                        <div class="col-sm-6">
-                            <h1 class="m-0">Inventory Tracking</h1>
-                        </div>
-
-                        <div class="col-sm-6">
-                            <ol class="breadcrumb float-sm-right">
-                                <li class="breadcrumb-item"><a href="index2.php">Home</a></li>
-                                <li class="breadcrumb-item active">Inventory</li>
-                            </ol>
-                        </div>
+        <div class="content-header">
+            <div class="container-fluid">
+                <div class="row mb-2">
+                    <div class="col-sm-6"><h1 class="m-0">Inventory Tracking</h1></div>
+                    <div class="col-sm-6">
+                        <ol class="breadcrumb float-sm-right">
+                            <li class="breadcrumb-item"><a href="index2.php">Home</a></li>
+                            <li class="breadcrumb-item active">Inventory</li>
+                        </ol>
                     </div>
                 </div>
             </div>
-
-            <section class="content">
-                <div class="container-fluid">
-
-                    <div class="row mb-4">
-
-                        <div class="col-lg-3 col-6">
-                            <div class="info-box">
-                                <span class="info-box-icon bg-info"><i class="fas fa-boxes"></i></span>
-                                <div class="info-box-content">
-                                    <span class="info-box-text">Total Products</span>
-                                    <span class="info-box-number">240</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-lg-3 col-6">
-                            <div class="info-box">
-                                <span class="info-box-icon bg-success"><i class="fas fa-check"></i></span>
-                                <div class="info-box-content">
-                                    <span class="info-box-text">In Stock</span>
-                                    <span class="info-box-number">180</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-lg-3 col-6">
-                            <div class="info-box">
-                                <span class="info-box-icon bg-warning"><i
-                                        class="fas fa-exclamation-triangle"></i></span>
-                                <div class="info-box-content">
-                                    <span class="info-box-text">Low Stock</span>
-                                    <span class="info-box-number">40</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-lg-3 col-6">
-                            <div class="info-box">
-                                <span class="info-box-icon bg-danger"><i class="fas fa-times"></i></span>
-                                <div class="info-box-content">
-                                    <span class="info-box-text">Out of Stock</span>
-                                    <span class="info-box-number">20</span>
-                                </div>
-                            </div>
-                        </div>
-
-                    </div>
-
-                    <div class="row mb-4">
-
-                        <div class="col-md-6">
-                            <div class="card card-warning">
-                                <div class="card-header">
-                                    <h3 class="card-title">Low Stock Alerts</h3>
-
-                                </div>
-                                <div class="card-body">
-                                    <ul class="list-group list-group-flush">
-                                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                                            Chicken
-                                            <span class="badge badge-warning badge-pill">15 units</span>
-                                        </li>
-                                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                                            Tomatoes
-                                            <span class="badge badge-warning badge-pill">8 units</span>
-                                        </li>
-                                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                                            Milk
-                                            <span class="badge badge-danger badge-pill">0 units</span>
-                                        </li>
-                                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                                            Bread
-                                            <span class="badge badge-warning badge-pill">12 units</span>
-                                        </li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <div class="card card-info">
-                                <div class="card-header">
-                                    <h3 class="card-title">Quick Actions</h3>
-
-                                </div>
-                                <div class="card-body">
-                                    <div class="btn-group-vertical d-block">
-                                        <button class="btn btn-primary mb-2" data-toggle="modal"
-                                            data-target="#bulkRestockModal">
-                                            <i class="fas fa-truck"></i> Bulk Restock
-                                        </button>
-                                        <button class="btn btn-secondary mb-2">
-                                            <i class="fas fa-file-export"></i> Export Inventory
-                                        </button>
-                                        <button class="btn btn-success mb-2">
-                                            <i class="fas fa-chart-line"></i> View Trends
-                                        </button>
-                                        <button class="btn btn-warning">
-                                            <i class="fas fa-bell"></i> Set Alerts
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                       
-
-                    </div>
-                    <div class="card card-dark">
-
-                        <div class="card-header">
-                            <h3 class="card-title">Inventory Items</h3>
-
-                            <div class="card-tools">
-
-
-                                <button class="btn btn-tool" data-card-widget="maximize">
-                                    <i class="fas fa-expand"></i>
-                                </button>
-
-                                <a href="#" class="btn btn-sm btn-success" data-toggle="modal"
-                                    data-target="#addInventoryModal">
-                                    <i class="fas fa-plus"></i> Add Product
-                                </a>
-                            </div>
-                        </div>
-
-                        <div class="card-body">
-
-                            <table id="inventoryTable" class="table table-dark table-hover">
-
-                                <thead>
-                                    <tr>
-                                        <th>Image</th>
-                                        <th>Product Name</th>
-                                        <th>Category</th>
-                                        <th>Supplier</th>
-                                        <th>Stock</th>
-                                        <th>Status</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-
-                                <tbody>
-
-                                    <tr>
-                                        <td><img src="https://via.placeholder.com/50/28a745/ffffff?text=RC"
-                                                class="img-circle"></td>
-                                        <td>Rice</td>
-                                        <td>Grains</td>
-                                        <td>Local Supplier</td>
-                                        <td><span class="badge badge-success">150</span></td>
-                                        <td><span class="badge badge-success">Available</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-info"><i class="fas fa-edit"></i></button>
-                                            <button class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
-                                        </td>
-                                    </tr>
-
-                                    <tr>
-                                        <td><img src="https://via.placeholder.com/50/dc3545/ffffff?text=CK"
-                                                class="img-circle"></td>
-                                        <td>Chicken</td>
-                                        <td>Meat</td>
-                                        <td>Fresh Farm</td>
-                                        <td><span class="badge badge-warning">15</span></td>
-                                        <td><span class="badge badge-warning">Low Stock</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-info"><i class="fas fa-edit"></i></button>
-                                            <button class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
-                                        </td>
-                                    </tr>
-
-                                    <tr>
-                                        <td><img src="https://via.placeholder.com/50/ffc107/000000?text=EG"
-                                                class="img-circle"></td>
-                                        <td>Eggs</td>
-                                        <td>Dairy</td>
-                                        <td>Golden Farm</td>
-                                        <td><span class="badge badge-danger">0</span></td>
-                                        <td><span class="badge badge-danger">Out of Stock</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-info"><i class="fas fa-edit"></i></button>
-                                            <button class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
-                                        </td>
-                                    </tr>
-
-                                    <tr>
-                                        <td><img src="https://via.placeholder.com/50/17a2b8/ffffff?text=TM"
-                                                class="img-circle"></td>
-                                        <td>Tomatoes</td>
-                                        <td>Vegetables</td>
-                                        <td>Green Valley</td>
-                                        <td><span class="badge badge-warning">8</span></td>
-                                        <td><span class="badge badge-warning">Low Stock</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-info"><i class="fas fa-edit"></i></button>
-                                            <button class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
-                                        </td>
-                                    </tr>
-
-                                    <tr>
-                                        <td><img src="https://via.placeholder.com/50/6f42c1/ffffff?text=ML"
-                                                class="img-circle"></td>
-                                        <td>Milk</td>
-                                        <td>Dairy</td>
-                                        <td>Dairy Co.</td>
-                                        <td><span class="badge badge-danger">0</span></td>
-                                        <td><span class="badge badge-danger">Out of Stock</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-info"><i class="fas fa-edit"></i></button>
-                                            <button class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
-                                        </td>
-                                    </tr>
-
-                                    <tr>
-                                        <td><img src="https://via.placeholder.com/50/e83e8c/ffffff?text=BR"
-                                                class="img-circle"></td>
-                                        <td>Bread</td>
-                                        <td>Bakery</td>
-                                        <td>Bakery Plus</td>
-                                        <td><span class="badge badge-warning">12</span></td>
-                                        <td><span class="badge badge-warning">Low Stock</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-info"><i class="fas fa-edit"></i></button>
-                                            <button class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
-                                        </td>
-                                    </tr>
-
-                                    <tr>
-                                        <td><img src="https://via.placeholder.com/50/20c997/ffffff?text=PT"
-                                                class="img-circle"></td>
-                                        <td>Potatoes</td>
-                                        <td>Vegetables</td>
-                                        <td>Farm Fresh</td>
-                                        <td><span class="badge badge-success">200</span></td>
-                                        <td><span class="badge badge-success">Available</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-info"><i class="fas fa-edit"></i></button>
-                                            <button class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
-                                        </td>
-                                    </tr>
-
-                                    <tr>
-                                        <td><img src="https://via.placeholder.com/50/fc6d26/ffffff?text=CH"
-                                                class="img-circle"></td>
-                                        <td>Cheese</td>
-                                        <td>Dairy</td>
-                                        <td>Cheese Factory</td>
-                                        <td><span class="badge badge-success">75</span></td>
-                                        <td><span class="badge badge-success">Available</span></td>
-                                        <td>
-                                            <button class="btn btn-sm btn-info"><i class="fas fa-edit"></i></button>
-                                            <button class="btn btn-sm btn-danger"><i class="fas fa-trash"></i></button>
-                                        </td>
-                                    </tr>
-
-                                </tbody>
-
-                            </table>
-                        </div>
-                    </div>
-            </section>
         </div>
 
-        <div class="modal fade" id="addInventoryModal">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
+        <section class="content">
+            <div class="container-fluid">
 
-                    <div class="modal-header">
-                        <h4 class="modal-title">Add Inventory Item</h4>
-                        <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <!-- ── Info Boxes ─────────────────────────────── -->
+                <div class="row mb-4">
+                    <div class="col-lg-3 col-6">
+                        <div class="info-box">
+                            <span class="info-box-icon bg-info"><i class="fas fa-boxes"></i></span>
+                            <div class="info-box-content">
+                                <span class="info-box-text">Total Products</span>
+                                <span class="info-box-number"><?= $total ?></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-6">
+                        <div class="info-box">
+                            <span class="info-box-icon bg-success"><i class="fas fa-check"></i></span>
+                            <div class="info-box-content">
+                                <span class="info-box-text">In Stock</span>
+                                <span class="info-box-number"><?= $in_stock ?></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-6">
+                        <div class="info-box">
+                            <span class="info-box-icon bg-warning"><i class="fas fa-exclamation-triangle"></i></span>
+                            <div class="info-box-content">
+                                <span class="info-box-text">Low Stock</span>
+                                <span class="info-box-number"><?= $low_stock ?></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-6">
+                        <div class="info-box">
+                            <span class="info-box-icon bg-danger"><i class="fas fa-times"></i></span>
+                            <div class="info-box-content">
+                                <span class="info-box-text">Out of Stock</span>
+                                <span class="info-box-number"><?= $out_stock ?></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Alerts + Quick Actions ─────────────────── -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card card-warning">
+                            <div class="card-header">
+                                <h3 class="card-title"><i class="fas fa-bell mr-1"></i> Low Stock Alerts</h3>
+                            </div>
+                            <div class="card-body p-0">
+                                <ul class="list-group list-group-flush">
+                                    <?php if (empty($low_alerts)): ?>
+                                        <li class="list-group-item text-muted text-center py-3">
+                                            <i class="fas fa-check-circle text-success mr-1"></i> All ingredients are sufficiently stocked.
+                                        </li>
+                                    <?php else: ?>
+                                        <?php foreach ($low_alerts as $alert):
+                                            $badgeClass = $alert['stock_qty'] == 0 ? 'badge-danger' : 'badge-warning';
+                                        ?>
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            <?= htmlspecialchars($alert['name']) ?>
+                                            <span class="badge <?= $badgeClass ?> badge-pill">
+                                                <?= $alert['stock_qty'] ?> <?= htmlspecialchars($alert['unit']) ?>
+                                            </span>
+                                        </li>
+                                        <?php endforeach; ?>
+                                    <?php endif; ?>
+                                </ul>
+                            </div>
+                        </div>
                     </div>
 
+                    <div class="col-md-6">
+                        <div class="card card-info">
+                            <div class="card-header">
+                                <h3 class="card-title"><i class="fas fa-bolt mr-1"></i> Quick Actions</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="btn-group-vertical d-block">
+                                    <button class="btn btn-primary mb-2" data-toggle="modal" data-target="#bulkRestockModal">
+                                        <i class="fas fa-truck mr-1"></i> Bulk Restock
+                                    </button>
+                                    <button class="btn btn-secondary mb-2">
+                                        <i class="fas fa-file-export mr-1"></i> Export Inventory
+                                    </button>
+                                    <button class="btn btn-success mb-2">
+                                        <i class="fas fa-chart-line mr-1"></i> View Trends
+                                    </button>
+                                    <button class="btn btn-warning">
+                                        <i class="fas fa-bell mr-1"></i> Set Alerts
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Inventory Table ─────────────────────────── -->
+                <div class="card card-dark">
+                    <div class="card-header">
+                        <h3 class="card-title">Inventory Items</h3>
+                        <div class="card-tools">
+                            <button class="btn btn-tool" data-card-widget="maximize">
+                                <i class="fas fa-expand"></i>
+                            </button>
+                            <a href="#" class="btn btn-sm btn-success" data-toggle="modal" data-target="#addInventoryModal">
+                                <i class="fas fa-plus"></i> Add Product
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+                        <table id="inventoryTable" class="table table-dark table-hover">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Ingredient Name</th>
+                                    <th>Unit</th>
+                                    <th>Stock Qty</th>
+                                    <th>Low Stock Threshold</th>
+                                    <th>Status</th>
+                                    <th>Last Updated</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($items as $item):
+                                    if ($item['stock_qty'] == 0) {
+                                        $statusBadge = 'badge-danger';
+                                        $statusLabel = 'Out of Stock';
+                                    } elseif ($item['stock_qty'] <= $item['low_stock_threshold']) {
+                                        $statusBadge = 'badge-warning';
+                                        $statusLabel = 'Low Stock';
+                                    } else {
+                                        $statusBadge = 'badge-success';
+                                        $statusLabel = 'Available';
+                                    }
+                                ?>
+                                <tr>
+                                    <td><?= $item['id'] ?></td>
+                                    <td><?= htmlspecialchars($item['name']) ?></td>
+                                    <td><?= htmlspecialchars($item['unit']) ?></td>
+                                    <td>
+                                        <span class="badge <?= $statusBadge ?>">
+                                            <?= $item['stock_qty'] ?>
+                                        </span>
+                                    </td>
+                                    <td><?= $item['low_stock_threshold'] ?></td>
+                                    <td><span class="badge <?= $statusBadge ?>"><?= $statusLabel ?></span></td>
+                                    <td><small><?= $item['updated_at'] ?? $item['created_at'] ?></small></td>
+                                    <td>
+                                        <!-- Edit button -->
+                                        <button class="btn btn-sm btn-warning"
+                                                data-toggle="modal"
+                                                data-target="#editInventoryModal"
+                                                data-id="<?= $item['id'] ?>"
+                                                data-name="<?= htmlspecialchars($item['name'], ENT_QUOTES) ?>"
+                                                data-unit="<?= htmlspecialchars($item['unit'], ENT_QUOTES) ?>"
+                                                data-stock="<?= $item['stock_qty'] ?>"
+                                                data-threshold="<?= $item['low_stock_threshold'] ?>">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <!-- Delete link -->
+                                        <a href="../../Backend/inventory_process.php?action=delete&id=<?= $item['id'] ?>"
+                                           class="btn btn-sm btn-danger"
+                                           onclick="return confirm('Delete \'<?= htmlspecialchars($item['name'], ENT_QUOTES) ?>\'? This cannot be undone.')">
+                                            <i class="fas fa-trash"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+    </div><!-- /.content-wrapper -->
+
+
+    <!-- ══════════════════════════════════════════════════════════
+         ADD INGREDIENT MODAL
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="modal fade" id="addInventoryModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-plus-circle mr-2"></i>Add Ingredient</h5>
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                </div>
+
+                <form action="../../Backend/inventory_process.php" method="POST">
                     <div class="modal-body">
-                        <form>
 
-                            <div class="row">
-
-                                <div class="col-md-6">
-                                    <div class="form-group">
-                                        <label>Product Name</label>
-                                        <input type="text" class="form-control">
-                                    </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Ingredient Name</label>
+                                    <input type="text" name="name" class="form-control" placeholder="e.g. Chicken Breast" required>
                                 </div>
-
-                                <div class="col-md-6">
-                                    <div class="form-group">
-                                        <label>Category</label>
-                                        <input type="text" class="form-control">
-                                    </div>
-                                </div>
-
                             </div>
-
-                            <div class="row">
-
-                                <div class="col-md-4">
-                                    <div class="form-group">
-                                        <label>Supplier</label>
-                                        <input type="text" class="form-control">
-                                    </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Unit</label>
+                                    <select name="unit" class="form-control" required>
+                                        <option value="">-- Select Unit --</option>
+                                        <option value="g">g (grams)</option>
+                                        <option value="kg">kg (kilograms)</option>
+                                        <option value="ml">ml (milliliters)</option>
+                                        <option value="L">L (liters)</option>
+                                        <option value="pcs">pcs (pieces)</option>
+                                        <option value="tbsp">tbsp (tablespoon)</option>
+                                        <option value="tsp">tsp (teaspoon)</option>
+                                        <option value="cups">cups</option>
+                                    </select>
                                 </div>
-
-                                <div class="col-md-4">
-                                    <div class="form-group">
-                                        <label>Stock</label>
-                                        <input type="number" class="form-control">
-                                    </div>
-                                </div>
-
-                                <div class="col-md-4">
-                                    <div class="form-group">
-                                        <label>Status</label>
-                                        <select class="form-control">
-                                            <option>Available</option>
-                                            <option>Low Stock</option>
-                                            <option>Out of Stock</option>
-                                        </select>
-                                    </div>
-                                </div>
-
                             </div>
+                        </div>
 
-                        </form>
-                    </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Stock Quantity</label>
+                                    <input type="number" name="stock_qty" class="form-control" step="0.01" min="0" placeholder="e.g. 100" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Low Stock Threshold</label>
+                                    <input type="number" name="low_stock_threshold" class="form-control" step="0.01" min="0" placeholder="e.g. 20">
+                                    <small class="text-muted">Alert will trigger when stock falls at or below this value.</small>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div><!-- /.modal-body -->
 
                     <div class="modal-footer">
-                        <button class="btn btn-default" data-dismiss="modal">Close</button>
-                        <button class="btn btn-success">Save Item</button>
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                            <i class="fas fa-times mr-1"></i>Close
+                        </button>
+                        <button type="submit" name="save_ingredient" class="btn btn-success">
+                            <i class="fas fa-save mr-1"></i>Save Ingredient
+                        </button>
                     </div>
+                </form>
 
-                </div>
             </div>
         </div>
+    </div>
 
-        <div class="modal fade" id="bulkRestockModal">
-            <div class="modal-dialog modal-xl">
-                <div class="modal-content">
 
-                    <div class="modal-header">
-                        <h4 class="modal-title">Bulk Restock</h4>
-                        <button type="button" class="close" data-dismiss="modal">&times;</button>
-                    </div>
+    <!-- ══════════════════════════════════════════════════════════
+         EDIT INGREDIENT MODAL
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="modal fade" id="editInventoryModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-edit mr-2"></i>Edit Ingredient</h5>
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                </div>
+
+                <form action="../../Backend/inventory_process.php" method="POST">
+                    <input type="hidden" name="update_ingredient" value="1">
+                    <input type="hidden" name="id" id="editIngId">
 
                     <div class="modal-body">
-                        <p>Select items to restock and enter quantities:</p>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Ingredient Name</label>
+                                    <input type="text" name="name" id="editIngName" class="form-control" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Unit</label>
+                                    <select name="unit" id="editIngUnit" class="form-control" required>
+                                        <option value="">-- Select Unit --</option>
+                                        <option value="g">g (grams)</option>
+                                        <option value="kg">kg (kilograms)</option>
+                                        <option value="ml">ml (milliliters)</option>
+                                        <option value="L">L (liters)</option>
+                                        <option value="pcs">pcs (pieces)</option>
+                                        <option value="tbsp">tbsp (tablespoon)</option>
+                                        <option value="tsp">tsp (teaspoon)</option>
+                                        <option value="cups">cups</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Stock Quantity</label>
+                                    <input type="number" name="stock_qty" id="editIngStock" class="form-control" step="0.01" min="0" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Low Stock Threshold</label>
+                                    <input type="number" name="low_stock_threshold" id="editIngThreshold" class="form-control" step="0.01" min="0">
+                                </div>
+                            </div>
+                        </div>
+
+                    </div><!-- /.modal-body -->
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                            <i class="fas fa-times mr-1"></i>Close
+                        </button>
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fas fa-save mr-1"></i>Update Ingredient
+                        </button>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ══════════════════════════════════════════════════════════
+         BULK RESTOCK MODAL  (live rows from DB)
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="modal fade" id="bulkRestockModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-xl" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-truck mr-2"></i>Bulk Restock</h5>
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                </div>
+
+                <form action="../../Backend/inventory_process.php" method="POST">
+                    <input type="hidden" name="bulk_restock" value="1">
+
+                    <div class="modal-body">
+                        <p class="text-muted">Check items to restock and enter the quantity to <strong>add</strong>:</p>
                         <table class="table table-striped">
                             <thead>
                                 <tr>
                                     <th>Select</th>
-                                    <th>Product</th>
+                                    <th>Ingredient</th>
                                     <th>Current Stock</th>
-                                    <th>Restock Quantity</th>
+                                    <th>Unit</th>
+                                    <th>Add Quantity</th>
                                 </tr>
                             </thead>
                             <tbody>
+                                <?php foreach ($items as $ri): ?>
                                 <tr>
-                                    <td><input type="checkbox" class="restock-check"></td>
-                                    <td>Chicken</td>
-                                    <td>15</td>
-                                    <td><input type="number" class="form-control restock-qty" min="0"></td>
+                                    <td><input type="checkbox" name="restock_ids[]" value="<?= $ri['id'] ?>" class="restock-check"></td>
+                                    <td><?= htmlspecialchars($ri['name']) ?></td>
+                                    <td><?= $ri['stock_qty'] ?></td>
+                                    <td><?= htmlspecialchars($ri['unit']) ?></td>
+                                    <td>
+                                        <input type="number" name="restock_qty[<?= $ri['id'] ?>]"
+                                               class="form-control restock-qty" min="0" step="0.01"
+                                               style="width:100px;">
+                                    </td>
                                 </tr>
-                                <tr>
-                                    <td><input type="checkbox" class="restock-check"></td>
-                                    <td>Tomatoes</td>
-                                    <td>8</td>
-                                    <td><input type="number" class="form-control restock-qty" min="0"></td>
-                                </tr>
-                                <tr>
-                                    <td><input type="checkbox" class="restock-check"></td>
-                                    <td>Milk</td>
-                                    <td>0</td>
-                                    <td><input type="number" class="form-control restock-qty" min="0"></td>
-                                </tr>
-                                <tr>
-                                    <td><input type="checkbox" class="restock-check"></td>
-                                    <td>Bread</td>
-                                    <td>12</td>
-                                    <td><input type="number" class="form-control restock-qty" min="0"></td>
-                                </tr>
+                                <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>
 
                     <div class="modal-footer">
-                        <button class="btn btn-default" data-dismiss="modal">Cancel</button>
-                        <button class="btn btn-success">Restock Selected</button>
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-truck mr-1"></i>Restock Selected
+                        </button>
                     </div>
+                </form>
 
-                </div>
             </div>
         </div>
-
     </div>
 
-    <script src="../plugins/jquery/jquery.min.js"></script>
-    <script src="../plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+</div><!-- /.wrapper -->
 
-    <script src="../plugins/datatables/jquery.dataTables.min.js"></script>
-    <script src="../plugins/datatables-bs4/js/dataTables.bootstrap4.min.js"></script>
 
-    <script src="../dist/js/adminlte.js"></script>
+<!-- ── Scripts ──────────────────────────────────────────────── -->
+<script src="../plugins/jquery/jquery.min.js"></script>
+<script src="../plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="../plugins/datatables/jquery.dataTables.min.js"></script>
+<script src="../plugins/datatables-bs4/js/dataTables.bootstrap4.min.js"></script>
+<script src="../dist/js/adminlte.js"></script>
+<script src="../plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js"></script>
 
-    <script>
-        $(function () {
-            $("#inventoryTable").DataTable({
-                "responsive": true,
-                "autoWidth": false,
-                "columnDefs": [
-                    { "orderable": false, "targets": [0, 6] }, // Disable sorting on Image (0) and Actions (6) columns
-                    { "type": "num", "targets": 4 } // Treat Stock column as numeric for proper sorting
-                ],
-                "order": [[1, "asc"]] // Default sort by Product Name ascending
-            });
+<!-- DataTable init -->
+<script>
+    $(function () {
+        $("#inventoryTable").DataTable({
+            "responsive": true,
+            "autoWidth": false,
+            "columnDefs": [
+                { "orderable": false, "targets": [7] }
+            ],
+            "order": [[1, "asc"]]
         });
-    </script>
+    });
+</script>
 
-    <!-- Dark mode toggle -->
-    <script>
-        $(function () {
-            // Check for saved dark mode preference
-            const darkMode = localStorage.getItem('darkMode');
-            if (darkMode === 'true') {
-                $('body').addClass('dark-mode');
-                $('.main-header.navbar').addClass('navbar-dark').removeClass('navbar-white navbar-light bg-white');
-                $('#darkModeToggle i').removeClass('fa-moon').addClass('fa-sun');
-            } else {
-                $('body').removeClass('dark-mode');
-                $('.main-header.navbar').removeClass('navbar-dark').addClass('navbar-white navbar-light bg-white');
-                $('#darkModeToggle i').removeClass('fa-sun').addClass('fa-moon');
-            }
-            $('#darkModeToggle').on('click', function (e) {
-                e.preventDefault();
-                $('body').toggleClass('dark-mode');
-                $('.main-header.navbar').toggleClass('navbar-dark navbar-white navbar-light bg-white');
-                // Toggle icon between moon and sun
-                $(this).find('i').toggleClass('fa-moon fa-sun');
-                // Save preference
-                const isDark = $('body').hasClass('dark-mode');
-                localStorage.setItem('darkMode', isDark);
-                // Animate the icon and button
-                $(this).addClass('clicked');
-                $(this).find('i').addClass('clicked');
-                setTimeout(() => {
-                    $(this).removeClass('clicked');
-                    $(this).find('i').removeClass('clicked');
-                }, 300);
-            });
+<!-- Dark mode toggle -->
+<script>
+    $(function () {
+        const darkMode = localStorage.getItem('darkMode');
+        if (darkMode === 'true') {
+            $('body').addClass('dark-mode');
+            $('.main-header.navbar').addClass('navbar-dark').removeClass('navbar-white navbar-light bg-white');
+            $('#darkModeToggle i').removeClass('fa-moon').addClass('fa-sun');
+        } else {
+            $('body').removeClass('dark-mode');
+            $('.main-header.navbar').removeClass('navbar-dark').addClass('navbar-white navbar-light bg-white');
+            $('#darkModeToggle i').removeClass('fa-sun').addClass('fa-moon');
+        }
+        $('#darkModeToggle').on('click', function (e) {
+            e.preventDefault();
+            $('body').toggleClass('dark-mode');
+            $('.main-header.navbar').toggleClass('navbar-dark navbar-white navbar-light bg-white');
+            $(this).find('i').toggleClass('fa-moon fa-sun');
+            localStorage.setItem('darkMode', $('body').hasClass('dark-mode'));
+            $(this).addClass('clicked');
+            setTimeout(() => $(this).removeClass('clicked'), 300);
         });
-    </script>
+    });
+</script>
+
+<!-- Edit modal: pre-fill from data-* on Edit button -->
+<script>
+    $(function () {
+        $('#editInventoryModal').on('show.bs.modal', function (event) {
+            var btn = $(event.relatedTarget);
+            $('#editIngId').val(btn.data('id'));
+            $('#editIngName').val(btn.data('name'));
+            $('#editIngUnit').val(btn.data('unit'));
+            $('#editIngStock').val(btn.data('stock'));
+            $('#editIngThreshold').val(btn.data('threshold'));
+        });
+    });
+</script>
 
 </body>
-
 </html>
-```

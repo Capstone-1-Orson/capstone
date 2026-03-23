@@ -70,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['email'])) {
             }
 
             if ($db_position === 'staff') {
-                header("Location: ../Frontend/POS.html");
+                header("Location: ../Frontend/POS.php");
                 exit();
             }
 
