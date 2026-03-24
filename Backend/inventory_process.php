@@ -127,15 +127,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' &&
         header("Location: $redirect"); exit;
     }
 
-    $stmt = $conn->prepare("DELETE FROM ingredients WHERE id = ?");
-    $stmt->bind_param('i', $id);
+    // 1. Remove all recipe links for this ingredient first (FK constraint)
+    $stmt = $conn->prepare("DELETE FROM menu_ingredients WHERE ingredient_id = ?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $stmt->close();
 
+    // 2. Now safe to delete the ingredient itself
+    $stmt = $conn->prepare("DELETE FROM ingredients WHERE id = ?");
+    $stmt->bind_param("i", $id);
     if ($stmt->execute()) {
         $_SESSION['success'] = "Ingredient deleted successfully.";
     } else {
         $_SESSION['error'] = "Failed to delete: " . $stmt->error;
     }
-
     $stmt->close();
     $conn->close();
     header("Location: $redirect"); exit;

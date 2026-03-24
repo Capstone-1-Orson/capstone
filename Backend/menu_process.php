@@ -129,6 +129,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_menu'])) {
 
 // ═══════════════════════════════════════════════
 //  DELETE  (GET  ?action=delete&id=N)
+//
+//  Strategy:
+//  - If the menu item has been ordered before (exists in order_items),
+//    we SOFT-DELETE it by setting is_available = 0 so it disappears
+//    from the POS and menu list but keeps order history intact.
+//  - If it has never been ordered, we hard-delete it safely.
 // ═══════════════════════════════════════════════
 if ($_SERVER['REQUEST_METHOD'] === 'GET' &&
     isset($_GET['action']) && $_GET['action'] === 'delete' &&
@@ -142,16 +148,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' &&
         exit;
     }
 
-    $stmt = $conn->prepare("DELETE FROM menu WHERE id = ?");
-    $stmt->bind_param('i', $id);
+    // Check if this menu item is referenced in any order
+    $check = $conn->prepare("SELECT COUNT(*) AS cnt FROM order_items WHERE menu_id = ?");
+    $check->bind_param('i', $id);
+    $check->execute();
+    $cnt = $check->get_result()->fetch_assoc()['cnt'];
+    $check->close();
 
-    if ($stmt->execute()) {
-        $_SESSION['success'] = "Menu item deleted successfully.";
+    if ($cnt > 0) {
+        // Has order history — soft delete (hide from POS & menu list)
+        $stmt = $conn->prepare("UPDATE menu SET is_available = 0 WHERE id = ?");
+        $stmt->bind_param('i', $id);
+        if ($stmt->execute()) {
+            $_SESSION['success'] = "Menu item hidden from POS (has order history, cannot be fully deleted).";
+        } else {
+            $_SESSION['error'] = "Failed to hide item: " . $stmt->error;
+        }
+        $stmt->close();
     } else {
-        $_SESSION['error'] = "Failed to delete item: " . $stmt->error;
+        // No order history — safe to hard delete
+        // Remove menu_ingredients first (FK), then the menu row
+        $del_ing = $conn->prepare("DELETE FROM menu_ingredients WHERE menu_id = ?");
+        $del_ing->bind_param('i', $id);
+        $del_ing->execute();
+        $del_ing->close();
+
+        $stmt = $conn->prepare("DELETE FROM menu WHERE id = ?");
+        $stmt->bind_param('i', $id);
+        if ($stmt->execute()) {
+            $_SESSION['success'] = "Menu item deleted successfully.";
+        } else {
+            $_SESSION['error'] = "Failed to delete item: " . $stmt->error;
+        }
+        $stmt->close();
     }
 
-    $stmt->close();
     $conn->close();
     header("Location: $redirect");
     exit;

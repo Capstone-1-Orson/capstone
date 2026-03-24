@@ -31,10 +31,30 @@ if ($res2 && $res2->num_rows > 0) {
 $conn->close();
 
 $cat_emoji = [
-    'Main Course' => '🍽️',
-    'Appetizer'   => '🥗',
-    'Dessert'     => '🍰',
-    'Beverage'    => '☕',
+    'Main Course'   => '🍽️',
+    'Appetizer'     => '🥗',
+    'Dessert'       => '🍰',
+    'Beverage'      => '☕',
+    'Coffee'        => '☕',
+    'Beer & Wine'   => '🍷',
+    'Bites & Treats'=> '🥐',
+    'Croffle'       => '🧇',
+    'Croffle Box'   => '📦',
+    'Frappe'        => '🥤',
+    'Smoothie'      => '🥤',
+    'Tea'           => '🍵',
+    'Pasta'         => '🍝',
+    'Pizza'         => '🍕',
+    'Sandwich'      => '🥪',
+    'Salad'         => '🥗',
+    'Soup'          => '🍲',
+    'Rice'          => '🍚',
+    'Breakfast'     => '🍳',
+    'Snacks'        => '🍟',
+    'Juice'         => '🍊',
+    'Milkshake'     => '🥛',
+    'Cake'          => '🎂',
+    'Waffles'       => '🧇',
 ];
 
 $products_json = json_encode(array_map(function($item) use ($cat_emoji) {
@@ -92,6 +112,8 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 @keyframes scaleIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 var(--accent-glow)}50%{box-shadow:0 0 0 8px transparent}}
 @keyframes slideUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+/* Prevent flash of invisible content during animation delay */
+.stats-strip,.cats,.product-card{opacity:1;}
 
 /* SIDEBAR */
 .pos-sidebar{width:var(--sidebar-w);flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:16px 0 14px;gap:3px;z-index:100;transition:background var(--tr);}
@@ -115,7 +137,7 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 
 /* MAIN */
 .pos-main{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:20px 18px;gap:16px;min-width:0;background:var(--bg);transition:background var(--tr);}
-.pos-topbar{display:flex;align-items:center;gap:11px;flex-shrink:0;animation:fadeUp .4s ease;}
+.pos-topbar{display:flex;align-items:center;gap:11px;flex-shrink:0;animation:fadeUp .4s ease forwards;}
 .pos-title{font-family:'Playfair Display',serif;font-size:23px;font-weight:700;white-space:nowrap;}
 .pos-title span{color:var(--accent);}
 .pos-search{flex:1;max-width:360px;position:relative;margin-left:auto;}
@@ -129,7 +151,7 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 .t-chip strong{color:var(--accent);font-weight:700;}
 
 /* STATS */
-.stats-strip{display:flex;gap:11px;flex-shrink:0;animation:fadeUp .4s .06s ease both;}
+.stats-strip{display:flex;gap:11px;flex-shrink:0;animation:fadeUp .4s .06s ease forwards;}
 .stat-card{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:13px 16px;display:flex;align-items:center;gap:13px;transition:all var(--tr);min-width:0;cursor:default;}
 .stat-card:hover{border-color:var(--border2);transform:translateY(-2px);box-shadow:0 8px 24px var(--accent-glow);}
 .stat-ic{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
@@ -137,8 +159,11 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 .stat-l{font-size:11px;color:var(--muted);margin-top:2px;}
 
 /* CATEGORIES */
-.cats{display:flex;gap:8px;overflow-x:auto;flex-shrink:0;padding-bottom:2px;animation:fadeUp .4s .1s ease both;}
-.cats::-webkit-scrollbar{display:none;}
+.cats{display:flex;gap:8px;overflow-x:auto;flex-shrink:0;padding-bottom:6px;animation:fadeUp .4s .1s ease forwards;scroll-behavior:smooth;}
+.cats::-webkit-scrollbar{height:3px;}
+.cats::-webkit-scrollbar-track{background:transparent;}
+.cats::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:4px;}
+.cats::-webkit-scrollbar-thumb:hover{background:var(--accent);}
 .cat-pill{display:flex;align-items:center;gap:6px;padding:7px 16px;border-radius:50px;border:1px solid var(--border2);background:var(--surface);color:var(--muted2);font-size:13px;font-weight:500;white-space:nowrap;flex-shrink:0;transition:all var(--tr);}
 .cat-pill:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);}
 .cat-pill.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;box-shadow:0 4px 14px var(--accent-glow);}
@@ -147,8 +172,8 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 .sec-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;flex-shrink:0;}
 
 /* PRODUCT GRID */
-.product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:13px;overflow-y:auto;padding-right:2px;align-content:start;}
-.product-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;transition:all var(--tr);cursor:pointer;position:relative;animation:fadeUp .35s ease both;}
+.product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:13px;overflow-y:auto;padding-right:4px;align-content:start;flex:1;min-height:0;}
+.product-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;transition:all var(--tr);cursor:pointer;position:relative;animation:fadeUp .35s ease forwards;}
 .product-card:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 12px 28px var(--accent-glow);}
 .product-card:hover .card-add-btn{opacity:1;transform:translateY(0);}
 .card-img-w{height:108px;position:relative;overflow:hidden;background:var(--surface2);}
@@ -186,6 +211,9 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 .tbl-chip{padding:5px 10px;border-radius:7px;background:var(--surface2);border:1px solid var(--border2);font-size:12px;font-weight:600;color:var(--muted2);transition:all var(--tr);}
 .tbl-chip.active{background:var(--accent-soft);border-color:rgba(233,30,140,.4);color:var(--accent);}
 .tbl-chip:hover:not(.active){border-color:var(--accent);color:var(--accent);}
+.tbl-number-inp{width:72px;padding:6px 10px;background:var(--surface2);border:1.5px solid var(--border2);border-radius:9px;color:var(--text);font-size:15px;font-weight:700;text-align:center;transition:all var(--tr);}
+.tbl-number-inp:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow);}
+.tbl-number-inp::-webkit-inner-spin-button,.tbl-number-inp::-webkit-outer-spin-button{opacity:1;}
 
 /* CART */
 .cart-scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;min-height:0;}
@@ -334,6 +362,96 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 @media(max-width:1200px){:root{--order-w:295px;}}
 @media(max-width:1024px){.stats-strip{display:none;}}
 @media(max-width:860px){.pos-order{display:none;}}
+
+/* ── SIDE PANELS ── */
+.side-panel{position:fixed;top:0;left:var(--sidebar-w);right:0;bottom:0;background:var(--bg);z-index:500;display:none;flex-direction:column;overflow:hidden;animation:fadeIn .2s ease;}
+.side-panel.open{display:flex;}
+.panel-header{display:flex;align-items:center;gap:14px;padding:22px 28px 18px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--surface);}
+.panel-header-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;background:var(--accent-soft);color:var(--accent);flex-shrink:0;}
+.panel-title{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;flex:1;}
+.panel-title span{color:var(--accent);}
+.panel-close{width:38px;height:38px;border-radius:10px;background:var(--surface2);border:1px solid var(--border2);color:var(--muted2);font-size:15px;display:flex;align-items:center;justify-content:center;transition:all var(--tr);}
+.panel-close:hover{background:var(--red);color:#fff;border-color:var(--red);}
+.panel-body{flex:1;overflow-y:auto;padding:24px 28px;}
+
+/* Panel grid cards */
+.panel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;margin-bottom:28px;}
+.panel-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;display:flex;flex-direction:column;gap:10px;transition:all var(--tr);}
+.panel-card:hover{border-color:var(--border2);transform:translateY(-2px);box-shadow:0 8px 24px var(--accent-glow);}
+.panel-card-ic{width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;}
+.panel-card-v{font-size:26px;font-weight:800;line-height:1.1;}
+.panel-card-l{font-size:12px;color:var(--muted);margin-top:2px;}
+.panel-card-trend{font-size:11px;font-weight:600;margin-top:4px;}
+.panel-card-trend.up{color:var(--green);}
+.panel-card-trend.flat{color:var(--muted);}
+
+/* Section title */
+.panel-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:14px;margin-top:4px;}
+
+/* Table */
+.panel-table{width:100%;border-collapse:collapse;font-size:13px;}
+.panel-table th{text-align:left;padding:8px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);border-bottom:1px solid var(--border2);}
+.panel-table td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.panel-table tr:last-child td{border-bottom:none;}
+.panel-table tr:hover td{background:var(--surface2);}
+.badge-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;}
+.badge-pill.green{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.25);}
+.badge-pill.red{background:rgba(239,68,68,.10);color:var(--red);border:1px solid rgba(239,68,68,.2);}
+.badge-pill.blue{background:rgba(59,130,246,.10);color:var(--blue);border:1px solid rgba(59,130,246,.2);}
+.badge-pill.pink{background:var(--accent-soft);color:var(--accent);border:1px solid rgba(233,30,140,.25);}
+.badge-pill.gray{background:var(--surface3);color:var(--muted2);border:1px solid var(--border2);}
+
+/* Menu panel grid */
+.menu-panel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;}
+.menu-panel-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;align-items:center;gap:14px;transition:all var(--tr);}
+.menu-panel-card:hover{border-color:var(--border2);transform:translateY(-2px);}
+.menu-panel-emoji{width:48px;height:48px;background:var(--surface2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;}
+.menu-panel-info{flex:1;min-width:0;}
+.menu-panel-name{font-weight:600;font-size:13.5px;}
+.menu-panel-cat{font-size:11px;color:var(--muted);margin-top:2px;}
+.menu-panel-price{font-size:15px;font-weight:800;color:var(--accent);margin-top:4px;}
+
+/* Tables panel */
+.tables-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:14px;}
+.table-card{background:var(--surface);border:2px solid var(--border);border-radius:var(--radius);padding:18px 14px;display:flex;flex-direction:column;align-items:center;gap:7px;cursor:pointer;transition:all var(--tr);}
+.table-card:hover{border-color:var(--border2);transform:translateY(-2px);}
+.table-card.occupied{border-color:rgba(233,30,140,.4);background:var(--accent-soft);}
+.table-card.available{border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.05);}
+.table-card.reserved{border-color:rgba(59,130,246,.35);background:rgba(59,130,246,.07);}
+.table-num{font-size:22px;font-weight:800;}
+.table-status{font-size:11px;font-weight:600;}
+.table-card.occupied .table-status{color:var(--accent);}
+.table-card.available .table-status{color:var(--green);}
+.table-card.reserved .table-status{color:var(--blue);}
+.table-pax{font-size:11px;color:var(--muted);}
+
+/* History panel */
+.history-item{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 16px;margin-bottom:10px;transition:all var(--tr);}
+.history-item:hover{border-color:var(--border2);}
+.history-ic{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.history-info{flex:1;min-width:0;}
+.history-id{font-weight:700;font-size:13.5px;}
+.history-meta{font-size:11.5px;color:var(--muted);margin-top:2px;}
+.history-amt{font-size:14px;font-weight:800;color:var(--accent);text-align:right;flex-shrink:0;}
+
+/* Reports panel */
+.report-bar-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px;}
+.report-bar-title{font-size:13px;font-weight:600;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;}
+.report-bar-title span{font-size:11px;color:var(--muted);font-weight:400;}
+.bar-row{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
+.bar-label{font-size:12px;color:var(--muted2);width:90px;flex-shrink:0;}
+.bar-track{flex:1;height:8px;background:var(--surface3);border-radius:4px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:4px;background:var(--accent);transition:width .6s ease;}
+.bar-val{font-size:12px;font-weight:700;color:var(--accent);width:60px;text-align:right;flex-shrink:0;}
+
+/* Light overrides for panels */
+[data-theme="light"] .side-panel{background:#fff;}
+[data-theme="light"] .panel-header{background:#fff;}
+[data-theme="light"] .panel-card{background:#fff;}
+[data-theme="light"] .menu-panel-card{background:#fff;}
+[data-theme="light"] .table-card{background:#fff;}
+[data-theme="light"] .history-item{background:#fff;}
+[data-theme="light"] .report-bar-wrap{background:#fff;}
 </style>
 </head>
 <body>
@@ -402,7 +520,7 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 <!-- ── Order Panel ─────────────────────────────────────────── -->
 <aside class="pos-order">
   <div class="o-top">
-    <div class="o-title">Bill Order</div>
+    <div class="o-title">Bill Order <span id="cartBadge" style="display:none;background:var(--accent);color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;margin-left:6px;vertical-align:middle;font-family:'Outfit',sans-serif;"></span></div>
     <div class="o-date" id="orderDate"></div>
   </div>
   <div class="o-tabs">
@@ -412,7 +530,7 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
   </div>
   <div class="tbl-row">
     <span class="tbl-label"><i class="fa-solid fa-chair" style="font-size:11px"></i> Table:</span>
-    <div class="tbl-chips" id="tableChips"></div>
+    <input type="number" id="tableInput" class="tbl-number-inp" min="1" max="99" value="1" placeholder="#">
   </div>
   <div class="cart-scroll" id="cartScroll">
     <div class="empty-cart" id="emptyMsg">
@@ -426,6 +544,10 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
     <button class="btn-coupon" id="btnCoupon"><i class="fa-solid fa-ticket me-1"></i>Apply</button>
   </div>
   <div class="o-summary">
+    <div class="sum-row" id="orderTypeRow" style="padding-bottom:6px;border-bottom:1px dashed var(--border2);margin-bottom:2px;">
+      <span class="sum-lbl"><i class="fa-solid fa-tag" style="font-size:10px;margin-right:3px"></i>Order Type</span>
+      <span class="sum-val" id="sumOrderType" style="font-size:12px;background:var(--accent-soft);color:var(--accent);border:1px solid rgba(233,30,140,.25);padding:2px 9px;border-radius:20px;font-weight:700;">Dine In</span>
+    </div>
     <div class="sum-row"><span class="sum-lbl">Subtotal</span><span class="sum-val" id="sumSub">₱ 0.00</span></div>
     <div class="sum-row" id="discRow" style="display:none"><span class="sum-lbl">Discount</span><span class="sum-val sum-disc" id="sumDisc">-₱ 0.00</span></div>
     <div class="sum-row"><span class="sum-lbl">Tax (1% VAT)</span><span class="sum-val" id="sumTax">₱ 0.00</span></div>
@@ -433,48 +555,272 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
     <div class="sum-row sum-total"><span>Total</span><span class="sum-val" id="sumTotal">₱ 0.00</span></div>
   </div>
 
-  <!-- Payment Method -->
-  <div>
-    <div class="pay-label mb-2">Payment Method</div>
-    <div class="pay-methods">
-      <button class="pay-btn active" data-method="Cash" onclick="selectPay(this)">
-        <i class="fa-solid fa-money-bill-wave"></i>Cash
-      </button>
-      <button class="pay-btn" data-method="Card" onclick="selectPay(this)">
-        <i class="fa-regular fa-credit-card"></i>Card
-      </button>
-      <button class="pay-btn" data-method="E-Pay" onclick="selectPay(this)">
-        <i class="fa-solid fa-mobile-screen-button"></i>E-Pay
-      </button>
-    </div>
-  </div>
-
-  <!-- ── Cash Tendered & Change Calculator ──
-  <div class="cash-section" id="cashSection">
-    <div class="cash-section-title">
-      <i class="fa-solid fa-money-bill-wave" style="color:var(--green)"></i> Cash Received
-    </div>
-    <div class="cash-input-wrap">
-      <span class="cash-prefix">₱</span>
-      <input type="number" class="cash-inp" id="cashInput"
-             placeholder="Enter amount tendered…" min="0" step="1">
-    </div>
-    Quick-amount shortcut buttons, rendered by JS
-    <div class="quick-amounts" id="quickAmounts"></div>
-     Live change display
-    <div class="change-display zero" id="changeDisplay">
-      <span class="change-label" id="changeLabel">Change</span>
-      <span class="change-amount zero" id="changeAmount">₱ —</span>
-    </div> -->
-  </div>
-
   <button class="btn-place" id="btnPlace" disabled>
-    <i class="fa-solid fa-check"></i> Place Order
+    <i class="fa-solid fa-credit-card"></i> Pay & Place Order
   </button>
 </aside>
 
 <!-- ── Receipt Modal container ───────────────────────────── -->
 <div id="receiptContainer"></div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- STATS PANEL                                               -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="side-panel" id="panel-stats">
+  <div class="panel-header">
+    <div class="panel-header-icon"><i class="fa-solid fa-chart-pie"></i></div>
+    <div class="panel-title">Dashboard <span>Stats</span></div>
+    <button class="panel-close" onclick="closePanel()"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div class="panel-body">
+    <div class="panel-section-title">Session Overview</div>
+    <div class="panel-grid">
+      <div class="panel-card">
+        <div class="panel-card-ic" style="background:var(--accent-soft)"><i class="fa-solid fa-fire" style="color:var(--accent)"></i></div>
+        <div class="panel-card-v" id="ps-revenue">₱0.00</div>
+        <div class="panel-card-l">Session Revenue</div>
+        <div class="panel-card-trend flat"><i class="fa-solid fa-clock-rotate-left"></i> Current session</div>
+      </div>
+      <div class="panel-card">
+        <div class="panel-card-ic" style="background:rgba(34,197,94,.12)"><i class="fa-solid fa-bag-shopping" style="color:var(--green)"></i></div>
+        <div class="panel-card-v" id="ps-orders">0</div>
+        <div class="panel-card-l">Orders Placed</div>
+        <div class="panel-card-trend flat"><i class="fa-solid fa-clock-rotate-left"></i> Current session</div>
+      </div>
+      <div class="panel-card">
+        <div class="panel-card-ic" style="background:rgba(59,130,246,.12)"><i class="fa-solid fa-utensils" style="color:var(--blue)"></i></div>
+        <div class="panel-card-v"><?= count($menu_items) ?></div>
+        <div class="panel-card-l">Active Menu Items</div>
+        <div class="panel-card-trend up"><i class="fa-solid fa-circle-check"></i> All available</div>
+      </div>
+      <div class="panel-card">
+        <div class="panel-card-ic" style="background:var(--accent-soft)"><i class="fa-solid fa-tags" style="color:var(--accent)"></i></div>
+        <div class="panel-card-v"><?= count($cats_raw) ?></div>
+        <div class="panel-card-l">Categories</div>
+        <div class="panel-card-trend flat"><i class="fa-solid fa-layer-group"></i> Menu groups</div>
+      </div>
+      <div class="panel-card">
+        <div class="panel-card-ic" style="background:rgba(34,197,94,.12)"><i class="fa-solid fa-calculator" style="color:var(--green)"></i></div>
+        <div class="panel-card-v" id="ps-avg">₱0.00</div>
+        <div class="panel-card-l">Avg. Order Value</div>
+        <div class="panel-card-trend flat"><i class="fa-solid fa-chart-line"></i> Per order</div>
+      </div>
+      <div class="panel-card">
+        <div class="panel-card-ic" style="background:rgba(59,130,246,.12)"><i class="fa-solid fa-table-cells-large" style="color:var(--blue)"></i></div>
+        <div class="panel-card-v">8</div>
+        <div class="panel-card-l">Total Tables</div>
+        <div class="panel-card-trend flat"><i class="fa-solid fa-chair"></i> Dining capacity</div>
+      </div>
+    </div>
+
+    <div class="panel-section-title">Category Breakdown</div>
+    <div class="report-bar-wrap">
+      <div class="report-bar-title">Items per Category <span>Live from menu</span></div>
+      <?php foreach($cats_raw as $cat): ?>
+      <?php $cnt = count(array_filter($menu_items, fn($i) => $i['category'] === $cat)); ?>
+      <?php $pct = count($menu_items) ? round($cnt / count($menu_items) * 100) : 0; ?>
+      <div class="bar-row">
+        <span class="bar-label"><?= $cat_emoji[$cat] ?? '🍽️' ?> <?= htmlspecialchars($cat) ?></span>
+        <div class="bar-track"><div class="bar-fill" style="width:<?= $pct ?>%"></div></div>
+        <span class="bar-val"><?= $cnt ?> items</span>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- MENU PANEL                                                -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="side-panel" id="panel-menu">
+  <div class="panel-header">
+    <div class="panel-header-icon"><i class="fa-solid fa-utensils"></i></div>
+    <div class="panel-title">Menu <span>Items</span></div>
+    <button class="panel-close" onclick="closePanel()"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div class="panel-body">
+    <?php foreach($cats_raw as $cat): ?>
+    <?php $items = array_filter($menu_items, fn($i) => $i['category'] === $cat); ?>
+    <?php if(count($items)): ?>
+    <div class="panel-section-title"><?= $cat_emoji[$cat] ?? '🍽️' ?> <?= htmlspecialchars($cat) ?> <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted2)">(<?= count($items) ?> items)</span></div>
+    <div class="menu-panel-grid" style="margin-bottom:24px;">
+      <?php foreach($items as $item): ?>
+      <div class="menu-panel-card">
+        <div class="menu-panel-emoji"><?= $cat_emoji[$item['category']] ?? '🍽️' ?></div>
+        <div class="menu-panel-info">
+          <div class="menu-panel-name"><?= htmlspecialchars($item['name']) ?></div>
+          <div class="menu-panel-cat"><?= htmlspecialchars($item['category']) ?></div>
+          <?php if($item['description']): ?><div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars($item['description']) ?></div><?php endif; ?>
+          <div class="menu-panel-price">₱<?= number_format($item['price'], 2) ?></div>
+        </div>
+        <span class="badge-pill green"><i class="fa-solid fa-circle" style="font-size:6px"></i> Active</span>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+    <?php endforeach; ?>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- TABLES PANEL                                              -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="side-panel" id="panel-tables">
+  <div class="panel-header">
+    <div class="panel-header-icon"><i class="fa-solid fa-table-cells-large"></i></div>
+    <div class="panel-title">Table <span>Layout</span></div>
+    <button class="panel-close" onclick="closePanel()"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div class="panel-body">
+    <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted2)"><div style="width:12px;height:12px;border-radius:3px;background:rgba(34,197,94,.2);border:1px solid rgba(34,197,94,.4)"></div>Available</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted2)"><div style="width:12px;height:12px;border-radius:3px;background:var(--accent-soft);border:1px solid rgba(233,30,140,.4)"></div>Occupied</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted2)"><div style="width:12px;height:12px;border-radius:3px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.4)"></div>Reserved</div>
+    </div>
+    <div class="panel-section-title">Dining Area</div>
+    <div class="tables-grid" id="tablesGrid"></div>
+
+    <div class="panel-section-title" style="margin-top:28px;">Table Summary</div>
+    <div class="panel-grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr));">
+      <div class="panel-card" style="flex-direction:row;align-items:center;gap:12px;padding:14px 16px;">
+        <div class="panel-card-ic" style="background:rgba(34,197,94,.12);width:36px;height:36px;font-size:15px;"><i class="fa-solid fa-circle-check" style="color:var(--green)"></i></div>
+        <div><div class="panel-card-v" style="font-size:20px;" id="tbl-available">6</div><div class="panel-card-l">Available</div></div>
+      </div>
+      <div class="panel-card" style="flex-direction:row;align-items:center;gap:12px;padding:14px 16px;">
+        <div class="panel-card-ic" style="background:var(--accent-soft);width:36px;height:36px;font-size:15px;"><i class="fa-solid fa-user-group" style="color:var(--accent)"></i></div>
+        <div><div class="panel-card-v" style="font-size:20px;" id="tbl-occupied">1</div><div class="panel-card-l">Occupied</div></div>
+      </div>
+      <div class="panel-card" style="flex-direction:row;align-items:center;gap:12px;padding:14px 16px;">
+        <div class="panel-card-ic" style="background:rgba(59,130,246,.1);width:36px;height:36px;font-size:15px;"><i class="fa-solid fa-bookmark" style="color:var(--blue)"></i></div>
+        <div><div class="panel-card-v" style="font-size:20px;" id="tbl-reserved">1</div><div class="panel-card-l">Reserved</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- HISTORY PANEL                                             -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="side-panel" id="panel-history">
+  <div class="panel-header">
+    <div class="panel-header-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
+    <div class="panel-title">Order <span>History</span></div>
+    <button class="panel-close" onclick="closePanel()"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div class="panel-body">
+    <div class="panel-section-title">Session Orders</div>
+    <div id="historyList">
+      <div style="text-align:center;padding:60px 20px;color:var(--muted);">
+        <i class="fa-solid fa-clock-rotate-left" style="font-size:40px;color:var(--surface3);display:block;margin-bottom:12px;"></i>
+        <strong>No orders yet this session</strong><br>
+        <small style="font-size:12px;">Completed orders will appear here</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- REPORTS PANEL                                             -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="side-panel" id="panel-reports">
+  <div class="panel-header">
+    <div class="panel-header-icon"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+    <div class="panel-title">Sales <span>Reports</span></div>
+    <button class="panel-close" onclick="closePanel()"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div class="panel-body">
+    <div class="panel-section-title">Session Performance</div>
+    <div class="panel-grid" style="margin-bottom:28px;">
+      <div class="panel-card">
+        <div class="panel-card-ic" style="background:var(--accent-soft)"><i class="fa-solid fa-peso-sign" style="color:var(--accent)"></i></div>
+        <div class="panel-card-v" id="rpt-revenue">₱0.00</div>
+        <div class="panel-card-l">Total Revenue</div>
+      </div>
+      <div class="panel-card">
+        <div class="panel-card-ic" style="background:rgba(34,197,94,.12)"><i class="fa-solid fa-receipt" style="color:var(--green)"></i></div>
+        <div class="panel-card-v" id="rpt-orders">0</div>
+        <div class="panel-card-l">Total Orders</div>
+      </div>
+      <div class="panel-card">
+        <div class="panel-card-ic" style="background:rgba(59,130,246,.12)"><i class="fa-solid fa-chart-line" style="color:var(--blue)"></i></div>
+        <div class="panel-card-v" id="rpt-avg">₱0.00</div>
+        <div class="panel-card-l">Avg. Order Value</div>
+      </div>
+      <div class="panel-card">
+        <div class="panel-card-ic" style="background:rgba(234,179,8,.12)"><i class="fa-solid fa-star" style="color:#eab308"></i></div>
+        <div class="panel-card-v" id="rpt-topitem">—</div>
+        <div class="panel-card-l">Top Selling Item</div>
+      </div>
+    </div>
+
+    <div class="panel-section-title">Revenue by Category</div>
+    <div class="report-bar-wrap" id="rpt-catbars">
+      <div class="report-bar-title">Category Sales <span>Session totals</span></div>
+      <div style="color:var(--muted);font-size:13px;padding:10px 0;">No orders placed yet this session.</div>
+    </div>
+
+    <div class="panel-section-title" style="margin-top:8px;">Recent Transactions</div>
+    <div id="rpt-txlist">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:30px;text-align:center;color:var(--muted);font-size:13px;">
+        <i class="fa-solid fa-file-invoice" style="font-size:30px;color:var(--surface3);display:block;margin-bottom:10px;"></i>
+        No transactions yet
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Pay Modal ─────────────────────────────────────────── -->
+<div class="receipt-backdrop" id="payModal" style="display:none;z-index:3000;" onclick="handlePayModalClick(event)">
+  <div class="receipt-modal" style="max-width:380px;" onclick="event.stopPropagation()">
+    <div class="receipt-header" style="padding:18px 20px 14px;">
+      <button class="receipt-close-x" onclick="closePayModal()"><i class="fa-solid fa-xmark"></i></button>
+      <div class="receipt-store-name" style="font-size:18px;">Confirm <span>Payment</span></div>
+      <div class="receipt-subtitle" id="payModalSubtitle"></div>
+    </div>
+
+    <!-- Order summary strip -->
+    <div class="receipt-meta" id="payModalMeta" style="grid-template-columns:1fr 1fr 1fr;"></div>
+
+    <!-- Payment method -->
+    <div style="padding:14px 20px 0;">
+      <div class="pay-label mb-2">Payment Method</div>
+      <div class="pay-methods" id="payModalMethods">
+        <button class="pay-btn active" data-method="Cash" onclick="selectModalPay(this)">
+          <i class="fa-solid fa-money-bill-wave"></i>Cash
+        </button>
+        <button class="pay-btn" data-method="Card" onclick="selectModalPay(this)">
+          <i class="fa-regular fa-credit-card"></i>Card
+        </button>
+        <button class="pay-btn" data-method="E-Pay" onclick="selectModalPay(this)">
+          <i class="fa-solid fa-mobile-screen-button"></i>E-Pay
+        </button>
+      </div>
+    </div>
+
+    <!-- Cash tendered (shown when Cash selected) -->
+    <div id="payModalCashSection" style="padding:12px 20px 0;display:flex;flex-direction:column;gap:9px;">
+      <div class="cash-section-title">
+        <i class="fa-solid fa-money-bill-wave" style="color:var(--green)"></i> Cash Received
+      </div>
+      <div class="cash-input-wrap">
+        <span class="cash-prefix">₱</span>
+        <input type="number" class="cash-inp" id="cashInput" placeholder="Enter amount tendered…" min="0" step="1">
+      </div>
+      <div class="quick-amounts" id="quickAmounts"></div>
+      <div class="change-display zero" id="changeDisplay">
+        <span class="change-label" id="changeLabel">Change</span>
+        <span class="change-amount zero" id="changeAmount">₱ —</span>
+      </div>
+    </div>
+
+    <!-- Confirm button -->
+    <div style="padding:16px 20px 20px;">
+      <button class="btn-place" id="btnConfirmPay" style="font-size:14px;padding:13px;">
+        <i class="fa-solid fa-check"></i> Confirm &amp; Place Order
+      </button>
+    </div>
+  </div>
+</div>
 
 <div class="pos-toast" id="toast"></div>
 
@@ -490,25 +836,206 @@ let sessionRevenue = 0, sessionOrders = 0;
 let currentTotal = 0;
 
 const CAT_ICON = {
-  'Main Course':'🍽️','Appetizer':'🥗','Dessert':'🍰','Beverage':'☕'
+  'Main Course':'🍽️','Appetizer':'🥗','Dessert':'🍰','Beverage':'☕',
+  'Coffee':'☕','Beer & Wine':'🍷','Bites & Treats':'🥐','Croffle':'🧇',
+  'Croffle Box':'📦','Frappe':'🥤','Smoothie':'🥤','Tea':'🍵',
+  'Pasta':'🍝','Pizza':'🍕','Sandwich':'🥪','Salad':'🥗',
+  'Soup':'🍲','Rice':'🍚','Breakfast':'🍳','Snacks':'🍟',
+  'Juice':'🍊','Milkshake':'🥛','Cake':'🎂','Waffles':'🧇',
 };
 
 document.addEventListener('DOMContentLoaded', () => {
   setDate();
   renderCats();
-  renderTables();
+  initTableInput();
   renderProducts();
   initSearch();
   initTabs();
   initTheme();
   initCoupon();
   initCashInput();
-  document.getElementById('btnPlace').addEventListener('click', placeOrder);
-  document.querySelectorAll('.nav-btn').forEach(b => b.addEventListener('click', () => {
-    document.querySelectorAll('.nav-btn').forEach(x => x.classList.remove('active'));
-    b.classList.add('active');
-  }));
+  document.getElementById('btnPlace').addEventListener('click', openPayModal);
+  document.getElementById('btnConfirmPay').addEventListener('click', placeOrder);
+
+  // ── Nav buttons → open panels ──────────────────────────────
+  const navMap = {
+    'Stats':   'panel-stats',
+    'Menu':    'panel-menu',
+    'Tables':  'panel-tables',
+    'History': 'panel-history',
+    'Reports': 'panel-reports',
+  };
+  document.querySelectorAll('.nav-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      const label = b.title || b.textContent.trim();
+      const panelId = navMap[label];
+      if (panelId) {
+        openPanel(panelId, b);
+      } else {
+        // Orders btn — close any open panel
+        closePanel();
+        document.querySelectorAll('.nav-btn').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+      }
+    });
+  });
+
+  // Close panel on Escape
+  document.addEventListener('keydown', e => { if(e.key==='Escape') closePanel(); });
+  renderTablesGrid();
 });
+
+// ── Order history (session) ───────────────────────────────────
+let orderHistory = [];
+
+// ── Panel open / close ────────────────────────────────────────
+function openPanel(id, navBtn) {
+  document.querySelectorAll('.side-panel').forEach(p => p.classList.remove('open'));
+  document.querySelectorAll('.nav-btn').forEach(x => x.classList.remove('active'));
+  if(navBtn) navBtn.classList.add('active');
+  const panel = document.getElementById(id);
+  if(!panel) return;
+  panel.classList.add('open');
+  // Refresh dynamic data
+  if(id === 'panel-stats')   refreshStatsPanel();
+  if(id === 'panel-history') refreshHistoryPanel();
+  if(id === 'panel-reports') refreshReportsPanel();
+  if(id === 'panel-tables')  renderTablesGrid();
+}
+
+function closePanel() {
+  document.querySelectorAll('.side-panel').forEach(p => p.classList.remove('open'));
+  // Re-activate Orders nav
+  document.querySelectorAll('.nav-btn').forEach(x => x.classList.remove('active'));
+  const ordersBtn = [...document.querySelectorAll('.nav-btn')].find(b => b.title === 'Orders');
+  if(ordersBtn) ordersBtn.classList.add('active');
+}
+
+// ── Stats panel refresh ───────────────────────────────────────
+function refreshStatsPanel() {
+  document.getElementById('ps-revenue').textContent = '₱' + sessionRevenue.toLocaleString('en',{minimumFractionDigits:2});
+  document.getElementById('ps-orders').textContent  = sessionOrders;
+  const avg = sessionOrders > 0 ? sessionRevenue / sessionOrders : 0;
+  document.getElementById('ps-avg').textContent = '₱' + avg.toLocaleString('en',{minimumFractionDigits:2});
+}
+
+// ── Tables grid ───────────────────────────────────────────────
+function renderTablesGrid() {
+  const grid = document.getElementById('tablesGrid');
+  if(!grid) return;
+  // Demo statuses — in production you'd fetch from DB
+  const statuses = {
+    '01':'occupied','02':'available','03':'available','04':'reserved',
+    '05':'available','06':'available','07':'available','08':'available'
+  };
+  const pax = {'01':'4 pax','02':'2 pax','03':'4 pax','04':'6 pax','05':'2 pax','06':'4 pax','07':'4 pax','08':'6 pax'};
+  grid.innerHTML = '';
+  let avail=0, occ=0, res=0;
+  for(let i=1;i<=8;i++){
+    const t=String(i).padStart(2,'0');
+    const s=statuses[t]||'available';
+    if(s==='available') avail++; else if(s==='occupied') occ++; else res++;
+    const card=document.createElement('div');
+    card.className=`table-card ${s}`;
+    card.innerHTML=`
+      <i class="fa-solid fa-chair" style="font-size:28px;opacity:.6"></i>
+      <div class="table-num">T${t}</div>
+      <div class="table-status">${s.charAt(0).toUpperCase()+s.slice(1)}</div>
+      <div class="table-pax">${pax[t]||''}</div>`;
+    card.addEventListener('click',()=>{
+      // Jump to Orders and set table
+      closePanel();
+      const inp=document.getElementById('tableInput');
+      if(inp){ inp.value=i; inp.dispatchEvent(new Event('input')); }
+    });
+    grid.appendChild(card);
+  }
+  const ae=document.getElementById('tbl-available');
+  const oe=document.getElementById('tbl-occupied');
+  const re=document.getElementById('tbl-reserved');
+  if(ae) ae.textContent=avail;
+  if(oe) oe.textContent=occ;
+  if(re) re.textContent=res;
+}
+
+// ── History panel refresh ─────────────────────────────────────
+function refreshHistoryPanel() {
+  const list = document.getElementById('historyList');
+  if(!list) return;
+  if(!orderHistory.length){
+    list.innerHTML=`<div style="text-align:center;padding:60px 20px;color:var(--muted);">
+      <i class="fa-solid fa-clock-rotate-left" style="font-size:40px;color:var(--surface3);display:block;margin-bottom:12px;"></i>
+      <strong>No orders yet this session</strong><br>
+      <small style="font-size:12px;">Completed orders will appear here</small></div>`;
+    return;
+  }
+  list.innerHTML = [...orderHistory].reverse().map(o=>`
+    <div class="history-item">
+      <div class="history-ic" style="background:var(--accent-soft)"><i class="fa-solid fa-receipt" style="color:var(--accent)"></i></div>
+      <div class="history-info">
+        <div class="history-id">Order #${o.id} &nbsp;<span class="badge-pill pink">${o.payMethod}</span></div>
+        <div class="history-meta">Table #${o.table} · ${o.type} · ${o.items} item${o.items>1?'s':''} · ${o.time}</div>
+      </div>
+      <div class="history-amt">₱${o.total.toLocaleString('en',{minimumFractionDigits:2})}</div>
+    </div>`).join('');
+}
+
+// ── Reports panel refresh ─────────────────────────────────────
+function refreshReportsPanel() {
+  const avg = sessionOrders>0 ? sessionRevenue/sessionOrders : 0;
+  document.getElementById('rpt-revenue').textContent = '₱'+sessionRevenue.toLocaleString('en',{minimumFractionDigits:2});
+  document.getElementById('rpt-orders').textContent  = sessionOrders;
+  document.getElementById('rpt-avg').textContent     = '₱'+avg.toLocaleString('en',{minimumFractionDigits:2});
+
+  // Top selling item
+  const itemCounts = {};
+  orderHistory.forEach(o => o.itemNames.forEach(n => { itemCounts[n]=(itemCounts[n]||0)+1; }));
+  const top = Object.entries(itemCounts).sort((a,b)=>b[1]-a[1])[0];
+  document.getElementById('rpt-topitem').textContent = top ? top[0] : '—';
+
+  // Category revenue bars
+  const catRev = {};
+  orderHistory.forEach(o => o.cartSnapshot.forEach(c => {
+    catRev[c.cat] = (catRev[c.cat]||0) + c.price*c.qty;
+  }));
+  const barsEl = document.getElementById('rpt-catbars');
+  if(!Object.keys(catRev).length){
+    barsEl.innerHTML=`<div class="report-bar-title">Category Sales <span>Session totals</span></div>
+      <div style="color:var(--muted);font-size:13px;padding:10px 0;">No orders placed yet.</div>`;
+  } else {
+    const maxRev = Math.max(...Object.values(catRev));
+    barsEl.innerHTML=`<div class="report-bar-title">Category Sales <span>Session totals</span></div>`+
+      Object.entries(catRev).sort((a,b)=>b[1]-a[1]).map(([cat,rev])=>`
+        <div class="bar-row">
+          <span class="bar-label" style="font-size:11.5px">${cat}</span>
+          <div class="bar-track"><div class="bar-fill" style="width:${Math.round(rev/maxRev*100)}%"></div></div>
+          <span class="bar-val">₱${rev.toLocaleString('en',{minimumFractionDigits:0})}</span>
+        </div>`).join('');
+  }
+
+  // Transaction list
+  const txEl = document.getElementById('rpt-txlist');
+  if(!orderHistory.length){
+    txEl.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:30px;text-align:center;color:var(--muted);font-size:13px;">
+      <i class="fa-solid fa-file-invoice" style="font-size:30px;color:var(--surface3);display:block;margin-bottom:10px;"></i>No transactions yet</div>`;
+  } else {
+    txEl.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
+      <table class="panel-table" style="width:100%">
+        <thead><tr>
+          <th>Order</th><th>Table</th><th>Type</th><th>Items</th><th>Method</th><th style="text-align:right">Total</th>
+        </tr></thead>
+        <tbody>`+[...orderHistory].reverse().map(o=>`
+          <tr>
+            <td><strong>#${o.id}</strong></td>
+            <td>#${o.table}</td>
+            <td>${o.type}</td>
+            <td>${o.items}</td>
+            <td><span class="badge-pill ${o.payMethod==='Cash'?'green':o.payMethod==='Card'?'blue':'pink'}">${o.payMethod}</span></td>
+            <td style="text-align:right;font-weight:700;color:var(--accent)">₱${o.total.toLocaleString('en',{minimumFractionDigits:2})}</td>
+          </tr>`).join('')+
+        `</tbody></table></div>`;
+  }
+}
 
 function setDate() {
   document.getElementById('orderDate').textContent =
@@ -535,21 +1062,16 @@ function renderCats() {
   });
 }
 
-// ── Tables ────────────────────────────────────────────────────
-function renderTables() {
-  const w=document.getElementById('tableChips');
-  w.innerHTML='';
-  ['01','02','03','04','05','06','07','08'].forEach(t=>{
-    const b=document.createElement('button');
-    b.className='tbl-chip'+(t===selTable?' active':'');
-    b.textContent='#'+t;
-    b.addEventListener('click',()=>{
-      selTable=t;
-      document.getElementById('tableChip').textContent='#'+t;
-      renderTables();
-    });
-    w.appendChild(b);
+// ── Table Number Input ────────────────────────────────────────
+function initTableInput() {
+  const inp=document.getElementById('tableInput');
+  inp.addEventListener('input',()=>{
+    const v=parseInt(inp.value)||1;
+    selTable=String(v).padStart(2,'0');
+    document.getElementById('tableChip').textContent='#'+selTable;
   });
+  // Init from default value
+  selTable=String(parseInt(inp.value)||1).padStart(2,'0');
 }
 
 // ── Search ────────────────────────────────────────────────────
@@ -577,7 +1099,7 @@ function renderProducts() {
     const inCart=cart.some(c=>c.id===p.id);
     const card=document.createElement('div');
     card.className='product-card'+(inCart?' in-cart':'');
-    card.style.animationDelay=(i*.04)+'s';
+    card.style.animationDelay=(Math.min(i*.04, 0.4))+'s';
     card.dataset.id=p.id;
     card.innerHTML=`
       <div class="card-img-w">
@@ -642,6 +1164,17 @@ function updateCartUI() {
   const placeBtn=document.getElementById('btnPlace');
   scroll.querySelectorAll('.cart-item').forEach(el=>el.remove());
 
+  // Update cart badge
+  const badge=document.getElementById('cartBadge');
+  const totalQty=cart.reduce((s,c)=>s+c.qty,0);
+  if(totalQty>0){ badge.textContent=totalQty; badge.style.display='inline'; }
+  else badge.style.display='none';
+
+  // Sync order type label in summary
+  const activeTab=document.querySelector('.o-tab.active');
+  const orderTypeEl=document.getElementById('sumOrderType');
+  if(activeTab && orderTypeEl) orderTypeEl.textContent=activeTab.textContent.trim();
+
   if(!cart.length){
     emptyMsg.style.display='flex';
     placeBtn.disabled=true;
@@ -655,7 +1188,7 @@ function updateCartUI() {
         <div class="ci-emoji">${item.emoji}</div>
         <div class="ci-info">
           <div class="ci-name">${item.name}</div>
-          <div class="ci-price">₱${item.price.toLocaleString()} each</div>
+          <div class="ci-price">₱${item.price.toLocaleString('en',{minimumFractionDigits:2})} each</div>
         </div>
         <div class="qty-ctrl">
           <button class="qty-btn" onclick="changeQty(${item.id},-1)"><i class="fa-solid fa-minus" style="font-size:9px"></i></button>
@@ -663,7 +1196,7 @@ function updateCartUI() {
           <button class="qty-btn" onclick="changeQty(${item.id},1)"><i class="fa-solid fa-plus" style="font-size:9px"></i></button>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
-          <span class="ci-total">₱${(item.price*item.qty).toLocaleString()}</span>
+          <span class="ci-total">₱${(item.price*item.qty).toLocaleString('en',{minimumFractionDigits:2})}</span>
           <button class="btn-rm" onclick="removeItem(${item.id})"><i class="fa-solid fa-trash-can"></i></button>
         </div>`;
       scroll.appendChild(el);
@@ -764,15 +1297,184 @@ function updateChange() {
 }
 
 function isCashPayment() {
-  const active=document.querySelector('.pay-btn.active');
+  const active=document.querySelector('#payModalMethods .pay-btn.active');
   return active && active.dataset.method==='Cash';
 }
 
 function selectPay(btn) {
   document.querySelectorAll('.pay-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  document.getElementById('cashSection').style.display=
-    (btn.dataset.method==='Cash') ? 'flex' : 'none';
+  document.getElementById('cashSection') &&
+    (document.getElementById('cashSection').style.display=(btn.dataset.method==='Cash')?'flex':'none');
+}
+
+function selectModalPay(btn) {
+  document.querySelectorAll('#payModalMethods .pay-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('payModalCashSection').style.display=
+    (btn.dataset.method==='Cash')?'flex':'none';
+  updateChange();
+}
+
+// ── Pay Modal ─────────────────────────────────────────────────
+function openPayModal() {
+  if(!cart.length) return;
+  // Populate summary strip
+  const activeTab=document.querySelector('.o-tab.active');
+  const orderType=activeTab?activeTab.textContent.trim():'Dine In';
+  document.getElementById('payModalSubtitle').textContent=orderType+' · Table #'+selTable;
+  document.getElementById('payModalMeta').innerHTML=`
+    <div>${cart.length} item${cart.length>1?'s':''}<br><small style="color:var(--muted)">Items</small></div>
+    <div style="text-align:center">₱${currentTotal.toLocaleString('en',{minimumFractionDigits:2})}<br><small style="color:var(--muted)">Total</small></div>
+    <div style="text-align:right">#${selTable}<br><small style="color:var(--muted)">Table</small></div>`;
+  // Reset to Cash selected
+  document.querySelectorAll('#payModalMethods .pay-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelector('#payModalMethods .pay-btn[data-method="Cash"]').classList.add('active');
+  document.getElementById('payModalCashSection').style.display='flex';
+  document.getElementById('cashInput').value='';
+  renderQuickAmounts(currentTotal);
+  updateChange();
+  const modal=document.getElementById('payModal');
+  modal.style.display='flex';
+  modal.style.animation='fadeIn .22s ease';
+  setTimeout(()=>document.getElementById('cashInput').focus(),120);
+}
+
+function closePayModal() {
+  const m=document.getElementById('payModal');
+  m.style.transition='opacity .18s ease';
+  m.style.opacity='0';
+  setTimeout(()=>{ m.style.display='none'; m.style.opacity=''; m.style.transition=''; },180);
+}
+
+function handlePayModalClick(e) {
+  if(e.target.id==='payModal') closePayModal();
+}
+
+// ── Place Order ───────────────────────────────────────────────
+function placeOrder() {
+  if(!cart.length) return;
+
+  const activePayBtn=document.querySelector('#payModalMethods .pay-btn.active');
+  const payMethod=activePayBtn?.dataset.method||'Cash';
+
+  // Capture cash tendered BEFORE closing modal
+  const cashTendered=payMethod==='Cash'?(parseFloat(document.getElementById('cashInput').value)||0):0;
+
+  // Validate cash amount
+  if(payMethod==='Cash'){
+    if(cashTendered<currentTotal){
+      showToast('<i class="fa-solid fa-triangle-exclamation me-1"></i> Cash received is less than total!','var(--red)',3000);
+      document.getElementById('cashInput').focus();
+      return;
+    }
+  }
+
+  const sub   =cart.reduce((s,c)=>s+c.price*c.qty,0);
+  const tax   =sub*.01;
+  const total =parseFloat(Math.max(sub+tax-discount,0).toFixed(2));
+  const changeDue=payMethod==='Cash'?(cashTendered-total):0;
+
+  const payload={
+    table_no:  selTable,
+    status:    'pending',
+    total_amt: total,
+    items: cart.map(c=>({ menu_id:c.id, qty:c.qty, unit_price:c.price }))
+  };
+
+  const btn=document.getElementById('btnConfirmPay');
+  btn.disabled=true;
+  btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
+
+  // Snapshot cart & order data BEFORE closing modal and resetting state
+  const activeTab=document.querySelector('.o-tab.active');
+  const cartSnapshot=cart.map(c=>({...c}));
+  const orderData_base={
+    table:selTable,
+    items:cartSnapshot,
+    subtotal:sub,
+    tax,
+    discount,
+    total,
+    payMethod,
+    cashTendered,
+    changeDue,
+    orderType:activeTab?activeTab.textContent.trim():'Dine In',
+  };
+
+  // Close the pay modal immediately on click
+  closePayModal();
+
+  fetch('../Backend/pos_process.php',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  })
+  .then(r=>r.json())
+  .then(res=>{
+    btn.disabled=false;
+    btn.innerHTML='<i class="fa-solid fa-check"></i> Confirm & Place Order';
+
+    if(res.success){
+      sessionRevenue+=total;
+      sessionOrders++;
+      document.getElementById('statRevenue').textContent='₱'+sessionRevenue.toLocaleString('en',{minimumFractionDigits:2});
+      document.getElementById('statOrders').textContent=sessionOrders;
+
+      // Record to history
+      orderHistory.push({
+        id:         res.order_id,
+        table:      selTable,
+        type:       orderData_base.orderType,
+        items:      cartSnapshot.reduce((s,c)=>s+c.qty,0),
+        itemNames:  cartSnapshot.map(c=>c.name),
+        cartSnapshot,
+        total,
+        payMethod,
+        time:       new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),
+      });
+      // Update history badge dot
+      const histBtn=[...document.querySelectorAll('.nav-btn')].find(b=>b.title==='History');
+      if(histBtn && !histBtn.querySelector('.bdot')){
+        const dot=document.createElement('span'); dot.className='bdot'; histBtn.appendChild(dot);
+      }
+
+      // Snapshot cart before reset
+      const orderData={
+        orderId:res.order_id,
+        ...orderData_base,
+      };
+
+      // Show receipt after modal fade completes
+      setTimeout(()=>{
+        showReceipt(orderData);
+
+        // Reset cart state after receipt is shown
+        cart=[]; discount=0;
+        document.getElementById('couponInput').value='';
+        document.getElementById('cashInput').value='';
+        currentTotal=0;
+        updateCartUI();
+        document.querySelectorAll('.product-card').forEach(c=>c.classList.remove('in-cart'));
+        document.querySelectorAll('.card-add-btn').forEach(b=>{
+          b.innerHTML='<i class="fa-solid fa-plus"></i> Add to Order';
+          b.style.opacity=0; b.style.transform='translateY(4px)';
+        });
+        const placeBtn=document.getElementById('btnPlace');
+        placeBtn.disabled=true;
+        updateChange();
+      }, 220);
+
+    } else {
+      showToast(`<i class="fa-solid fa-triangle-exclamation me-1"></i> ${res.message||'Error saving order'}`, 'var(--red)', 3500);
+    }
+  })
+  .catch(err=>{
+    console.error('pos_process error:', err);
+    showToast('<i class="fa-solid fa-triangle-exclamation me-1"></i> Network error. Try again.','var(--red)',3000);
+    btn.disabled=false;
+    btn.innerHTML='<i class="fa-solid fa-check"></i> Confirm & Place Order';
+  });
 }
 
 // ── Coupon ────────────────────────────────────────────────────
@@ -793,95 +1495,9 @@ function initTabs() {
   document.querySelectorAll('.o-tab').forEach(b=>b.addEventListener('click',()=>{
     document.querySelectorAll('.o-tab').forEach(x=>x.classList.remove('active'));
     b.classList.add('active');
+    const orderTypeEl=document.getElementById('sumOrderType');
+    if(orderTypeEl) orderTypeEl.textContent=b.textContent.trim();
   }));
-}
-
-// ── Place Order ───────────────────────────────────────────────
-function placeOrder() {
-  if(!cart.length) return;
-
-  // Validate cash amount if cash payment
-  if(isCashPayment()){
-    const cashVal=parseFloat(document.getElementById('cashInput').value)||0;
-    if(cashVal<currentTotal){
-      showToast('<i class="fa-solid fa-triangle-exclamation me-1"></i> Cash received is less than total!','var(--red)',3000);
-      document.getElementById('cashInput').focus();
-      return;
-    }
-  }
-
-  const sub   =cart.reduce((s,c)=>s+c.price*c.qty,0);
-  const tax   =sub*.01;
-  const total =parseFloat(Math.max(sub+tax-discount,0).toFixed(2));
-  const payMethod=document.querySelector('.pay-btn.active')?.dataset.method||'Cash';
-
-  const payload={
-    table_no:  selTable,
-    status:    'pending',
-    total_amt: total,
-    items: cart.map(c=>({ menu_id:c.id, qty:c.qty, unit_price:c.price }))
-  };
-
-  const btn=document.getElementById('btnPlace');
-  btn.disabled=true;
-  btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
-
-  fetch('../Backend/pos_process.php',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify(payload)
-  })
-  .then(r=>r.json())
-  .then(res=>{
-    if(res.success){
-      sessionRevenue+=total;
-      sessionOrders++;
-      document.getElementById('statRevenue').textContent='₱'+sessionRevenue.toLocaleString('en',{minimumFractionDigits:2});
-      document.getElementById('statOrders').textContent=sessionOrders;
-
-      const cashTendered=isCashPayment()?(parseFloat(document.getElementById('cashInput').value)||0):0;
-      const changeDue   =isCashPayment()?(cashTendered-total):0;
-
-      showReceipt({
-        orderId:res.order_id,
-        table:selTable,
-        items:[...cart],
-        subtotal:sub,
-        tax,
-        discount,
-        total,
-        payMethod,
-        cashTendered,
-        changeDue,
-      });
-
-      // Reset cart state
-      setTimeout(()=>{
-        cart=[]; discount=0;
-        document.getElementById('couponInput').value='';
-        document.getElementById('cashInput').value='';
-        currentTotal=0;
-        updateCartUI();
-        document.querySelectorAll('.product-card').forEach(c=>c.classList.remove('in-cart'));
-        document.querySelectorAll('.card-add-btn').forEach(b=>{
-          b.innerHTML='<i class="fa-solid fa-plus"></i> Add to Order';
-          b.style.opacity=0; b.style.transform='translateY(4px)';
-        });
-        btn.disabled=true;
-        btn.innerHTML='<i class="fa-solid fa-check"></i> Place Order';
-        updateChange();
-      },300);
-    } else {
-      showToast(`<i class="fa-solid fa-triangle-exclamation me-1"></i> ${res.message}`,'var(--red)',3500);
-      btn.disabled=false;
-      btn.innerHTML='<i class="fa-solid fa-check"></i> Place Order';
-    }
-  })
-  .catch(()=>{
-    showToast('<i class="fa-solid fa-triangle-exclamation me-1"></i> Network error. Try again.','var(--red)',3000);
-    btn.disabled=false;
-    btn.innerHTML='<i class="fa-solid fa-check"></i> Place Order';
-  });
 }
 
 // ── Receipt Modal ─────────────────────────────────────────────

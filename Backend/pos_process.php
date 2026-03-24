@@ -1,92 +1,177 @@
 <?php
 // Backend/pos_process.php
-// Receives JSON POST from POS.php and saves to:
-//   orders      (id, table_no, status, total_amt, created_at)
-//   order_items (id, order_id, menu_id, qty, unit_price)
+// Handles POS order placement AND auto-deducts ingredient stock.
 
-session_start();
 header('Content-Type: application/json');
+session_start();
 
 if (!isset($_SESSION['user'])) {
-    echo json_encode(['success' => false, 'message' => 'Not authenticated.']);
-    exit;
+    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+    exit();
 }
 
 require_once 'conn.php';
 
-// ── Read JSON body ────────────────────────────────────────────
-$input = json_decode(file_get_contents('php://input'), true);
+// ── Read JSON payload from POS.php ────────────────────────────
+$raw  = file_get_contents('php://input');
+$data = json_decode($raw, true);
 
-if (!$input) {
-    echo json_encode(['success' => false, 'message' => 'Invalid request data.']);
-    exit;
+if (!$data || empty($data['items'])) {
+    echo json_encode(['success' => false, 'message' => 'Invalid payload']);
+    exit();
 }
 
-$table_no  = trim($input['table_no']  ?? '');
-$status    = trim($input['status']    ?? 'pending');
-$total_amt = floatval($input['total_amt'] ?? 0);
-$items     = $input['items'] ?? [];
+$table_no  = $conn->real_escape_string($data['table_no']  ?? '01');
+$status    = 'pending';
+$total_amt = floatval($data['total_amt'] ?? 0);
+$items     = $data['items'];  // [ { menu_id, qty, unit_price }, … ]
 
-// ── Validate ──────────────────────────────────────────────────
-if (empty($table_no) || $total_amt <= 0 || empty($items)) {
-    echo json_encode(['success' => false, 'message' => 'Missing required order data.']);
-    exit;
+// ══════════════════════════════════════════════════════════════
+//  PRE-CHECK: verify all ingredients have enough stock BEFORE
+//  touching the database. Collect shortages and reject early.
+// ══════════════════════════════════════════════════════════════
+$stmtCheck = $conn->prepare(
+    "SELECT i.id, i.name, i.stock_qty, i.unit, mi.qty_needed, m.name AS menu_name
+     FROM menu_ingredients mi
+     JOIN ingredients i ON i.id = mi.ingredient_id
+     JOIN menu m        ON m.id = mi.menu_id
+     WHERE mi.menu_id = ?"
+);
+
+// We accumulate how much of each ingredient the full order needs
+// key = ingredient_id, value = [ name, unit, available, needed ]
+$needs = [];
+
+foreach ($items as $item) {
+    $menu_id = intval($item['menu_id']);
+    $qty     = intval($item['qty']);
+
+    $stmtCheck->bind_param('i', $menu_id);
+    $stmtCheck->execute();
+    $res = $stmtCheck->get_result();
+
+    while ($row = $res->fetch_assoc()) {
+        $id        = intval($row['id']);
+        $required  = floatval($row['qty_needed']) * $qty;
+
+        if (!isset($needs[$id])) {
+            $needs[$id] = [
+                'name'      => $row['name'],
+                'unit'      => $row['unit'],
+                'available' => floatval($row['stock_qty']),
+                'needed'    => 0,
+                'menu_name' => $row['menu_name'],
+            ];
+        }
+        $needs[$id]['needed'] += $required;
+    }
+    $res->free();
+}
+$stmtCheck->close();
+
+// Find any shortages
+$shortages = [];
+foreach ($needs as $ing) {
+    if ($ing['needed'] > $ing['available']) {
+        $shortages[] = sprintf(
+            '"%s" needs %.2f %s but only %.2f %s left',
+            $ing['name'],
+            $ing['needed'],
+            $ing['unit'],
+            $ing['available'],
+            $ing['unit']
+        );
+    }
 }
 
-$created_at = date('Y-m-d H:i:s');
+if (!empty($shortages)) {
+    echo json_encode([
+        'success'   => false,
+        'out_of_stock' => true,
+        'message'   => '⚠️ Out of stock: ' . implode('; ', $shortages),
+    ]);
+    $conn->close();
+    exit();
+}
 
-// ── Begin transaction ─────────────────────────────────────────
+// ── BEGIN TRANSACTION ─────────────────────────────────────────
 $conn->begin_transaction();
 
 try {
+
     // 1. Insert into orders
-    // orders columns: id, table_no, status, total_amt, created_at
     $stmt = $conn->prepare(
         "INSERT INTO orders (table_no, status, total_amt, created_at)
-         VALUES (?, ?, ?, ?)"
+         VALUES (?, ?, ?, NOW())"
     );
-    // s=table_no, s=status, d=total_amt, s=created_at
-    $stmt->bind_param('ssds', $table_no, $status, $total_amt, $created_at);
+    $stmt->bind_param('ssd', $table_no, $status, $total_amt);
     $stmt->execute();
     $order_id = $conn->insert_id;
     $stmt->close();
 
-    // 2. Insert each item into order_items
-    // order_items columns: id, order_id, menu_id, qty, unit_price
-    $stmt2 = $conn->prepare(
+    // 2. Insert each order item + deduct ingredients
+    $stmtItem = $conn->prepare(
         "INSERT INTO order_items (order_id, menu_id, qty, unit_price)
          VALUES (?, ?, ?, ?)"
     );
 
+    $stmtIngReq = $conn->prepare(
+        "SELECT ingredient_id, qty_needed
+         FROM menu_ingredients
+         WHERE menu_id = ?"
+    );
+
+    $stmtDeduct = $conn->prepare(
+        "UPDATE ingredients
+         SET stock_qty = GREATEST(stock_qty - ?, 0),
+             updated_at = NOW()
+         WHERE id = ?"
+    );
+
     foreach ($items as $item) {
-        $menu_id    = intval($item['menu_id']    ?? 0);
-        $qty        = intval($item['qty']        ?? 0);
-        $unit_price = floatval($item['unit_price'] ?? 0);
+        $menu_id    = intval($item['menu_id']);
+        $qty        = intval($item['qty']);
+        $unit_price = floatval($item['unit_price']);
 
-        if ($menu_id <= 0 || $qty <= 0) continue;
+        $stmtItem->bind_param('iiid', $order_id, $menu_id, $qty, $unit_price);
+        $stmtItem->execute();
 
-        // i=order_id, i=menu_id, i=qty, d=unit_price
-        $stmt2->bind_param('iiid', $order_id, $menu_id, $qty, $unit_price);
-        $stmt2->execute();
+        $stmtIngReq->bind_param('i', $menu_id);
+        $stmtIngReq->execute();
+        $ingResult = $stmtIngReq->get_result();
+
+        while ($ing = $ingResult->fetch_assoc()) {
+            $ingredient_id = intval($ing['ingredient_id']);
+            $total_deduct  = floatval($ing['qty_needed']) * $qty;
+
+            $stmtDeduct->bind_param('di', $total_deduct, $ingredient_id);
+            $stmtDeduct->execute();
+        }
+
+        $ingResult->free();
     }
-    $stmt2->close();
 
-    // ── Commit ────────────────────────────────────────────────
+    $stmtItem->close();
+    $stmtIngReq->close();
+    $stmtDeduct->close();
+
     $conn->commit();
-    $conn->close();
 
     echo json_encode([
         'success'  => true,
         'order_id' => $order_id,
-        'message'  => 'Order placed successfully.'
+        'message'  => 'Order placed and inventory updated.'
     ]);
 
 } catch (Exception $e) {
+
     $conn->rollback();
-    $conn->close();
+
     echo json_encode([
         'success' => false,
-        'message' => 'Transaction failed: ' . $e->getMessage()
+        'message' => 'Order failed: ' . $e->getMessage()
     ]);
 }
+
+$conn->close();
 ?>

@@ -258,9 +258,6 @@ $conn->close();
                             </div>
                             <div class="card-body">
                                 <div class="btn-group-vertical d-block">
-                                    <button class="btn btn-primary mb-2" data-toggle="modal" data-target="#bulkRestockModal">
-                                        <i class="fas fa-truck mr-1"></i> Bulk Restock
-                                    </button>
                                     <button class="btn btn-secondary mb-2">
                                         <i class="fas fa-file-export mr-1"></i> Export Inventory
                                     </button>

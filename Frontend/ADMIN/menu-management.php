@@ -315,11 +315,10 @@ $conn->close();
                                 data-description="<?= htmlspecialchars($item['description'] ?? '', ENT_QUOTES) ?>">
                           <i class="fas fa-edit"></i>
                         </button>
-                        <a href="../../Backend/menu_process.php?action=delete&id=<?= $item['id'] ?>"
-                           class="btn btn-sm btn-danger"
-                           onclick="return confirm('Delete \'<?= htmlspecialchars($item['name'], ENT_QUOTES) ?>\'? This cannot be undone.')">
+                        <button type="button" class="btn btn-sm btn-danger"
+                                onclick="confirmDelete(<?= $item['id'] ?>, '<?= htmlspecialchars($item['name'], ENT_QUOTES) ?>')">
                           <i class="fas fa-trash"></i>
-                        </a>
+                        </button>
                       </td>
                     </tr>
                     <?php endforeach; ?>
@@ -361,10 +360,28 @@ $conn->close();
                   <label>Category</label>
                   <select name="category" class="form-control" required>
                     <option value="">-- Select Category --</option>
-                    <option value="Main Course">Main Course</option>
-                    <option value="Appetizer">Appetizer</option>
-                    <option value="Dessert">Dessert</option>
-                    <option value="Beverage">Beverage</option>
+                    <optgroup label="☕ Drinks">
+                      <option value="Coffee">Coffee (Hot/Iced)</option>
+                      <option value="Frappe">Frappe</option>
+                      <option value="Non-Coffee">Non-Coffee (Hot/Iced)</option>
+                      <option value="Soda Mix & Match">Soda Mix &amp; Match</option>
+                      <option value="Fresh Juice">Fresh Juices</option>
+                      <option value="Shake">Fresh Fruit / Protein Shake</option>
+                      <option value="Beer & Wine">Beers / Wine</option>
+                      <option value="Others">Others (Drinks)</option>
+                    </optgroup>
+                    <optgroup label="🍽️ Food">
+                      <option value="Rice Meal">Rice Meals</option>
+                      <option value="Pasta">Pasta</option>
+                      <option value="Bites & Treats">Bites and Treats</option>
+                    </optgroup>
+                    <optgroup label="🧇 Croffles">
+                      <option value="Croffle">Croffles</option>
+                      <option value="Croffle Box">Croffle in a Box</option>
+                    </optgroup>
+                    <optgroup label="➕ Extras">
+                      <option value="Add-On">Customize Add-Ons</option>
+                    </optgroup>
                   </select>
                 </div>
               </div>
@@ -479,10 +496,28 @@ $conn->close();
                   <label>Category</label>
                   <select name="category" id="editCategory" class="form-control" required>
                     <option value="">-- Select Category --</option>
-                    <option value="Main Course">Main Course</option>
-                    <option value="Appetizer">Appetizer</option>
-                    <option value="Dessert">Dessert</option>
-                    <option value="Beverage">Beverage</option>
+                    <optgroup label="☕ Drinks">
+                      <option value="Coffee">Coffee (Hot/Iced)</option>
+                      <option value="Frappe">Frappe</option>
+                      <option value="Non-Coffee">Non-Coffee (Hot/Iced)</option>
+                      <option value="Soda Mix & Match">Soda Mix &amp; Match</option>
+                      <option value="Fresh Juice">Fresh Juices</option>
+                      <option value="Shake">Fresh Fruit / Protein Shake</option>
+                      <option value="Beer & Wine">Beers / Wine</option>
+                      <option value="Others">Others (Drinks)</option>
+                    </optgroup>
+                    <optgroup label="🍽️ Food">
+                      <option value="Rice Meal">Rice Meals</option>
+                      <option value="Pasta">Pasta</option>
+                      <option value="Bites & Treats">Bites and Treats</option>
+                    </optgroup>
+                    <optgroup label="🧇 Croffles">
+                      <option value="Croffle">Croffles</option>
+                      <option value="Croffle Box">Croffle in a Box</option>
+                    </optgroup>
+                    <optgroup label="➕ Extras">
+                      <option value="Add-On">Customize Add-Ons</option>
+                    </optgroup>
                   </select>
                 </div>
               </div>
@@ -565,7 +600,36 @@ $conn->close();
   </div>
 
 </div><!-- /.wrapper -->
-
+<!-- ══════════════════════════════════════════════════════════
+     DELETE CONFIRM MODAL
+═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-sm" role="document">
+    <div class="modal-content">
+      <div class="modal-header bg-danger">
+        <h5 class="modal-title text-white">
+          <i class="fas fa-exclamation-triangle mr-2"></i>Delete Item
+        </h5>
+        <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body text-center">
+        <p class="mb-1">Are you sure you want to delete</p>
+        <strong id="deleteItemName" class="d-block mb-2" style="color:#e91e8c;"></strong>
+        <small class="text-muted">
+          If this item has order history, it will be <em>hidden</em> instead of permanently deleted.
+        </small>
+      </div>
+      <div class="modal-footer justify-content-center">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+          <i class="fas fa-times mr-1"></i>Cancel
+        </button>
+        <a id="deleteConfirmBtn" href="#" class="btn btn-danger">
+          <i class="fas fa-trash mr-1"></i>Delete
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ── Scripts ──────────────────────────────────────────────── -->
 <script src="../plugins/jquery/jquery.min.js"></script>
@@ -805,6 +869,12 @@ $conn->close();
 
     editRenderTags();
   });
+
+  function confirmDelete(id, name) {
+    $('#deleteItemName').text(name);
+    $('#deleteConfirmBtn').attr('href', '../../Backend/menu_process.php?action=delete&id=' + id);
+    $('#deleteConfirmModal').modal('show');
+  }
 </script>
 
 </body>
