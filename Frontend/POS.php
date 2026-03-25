@@ -136,7 +136,7 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 .s-avatar:hover{transform:scale(1.1);}
 
 /* MAIN */
-.pos-main{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:20px 18px;gap:16px;min-width:0;background:var(--bg);transition:background var(--tr);}
+.pos-main{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:20px 18px;gap:16px;min-width:0;min-height:0;background:var(--bg);transition:background var(--tr);}
 .pos-topbar{display:flex;align-items:center;gap:11px;flex-shrink:0;animation:fadeUp .4s ease forwards;}
 .pos-title{font-family:'Playfair Display',serif;font-size:23px;font-weight:700;white-space:nowrap;}
 .pos-title span{color:var(--accent);}
@@ -171,21 +171,24 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 .cat-pill.active .cat-cnt{background:rgba(255,255,255,.25);color:#fff;}
 .sec-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;flex-shrink:0;}
 
+/* MENU AREA WRAPPER */
+.menu-area{display:flex;flex-direction:column;flex:1;min-height:0;gap:8px;overflow:hidden;}
+
 /* PRODUCT GRID */
-.product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:13px;overflow-y:auto;padding-right:4px;align-content:start;flex:1;min-height:0;}
-.product-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;transition:all var(--tr);cursor:pointer;position:relative;animation:fadeUp .35s ease forwards;}
+.product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:13px;overflow-y:auto;padding-right:4px;padding-bottom:12px;align-content:start;flex:1;min-height:0;}
+.product-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;transition:all var(--tr);cursor:pointer;position:relative;animation:fadeUp .35s ease forwards;min-height:200px;}
 .product-card:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 12px 28px var(--accent-glow);}
 .product-card:hover .card-add-btn{opacity:1;transform:translateY(0);}
-.card-img-w{height:108px;position:relative;overflow:hidden;background:var(--surface2);}
+.card-img-w{height:108px;min-height:108px;flex-shrink:0;position:relative;overflow:hidden;background:var(--surface2);}
 .card-emoji{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px;transition:transform .45s ease;}
 .product-card:hover .card-emoji{transform:scale(1.12);}
 .card-bdg{position:absolute;top:8px;right:8px;background:var(--green);color:#fff;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:20px;}
 .card-bdg.hot{background:var(--red);}
 .card-bdg.new{background:var(--blue);}
-.card-body-i{padding:11px;flex:1;display:flex;flex-direction:column;gap:7px;}
-.card-name{font-weight:600;font-size:13.5px;line-height:1.3;}
-.card-desc{font-size:11px;color:var(--muted);line-height:1.4;}
-.card-foot{display:flex;align-items:center;justify-content:space-between;}
+.card-body-i{padding:11px;flex:1;display:flex;flex-direction:column;gap:7px;min-height:0;}
+.card-name{font-weight:600;font-size:13.5px;line-height:1.3;flex-shrink:0;}
+.card-desc{font-size:11px;color:var(--muted);line-height:1.4;flex-shrink:0;}
+.card-foot{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-top:auto;}
 .card-price{font-size:15px;font-weight:700;color:var(--accent);}
 .card-add-btn{width:100%;background:var(--accent);color:#fff;font-weight:700;font-size:12.5px;padding:9px;display:flex;align-items:center;justify-content:center;gap:5px;opacity:0;transform:translateY(4px);transition:all var(--tr);flex-shrink:0;}
 .card-add-btn:hover{background:var(--accent-hover);}
@@ -513,8 +516,10 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
   </div>
 
   <div class="cats" id="catRow"></div>
-  <div class="sec-label">Menu Items</div>
-  <div class="product-grid" id="productGrid"></div>
+  <div class="menu-area">
+    <div class="sec-label">Menu Items</div>
+    <div class="product-grid" id="productGrid"></div>
+  </div>
 </main>
 
 <!-- ── Order Panel ─────────────────────────────────────────── -->
