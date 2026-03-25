@@ -28,7 +28,106 @@ if ($res2 && $res2->num_rows > 0) {
     }
 }
 
+// ── Helper: check table exists ─────────────────────────────────
+function tableExists($conn, $table) {
+    $r = $conn->query("SHOW TABLES LIKE '$table'");
+    return $r && $r->num_rows > 0;
+}
+$hasOrderItems = tableExists($conn, 'order_items');
+
+// ── Today's DB stats (for Reports panel initial load) ──────────
+$db_today_revenue = 0.0;
+$db_today_orders  = 0;
+$r = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at)=CURDATE()");
+if ($r && $row = $r->fetch_assoc()) {
+    $db_today_revenue = (float)$row['rev'];
+    $db_today_orders  = (int)$row['cnt'];
+}
+
+// ── All-time DB stats ──────────────────────────────────────────
+$db_total_revenue = 0.0;
+$db_total_orders  = 0;
+$r = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS rev FROM orders");
+if ($r && $row = $r->fetch_assoc()) {
+    $db_total_revenue = (float)$row['rev'];
+    $db_total_orders  = (int)$row['cnt'];
+}
+
+// ── Top selling item (all-time) ────────────────────────────────
+$db_top_item = '—';
+if ($hasOrderItems) {
+    $r = $conn->query(
+        "SELECT m.name, SUM(oi.qty) AS total_qty
+         FROM order_items oi JOIN menu m ON m.id = oi.menu_id
+         GROUP BY oi.menu_id ORDER BY total_qty DESC LIMIT 1"
+    );
+    if ($r && $row = $r->fetch_assoc()) {
+        $db_top_item = htmlspecialchars($row['name']) . ' (' . (int)$row['total_qty'] . ' sold)';
+    }
+}
+
+// ── Order history from DB (last 50 orders today) ───────────────
+$db_history = [];
+if ($hasOrderItems) {
+    $r = $conn->query(
+        "SELECT o.id, o.table_no, o.total_amt, o.created_at,
+                SUM(oi.qty) AS total_qty,
+                GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS item_names
+         FROM orders o
+         JOIN order_items oi ON oi.order_id = o.id
+         JOIN menu m ON m.id = oi.menu_id
+         WHERE DATE(o.created_at) = CURDATE()
+         GROUP BY o.id ORDER BY o.created_at DESC LIMIT 50"
+    );
+    if ($r) while ($row = $r->fetch_assoc()) $db_history[] = $row;
+} else {
+    $r = $conn->query(
+        "SELECT id, table_no, total_amt, created_at, 0 AS total_qty, '—' AS item_names
+         FROM orders WHERE DATE(created_at)=CURDATE() ORDER BY created_at DESC LIMIT 50"
+    );
+    if ($r) while ($row = $r->fetch_assoc()) $db_history[] = $row;
+}
+
+// ── Category revenue today ─────────────────────────────────────
+$db_cat_revenue = [];
+if ($hasOrderItems) {
+    $r = $conn->query(
+        "SELECT m.category, SUM(oi.qty * oi.unit_price) AS revenue
+         FROM order_items oi
+         JOIN menu m ON m.id = oi.menu_id
+         JOIN orders o ON o.id = oi.order_id
+         WHERE DATE(o.created_at) = CURDATE()
+         GROUP BY m.category ORDER BY revenue DESC"
+    );
+    if ($r) while ($row = $r->fetch_assoc()) $db_cat_revenue[] = $row;
+}
+
+// ── Recent transactions today ──────────────────────────────────
+$db_transactions = [];
+if ($hasOrderItems) {
+    $r = $conn->query(
+        "SELECT o.id, o.table_no, o.total_amt, o.created_at,
+                SUM(oi.qty) AS total_qty
+         FROM orders o
+         JOIN order_items oi ON oi.order_id = o.id
+         WHERE DATE(o.created_at) = CURDATE()
+         GROUP BY o.id ORDER BY o.created_at DESC LIMIT 20"
+    );
+    if ($r) while ($row = $r->fetch_assoc()) $db_transactions[] = $row;
+} else {
+    $r = $conn->query(
+        "SELECT id, table_no, total_amt, created_at, 0 AS total_qty
+         FROM orders WHERE DATE(created_at)=CURDATE() ORDER BY created_at DESC LIMIT 20"
+    );
+    if ($r) while ($row = $r->fetch_assoc()) $db_transactions[] = $row;
+}
+
 $conn->close();
+
+// JSON for JS
+$db_history_json      = json_encode($db_history);
+$db_cat_revenue_json  = json_encode($db_cat_revenue);
+$db_transactions_json = json_encode($db_transactions);
 
 $cat_emoji = [
     'Main Course'   => '🍽️',
@@ -835,6 +934,16 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 const products = <?= $products_json ?>;
 const DB_CATS  = <?= $cats_json ?>;
 
+// ── DB-loaded data ────────────────────────────────────────────
+const DB_HISTORY      = <?= $db_history_json ?>;
+const DB_CAT_REVENUE  = <?= $db_cat_revenue_json ?>;
+const DB_TRANSACTIONS = <?= $db_transactions_json ?>;
+const DB_TODAY_REV    = <?= json_encode($db_today_revenue) ?>;
+const DB_TODAY_ORDERS = <?= json_encode($db_today_orders) ?>;
+const DB_TOTAL_REV    = <?= json_encode($db_total_revenue) ?>;
+const DB_TOTAL_ORDERS = <?= json_encode($db_total_orders) ?>;
+const DB_TOP_ITEM     = <?= json_encode($db_top_item) ?>;
+
 // ── State ─────────────────────────────────────────────────────
 let cart = [], activeCat = 'all', searchQ = '', discount = 0, selTable = '01';
 let sessionRevenue = 0, sessionOrders = 0;
@@ -967,49 +1076,88 @@ function renderTablesGrid() {
 function refreshHistoryPanel() {
   const list = document.getElementById('historyList');
   if(!list) return;
-  if(!orderHistory.length){
+
+  // Merge DB history + session orders (session takes priority for new ones)
+  const sessionIds = new Set(orderHistory.map(o => o.id));
+  const dbRows = DB_HISTORY.filter(r => !sessionIds.has(r.id));
+
+  // Build combined list: session orders first (newest), then DB rows not in session
+  const combined = [
+    ...[...orderHistory].reverse().map(o => ({
+      id:       o.id,
+      table_no: o.table,
+      total_amt:o.total,
+      created_at: o.time,
+      total_qty: o.items,
+      item_names: o.itemNames ? o.itemNames.join(', ') : '—',
+      payMethod: o.payMethod,
+      fromSession: true,
+    })),
+    ...dbRows.map(r => ({
+      id:       r.id,
+      table_no: r.table_no,
+      total_amt: parseFloat(r.total_amt),
+      created_at: r.created_at,
+      total_qty: r.total_qty,
+      item_names: r.item_names,
+      payMethod: '—',
+      fromSession: false,
+    }))
+  ];
+
+  if(!combined.length){
     list.innerHTML=`<div style="text-align:center;padding:60px 20px;color:var(--muted);">
       <i class="fa-solid fa-clock-rotate-left" style="font-size:40px;color:var(--surface3);display:block;margin-bottom:12px;"></i>
-      <strong>No orders yet this session</strong><br>
+      <strong>No orders today</strong><br>
       <small style="font-size:12px;">Completed orders will appear here</small></div>`;
     return;
   }
-  list.innerHTML = [...orderHistory].reverse().map(o=>`
+
+  list.innerHTML = combined.map(o=>`
     <div class="history-item">
       <div class="history-ic" style="background:var(--accent-soft)"><i class="fa-solid fa-receipt" style="color:var(--accent)"></i></div>
       <div class="history-info">
-        <div class="history-id">Order #${o.id} &nbsp;<span class="badge-pill pink">${o.payMethod}</span></div>
-        <div class="history-meta">Table #${o.table} · ${o.type} · ${o.items} item${o.items>1?'s':''} · ${o.time}</div>
+        <div class="history-id">Order #${o.id} &nbsp;
+          ${o.payMethod !== '—' ? `<span class="badge-pill pink">${o.payMethod}</span>` : ''}
+          ${o.fromSession ? '<span class="badge-pill green" style="font-size:9px">New</span>' : ''}
+        </div>
+        <div class="history-meta">Table #${o.table_no} · ${o.total_qty} item${o.total_qty!=1?'s':''} · ${o.created_at}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px">${o.item_names}</div>
       </div>
-      <div class="history-amt">₱${o.total.toLocaleString('en',{minimumFractionDigits:2})}</div>
+      <div class="history-amt">₱${parseFloat(o.total_amt).toLocaleString('en',{minimumFractionDigits:2})}</div>
     </div>`).join('');
 }
 
 // ── Reports panel refresh ─────────────────────────────────────
 function refreshReportsPanel() {
-  const avg = sessionOrders>0 ? sessionRevenue/sessionOrders : 0;
-  document.getElementById('rpt-revenue').textContent = '₱'+sessionRevenue.toLocaleString('en',{minimumFractionDigits:2});
-  document.getElementById('rpt-orders').textContent  = sessionOrders;
+  // Combine DB today totals + this session
+  const combinedRevenue = DB_TODAY_REV + sessionRevenue;
+  const combinedOrders  = DB_TODAY_ORDERS + sessionOrders;
+  const avg = combinedOrders > 0 ? combinedRevenue / combinedOrders : 0;
+
+  document.getElementById('rpt-revenue').textContent = '₱'+combinedRevenue.toLocaleString('en',{minimumFractionDigits:2});
+  document.getElementById('rpt-orders').textContent  = combinedOrders;
   document.getElementById('rpt-avg').textContent     = '₱'+avg.toLocaleString('en',{minimumFractionDigits:2});
 
-  // Top selling item
+  // Top item: session first, fallback DB
   const itemCounts = {};
   orderHistory.forEach(o => o.itemNames.forEach(n => { itemCounts[n]=(itemCounts[n]||0)+1; }));
-  const top = Object.entries(itemCounts).sort((a,b)=>b[1]-a[1])[0];
-  document.getElementById('rpt-topitem').textContent = top ? top[0] : '—';
+  const sessionTop = Object.entries(itemCounts).sort((a,b)=>b[1]-a[1])[0];
+  document.getElementById('rpt-topitem').textContent = sessionTop ? sessionTop[0] : DB_TOP_ITEM;
 
-  // Category revenue bars
+  // Category revenue: merge DB + session
   const catRev = {};
+  DB_CAT_REVENUE.forEach(r => { catRev[r.category] = (catRev[r.category]||0) + parseFloat(r.revenue); });
   orderHistory.forEach(o => o.cartSnapshot.forEach(c => {
     catRev[c.cat] = (catRev[c.cat]||0) + c.price*c.qty;
   }));
   const barsEl = document.getElementById('rpt-catbars');
   if(!Object.keys(catRev).length){
-    barsEl.innerHTML=`<div class="report-bar-title">Category Sales <span>Session totals</span></div>
-      <div style="color:var(--muted);font-size:13px;padding:10px 0;">No orders placed yet.</div>`;
+    barsEl.innerHTML=`<div class="report-bar-title">Category Sales <span>Today\'s totals</span></div>
+      <div style="color:var(--muted);font-size:13px;padding:10px 0;">No orders today.</div>`;
   } else {
     const maxRev = Math.max(...Object.values(catRev));
-    barsEl.innerHTML=`<div class="report-bar-title">Category Sales <span>Session totals</span></div>`+
+    barsEl.innerHTML=`<div class="report-bar-title">Category Sales <span>Today\'s totals</span></div>`+
       Object.entries(catRev).sort((a,b)=>b[1]-a[1]).map(([cat,rev])=>`
         <div class="bar-row">
           <span class="bar-label" style="font-size:11.5px">${cat}</span>
@@ -1018,27 +1166,43 @@ function refreshReportsPanel() {
         </div>`).join('');
   }
 
-  // Transaction list
+  // Transaction list: merge DB + session
+  const sessionIds = new Set(orderHistory.map(o => o.id));
+  const dbTx = DB_TRANSACTIONS.filter(r => !sessionIds.has(r.id));
+  const allTx = [
+    ...[...orderHistory].reverse().map(o => ({
+      id:o.id, table:o.table, items:o.items, payMethod:o.payMethod, total:o.total, isNew:true
+    })),
+    ...dbTx.map(r => ({
+      id:r.id, table:r.table_no, items:r.total_qty, payMethod:'—', total:parseFloat(r.total_amt), isNew:false
+    }))
+  ];
+
   const txEl = document.getElementById('rpt-txlist');
-  if(!orderHistory.length){
+  if(!allTx.length){
     txEl.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:30px;text-align:center;color:var(--muted);font-size:13px;">
-      <i class="fa-solid fa-file-invoice" style="font-size:30px;color:var(--surface3);display:block;margin-bottom:10px;"></i>No transactions yet</div>`;
+      <i class="fa-solid fa-file-invoice" style="font-size:30px;color:var(--surface3);display:block;margin-bottom:10px;"></i>No transactions today</div>`;
   } else {
     txEl.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
       <table class="panel-table" style="width:100%">
-        <thead><tr>
-          <th>Order</th><th>Table</th><th>Type</th><th>Items</th><th>Method</th><th style="text-align:right">Total</th>
-        </tr></thead>
-        <tbody>`+[...orderHistory].reverse().map(o=>`
+        <thead><tr><th>Order</th><th>Table</th><th>Items</th><th>Method</th><th style="text-align:right">Total</th></tr></thead>
+        <tbody>`+allTx.map(o=>`
           <tr>
-            <td><strong>#${o.id}</strong></td>
+            <td><strong>#${o.id}</strong>${o.isNew?'<span class="badge-pill green" style="font-size:9px;margin-left:4px">New</span>':''}</td>
             <td>#${o.table}</td>
-            <td>${o.type}</td>
             <td>${o.items}</td>
-            <td><span class="badge-pill ${o.payMethod==='Cash'?'green':o.payMethod==='Card'?'blue':'pink'}">${o.payMethod}</span></td>
+            <td><span class="badge-pill ${o.payMethod==='Cash'?'green':o.payMethod==='Card'?'blue':o.payMethod==='—'?'':'pink'}">${o.payMethod}</span></td>
             <td style="text-align:right;font-weight:700;color:var(--accent)">₱${o.total.toLocaleString('en',{minimumFractionDigits:2})}</td>
           </tr>`).join('')+
-        `</tbody></table></div>`;
+        `</tbody></table></div>
+      <div style="margin-top:16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;">All-Time Summary</div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;">
+          <div><div style="font-size:18px;font-weight:700;color:var(--accent)">₱${DB_TOTAL_REV.toLocaleString('en',{minimumFractionDigits:2})}</div><div style="font-size:11px;color:var(--muted)">Total Revenue</div></div>
+          <div><div style="font-size:18px;font-weight:700;color:var(--green)">${DB_TOTAL_ORDERS}</div><div style="font-size:11px;color:var(--muted)">Total Orders</div></div>
+          <div><div style="font-size:18px;font-weight:700;color:var(--blue)">₱${DB_TOTAL_ORDERS>0?(DB_TOTAL_REV/DB_TOTAL_ORDERS).toLocaleString('en',{minimumFractionDigits:2}):'0.00'}</div><div style="font-size:11px;color:var(--muted)">Avg. Order</div></div>
+        </div>
+      </div>`;
   }
 }
 

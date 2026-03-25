@@ -111,7 +111,7 @@ $conn->close();
           <img src="../dist/img/user2-160x160.jpg" class="img-circle elevation-2">
         </div>
         <div class="info">
-          <a href="#" class="d-block">Manager</a>
+           <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user']['firstname'] ?? 'Admin') ?></a>
         </div>
       </div>
       <nav class="mt-2">
@@ -133,7 +133,7 @@ $conn->close();
           </li>
           <li class="nav-item">
             <a href="./suppliers.php" class="nav-link">
-              <i class="nav-icon fas fa-truck"></i><p>Suppliers Orders</p>
+              <i class="nav-icon fas fa-truck"></i><p>Supplier Info</p>
             </a>
           </li>
           <li class="nav-item">

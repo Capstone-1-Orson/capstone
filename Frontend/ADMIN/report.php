@@ -7,6 +7,14 @@ if (!isset($_SESSION['user'])) {
 
 require_once '../../Backend/conn.php';
 
+// ── Helper: check if a table exists ───────────────────────────
+function tableExists($conn, $table) {
+    $res = $conn->query("SHOW TABLES LIKE '$table'");
+    return $res && $res->num_rows > 0;
+}
+
+$hasOrderItems = tableExists($conn, 'order_items');
+
 // ── Summary Stats ─────────────────────────────────────────────
 $totalOrders  = 0;
 $totalRevenue = 0.0;
@@ -23,14 +31,16 @@ if ($res2 && $row2 = $res2->fetch_assoc()) {
 }
 
 $topItem = 'No orders yet';
-$res3 = $conn->query(
-    "SELECT m.name, SUM(oi.qty) AS total_qty
-     FROM order_items oi
-     JOIN menu m ON m.id = oi.menu_id
-     GROUP BY oi.menu_id ORDER BY total_qty DESC LIMIT 1"
-);
-if ($res3 && $row3 = $res3->fetch_assoc()) {
-    $topItem = htmlspecialchars($row3['name']) . ' (' . (int)$row3['total_qty'] . ' sold)';
+if ($hasOrderItems) {
+    $res3 = $conn->query(
+        "SELECT m.name, SUM(oi.qty) AS total_qty
+         FROM order_items oi
+         JOIN menu m ON m.id = oi.menu_id
+         GROUP BY oi.menu_id ORDER BY total_qty DESC LIMIT 1"
+    );
+    if ($res3 && $row3 = $res3->fetch_assoc()) {
+        $topItem = htmlspecialchars($row3['name']) . ' (' . (int)$row3['total_qty'] . ' sold)';
+    }
 }
 
 // ── Sales Chart (last 7 days) ─────────────────────────────────
@@ -53,25 +63,37 @@ if ($res4) while ($row = $res4->fetch_assoc()) $inventoryRows[] = $row;
 
 // ── Orders ────────────────────────────────────────────────────
 $orderRows = [];
-$res5 = $conn->query(
-    "SELECT o.id AS order_id, o.created_at, o.table_no, o.status, o.total_amt,
-            GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
-            SUM(oi.qty) AS total_qty
-     FROM orders o
-     JOIN order_items oi ON oi.order_id = o.id
-     JOIN menu m ON m.id = oi.menu_id
-     GROUP BY o.id ORDER BY o.created_at DESC LIMIT 100"
-);
-if ($res5) while ($row = $res5->fetch_assoc()) $orderRows[] = $row;
+if ($hasOrderItems) {
+    $res5 = $conn->query(
+        "SELECT o.id AS order_id, o.created_at, o.table_no, o.status, o.total_amt,
+                GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
+                SUM(oi.qty) AS total_qty
+         FROM orders o
+         JOIN order_items oi ON oi.order_id = o.id
+         JOIN menu m ON m.id = oi.menu_id
+         GROUP BY o.id ORDER BY o.created_at DESC LIMIT 100"
+    );
+    if ($res5) while ($row = $res5->fetch_assoc()) $orderRows[] = $row;
+} else {
+    // Fallback: show orders without item detail if order_items doesn't exist yet
+    $res5 = $conn->query(
+        "SELECT id AS order_id, created_at, table_no, status, total_amt,
+                '—' AS items, 0 AS total_qty
+         FROM orders ORDER BY created_at DESC LIMIT 100"
+    );
+    if ($res5) while ($row = $res5->fetch_assoc()) $orderRows[] = $row;
+}
 
 // ── Category Sales ────────────────────────────────────────────
 $catSales = [];
-$res6 = $conn->query(
-    "SELECT m.category, SUM(oi.qty * oi.unit_price) AS revenue
-     FROM order_items oi JOIN menu m ON m.id = oi.menu_id
-     GROUP BY m.category ORDER BY revenue DESC"
-);
-if ($res6) while ($row = $res6->fetch_assoc()) $catSales[] = $row;
+if ($hasOrderItems) {
+    $res6 = $conn->query(
+        "SELECT m.category, SUM(oi.qty * oi.unit_price) AS revenue
+         FROM order_items oi JOIN menu m ON m.id = oi.menu_id
+         GROUP BY m.category ORDER BY revenue DESC"
+    );
+    if ($res6) while ($row = $res6->fetch_assoc()) $catSales[] = $row;
+}
 
 $conn->close();
 $chartLabelsJson = json_encode($chartLabels);
@@ -155,11 +177,11 @@ $chartDataJson   = json_encode($chartData);
           <li class="nav-item"><a href="./index2.php" class="nav-link"><i class="nav-icon fas fa-tachometer-alt"></i><p>Overview</p></a></li>
           <li class="nav-item"><a href="./menu-management.php" class="nav-link"><i class="nav-icon fas fa-utensils"></i><p>Menu Management</p></a></li>
           <li class="nav-item"><a href="./inventory.php" class="nav-link"><i class="nav-icon fas fa-boxes"></i><p>Inventory Tracking</p></a></li>
-          <li class="nav-item"><a href="./suppliers.php" class="nav-link"><i class="nav-icon fas fa-truck"></i><p>Suppliers Orders</p></a></li>
+          <li class="nav-item"><a href="./suppliers.php" class="nav-link"><i class="nav-icon fas fa-truck"></i><p>Supplier Info</p></a></li>
           <li class="nav-item"><a href="./staff-list.php" class="nav-link"><i class="far fa-user nav-icon"></i><p>Staff List</p></a></li>
           <li class="nav-item"><a href="./sale_revenue.php" class="nav-link"><i class="nav-icon fas fa-chart-line"></i><p>Sales &amp; Revenue</p></a></li>
           <li class="nav-item"><a href="./report.php" class="nav-link active"><i class="nav-icon fas fa-file-alt"></i><p>Reports</p></a></li>
-          <li class="nav-item mt-auto"><a href="../../Backend/logout.php" class="nav-link"><i class="nav-icon fas fa-cog"></i><p>Log Out</p></a></li>
+          <li class="nav-item mt-auto"><a href="../../Backend/logout.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p></a></li>
         </ul>
       </nav>
     </div>
@@ -182,6 +204,17 @@ $chartDataJson   = json_encode($chartData);
 
     <section class="content">
       <div class="container-fluid">
+
+        <?php if (!$hasOrderItems): ?>
+        <!-- ── Setup Notice ──────────────────────────────── -->
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+          <i class="fas fa-exclamation-triangle mr-2"></i>
+          <strong>Setup Required:</strong> The <code>order_items</code> table is missing.
+          Please run <strong>create_order_items_table.sql</strong> in phpMyAdmin to enable
+          full order detail reporting. Orders are still displayed using basic data.
+          <button type="button" class="close" data-dismiss="alert">&times;</button>
+        </div>
+        <?php endif; ?>
 
         <!-- ── Summary Stats ──────────────────────────────── -->
         <div class="card mb-3">
@@ -293,24 +326,17 @@ $chartDataJson   = json_encode($chartData);
                   <th>Table</th>
                   <th>Items Ordered</th>
                   <th>Total Qty</th>
-                  <th>Status</th>
                   <th>Total (&#8369;)</th>
                 </tr>
               </thead>
               <tbody>
-                <?php foreach ($orderRows as $ord):
-                  $s = strtolower($ord['status']);
-                  if ($s === 'completed')     $statusBadge = '<span class="badge badge-success">Completed</span>';
-                  elseif ($s === 'cancelled') $statusBadge = '<span class="badge badge-danger">Cancelled</span>';
-                  else                        $statusBadge = '<span class="badge badge-warning">Pending</span>';
-                ?>
+                <?php foreach ($orderRows as $ord): ?>
                 <tr>
                   <td><strong>#<?= (int)$ord['order_id'] ?></strong></td>
                   <td><?= htmlspecialchars($ord['created_at']) ?></td>
                   <td>Table <?= htmlspecialchars($ord['table_no']) ?></td>
                   <td><?= htmlspecialchars($ord['items']) ?></td>
                   <td><?= (int)$ord['total_qty'] ?></td>
-                  <td><?= $statusBadge ?></td>
                   <td>&#8369;<?= number_format((float)$ord['total_amt'], 2) ?></td>
                 </tr>
                 <?php endforeach; ?>

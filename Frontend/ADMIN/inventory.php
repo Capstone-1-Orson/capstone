@@ -95,7 +95,7 @@ $conn->close();
                     <img src="../dist/img/user2-160x160.jpg" class="img-circle elevation-2">
                 </div>
                 <div class="info">
-                    <a href="#" class="d-block">Manager</a>
+                     <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user']['firstname'] ?? 'Admin') ?></a>
                 </div>
             </div>
             <nav class="mt-2">
@@ -117,7 +117,7 @@ $conn->close();
                     </li>
                     <li class="nav-item">
                         <a href="./suppliers.php" class="nav-link">
-                            <i class="nav-icon fas fa-truck"></i><p>Suppliers Orders</p>
+                            <i class="nav-icon fas fa-truck"></i><p>Supplier Info</p>
                         </a>
                     </li>
                     <li class="nav-item">
@@ -258,13 +258,13 @@ $conn->close();
                             </div>
                             <div class="card-body">
                                 <div class="btn-group-vertical d-block">
-                                    <button class="btn btn-secondary mb-2">
+                                    <button class="btn btn-secondary mb-2" id="exportCsvBtn">
                                         <i class="fas fa-file-export mr-1"></i> Export Inventory
                                     </button>
-                                    <button class="btn btn-success mb-2">
+                                    <button class="btn btn-success mb-2" data-toggle="modal" data-target="#trendsModal">
                                         <i class="fas fa-chart-line mr-1"></i> View Trends
                                     </button>
-                                    <button class="btn btn-warning">
+                                    <button class="btn btn-warning" data-toggle="modal" data-target="#setAlertsModal">
                                         <i class="fas fa-bell mr-1"></i> Set Alerts
                                     </button>
                                 </div>
@@ -559,6 +559,81 @@ $conn->close();
         </div>
     </div>
 
+
+    <!-- ══════════════════════════════════════════════════════════
+         VIEW TRENDS MODAL
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="modal fade" id="trendsModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-xl" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-chart-line mr-2"></i>Stock Level Overview</h5>
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-3">Current stock quantities vs. low stock thresholds for all ingredients.</p>
+                    <canvas id="trendsChart" height="120"></canvas>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════
+         SET ALERTS MODAL
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="modal fade" id="setAlertsModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-bell mr-2"></i>Set Low Stock Alert Thresholds</h5>
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                </div>
+                <form action="../../Backend/inventory_process.php" method="POST">
+                    <input type="hidden" name="bulk_update_thresholds" value="1">
+                    <div class="modal-body">
+                        <p class="text-muted">Update the low stock threshold for each ingredient. An alert triggers when stock falls at or below this value.</p>
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Ingredient</th>
+                                    <th>Unit</th>
+                                    <th>Current Stock</th>
+                                    <th>Alert Threshold</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($items as $ai): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($ai['name']) ?></td>
+                                    <td><?= htmlspecialchars($ai['unit']) ?></td>
+                                    <td><?= $ai['stock_qty'] ?></td>
+                                    <td>
+                                        <input type="number"
+                                               name="threshold[<?= $ai['id'] ?>]"
+                                               value="<?= $ai['low_stock_threshold'] ?>"
+                                               class="form-control form-control-sm"
+                                               min="0" step="0.01"
+                                               style="width:100px;">
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fas fa-save mr-1"></i>Save Thresholds
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
 </div><!-- /.wrapper -->
 
 
@@ -607,6 +682,120 @@ $conn->close();
             setTimeout(() => $(this).removeClass('clicked'), 300);
         });
     });
+</script>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<!-- Quick Actions JS -->
+<script>
+(function ($) {
+
+    // ── Inventory data from PHP ──────────────────────────────
+    var inventoryData = <?php
+        $chartData = array_map(fn($i) => [
+            'name'      => $i['name'],
+            'stock'     => (float) $i['stock_qty'],
+            'threshold' => (float) $i['low_stock_threshold'],
+        ], $items);
+        echo json_encode($chartData, JSON_HEX_TAG);
+    ?>;
+
+    // ── 1. Export Inventory as CSV ───────────────────────────
+    $('#exportCsvBtn').on('click', function () {
+        var rows = [['ID','Name','Unit','Stock Qty','Low Stock Threshold','Status','Last Updated']];
+        $('#inventoryTable tbody tr').each(function () {
+            var cells = $(this).find('td');
+            rows.push([
+                cells.eq(0).text().trim(),
+                cells.eq(1).text().trim(),
+                cells.eq(2).text().trim(),
+                cells.eq(3).text().trim(),
+                cells.eq(4).text().trim(),
+                cells.eq(5).text().trim(),
+                cells.eq(6).text().trim()
+            ]);
+        });
+        var csv = rows.map(function (r) {
+            return r.map(function (v) { return '"' + v.replace(/"/g, '""') + '"'; }).join(',');
+        }).join('\r\n');
+        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        var url  = URL.createObjectURL(blob);
+        var a    = document.createElement('a');
+        a.href     = url;
+        a.download = 'inventory_export_' + new Date().toISOString().slice(0,10) + '.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+
+    // ── 2. View Trends — bar chart ───────────────────────────
+    var trendsChartInstance = null;
+
+    $('#trendsModal').on('shown.bs.modal', function () {
+        if (trendsChartInstance) { trendsChartInstance.destroy(); }
+
+        var labels     = inventoryData.map(function (d) { return d.name; });
+        var stocks     = inventoryData.map(function (d) { return d.stock; });
+        var thresholds = inventoryData.map(function (d) { return d.threshold; });
+        var colors     = inventoryData.map(function (d) {
+            if (d.stock === 0)              return 'rgba(220,53,69,0.8)';
+            if (d.stock <= d.threshold)     return 'rgba(255,193,7,0.8)';
+            return 'rgba(40,167,69,0.8)';
+        });
+
+        var ctx = document.getElementById('trendsChart').getContext('2d');
+        trendsChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Stock Qty',
+                        data: stocks,
+                        backgroundColor: colors,
+                        borderColor: colors.map(function (c) { return c.replace('0.8', '1'); }),
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Low Stock Threshold',
+                        data: thresholds,
+                        type: 'line',
+                        borderColor: 'rgba(255,193,7,1)',
+                        backgroundColor: 'transparent',
+                        borderDash: [6,3],
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        tension: 0.3
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            label: function (ctx) {
+                                return ' ' + ctx.dataset.label + ': ' + ctx.parsed.y;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { ticks: { maxRotation: 45, minRotation: 30 } },
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    });
+
+    $('#trendsModal').on('hidden.bs.modal', function () {
+        if (trendsChartInstance) { trendsChartInstance.destroy(); trendsChartInstance = null; }
+    });
+
+}(jQuery));
 </script>
 
 <!-- Edit modal: pre-fill from data-* on Edit button -->

@@ -123,67 +123,39 @@ if (!isset($_SESSION['user'])) {
             <img src="../dist/img/user2-160x160.jpg" class="img-circle elevation-2" alt="User Image">
           </div>
           <div class="info">
-            <a href="#" class="d-block">Alexander Pierce</a>
+             <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user']['firstname'] ?? 'Admin') ?></a>
           </div>
         </div>
 
         <!-- Sidebar Menu -->
-        <nav class="mt-2">
-          <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
-            <li class="nav-item">
-              <a href="./index2.php" class="nav-link">
-                <i class="nav-icon fas fa-tachometer-alt"></i>
-                <p>Overview</p>
-              </a>
-            </li>
-            <li class="nav-item">
-              <a href="./menu-management.php" class="nav-link">
-                <i class="nav-icon fas fa-utensils"></i>
-                <p>Menu Management</p>
-              </a>
-            </li>
-            <li class="nav-item">
-              <a href="./inventory.php" class="nav-link">
-                <i class="nav-icon fas fa-boxes"></i>
-                <p>Inventory Tracking</p>
-              </a>
-            </li>
-            <li class="nav-item">
-              <a href="./suppliers.php" class="nav-link">
-                <i class="nav-icon fas fa-truck"></i>
-                <p>Suppliers Orders</p>
-              </a>
-            </li>
-
-            <li class="nav-item">
-              <a href="./staff-list.php" class="nav-link active">
-                <i class="far fa-user nav-icon"></i>
-                <p>Staff List</p>
-              </a>
-            </li>
-
-            <li class="nav-item">
-              <a href="./sale_revenue.php" class="nav-link">
-                <i class="nav-icon fas fa-chart-line"></i>
-                <p>Sales & Revenue</p>
-              </a>
-            </li>
-
-            <li class="nav-item">
-              <a href="./report.php" class="nav-link">
-                <i class="nav-icon fas fa-file-alt"></i>
-                <p>Reports</p>
-              </a>
-            </li>
-
-            <li class="nav-item mt-auto">
-              <a href="../../Backend/logout.php" class="nav-link">
-                  <i class="nav-icon fas fa-cog"></i>
-                  <p>Log Out</p>
-              </a>
-            </li>
-          </ul>
-        </nav>
+         <nav class="mt-2">
+        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+          <li class="nav-item">
+            <a href="./index2.php" class="nav-link"><i class="nav-icon fas fa-tachometer-alt"></i><p>Overview</p></a>
+          </li>
+          <li class="nav-item">
+            <a href="./menu-management.php" class="nav-link"><i class="nav-icon fas fa-utensils"></i><p>Menu Management</p></a>
+          </li>
+          <li class="nav-item">
+            <a href="./inventory.php" class="nav-link"><i class="nav-icon fas fa-boxes"></i><p>Inventory Tracking</p></a>
+          </li>
+          <li class="nav-item">
+            <a href="./suppliers.php" class="nav-link"><i class="nav-icon fas fa-truck"></i><p>Supplier Info</p></a>
+          </li>
+          <li class="nav-item">
+            <a href="./staff-list.php" class="nav-link active"><i class="far fa-user nav-icon"></i><p>Staff List</p></a>
+          </li>
+          <li class="nav-item">
+            <a href="./sale_revenue.php" class="nav-link"><i class="nav-icon fas fa-chart-line"></i><p>Sales & Revenue</p></a>
+          </li>
+          <li class="nav-item">
+            <a href="./report.php" class="nav-link"><i class="nav-icon fas fa-file-alt"></i><p>Reports</p></a>
+          </li>
+          <li class="nav-item mt-auto">
+            <a href="../../Backend/logout.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p></a>
+          </li>
+        </ul>
+      </nav>
         <!-- /.sidebar-menu -->
       </div>
       <!-- /.sidebar -->
@@ -375,6 +347,12 @@ if (!isset($_SESSION['user'])) {
                         pattern="[a-zA-Z0-9._%+\-]+@(gmail|yahoo)\.(com|com\.ph)"
                         title="Only Gmail or Yahoo email addresses are allowed"
                         required>
+                </div>
+
+                <div class="form-group">
+                  <label>New Password <small class="text-muted">(leave blank to keep current)</small></label>
+                  <input type="password" name="password" id="view_password" class="form-control" oninput="checkPasswordStrength(this.value)">
+                  <small id="password-strength" class="form-text"></small>
                 </div>
 
                 <div class="form-group">
