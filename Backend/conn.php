@@ -2,7 +2,7 @@
 $servername = "localhost";
 $username = "root";
 $password = "";
-$dbname = "operlytics";
+$dbname = "empress_cafe";
 
 // Create connection
 $conn = new mysqli($servername, $username, $password, $dbname);

@@ -214,7 +214,7 @@ if (!isset($_SESSION['user'])) {
                       <?php
                       include('../../Backend/conn.php');
 
-                      $result = mysqli_query($conn, "SELECT * FROM user");
+                      $result = mysqli_query($conn, "SELECT * FROM user WHERE position = 'staff'");
 
                       while ($row = mysqli_fetch_assoc($result)) {
                         $fullname = $row['firstname'] . ' ' . $row['lastname'];
@@ -228,7 +228,7 @@ if (!isset($_SESSION['user'])) {
                         data-contact="<?= $row['contact']; ?>"
                         data-address="<?= $row['address']; ?>"
                       >
-                        <td><?= $row['id']; ?></td>
+                        <td>*</td>
                         <td><?= $fullname; ?></td>
                         <td><?= $row['email']; ?></td>
                         <td>****</td>
