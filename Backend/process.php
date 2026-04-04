@@ -111,8 +111,33 @@ if (isset($_POST['update_user'])) {
     }
     $checkEmail->close();
 
-    $stmt = $conn->prepare("UPDATE user SET firstname=?, lastname=?, email=?, contact=?, address=?, position=? WHERE id=?");
-    $stmt->bind_param("ssssssi", $firstname, $lastname, $email, $contact, $address, $position, $id);
+    // Optional password update
+    $password = $_POST['password'] ?? '';
+    if ($password !== '') {
+        if (strlen($password) < 8) {
+            $_SESSION['error'] = 'Password must be at least 8 characters!';
+            header("Location: $redirect_back"); exit();
+        }
+        if (!preg_match('/[A-Z]/', $password)) {
+            $_SESSION['error'] = 'Password must contain at least one uppercase letter!';
+            header("Location: $redirect_back"); exit();
+        }
+        if (!preg_match('/[0-9]/', $password)) {
+            $_SESSION['error'] = 'Password must contain at least one number!';
+            header("Location: $redirect_back"); exit();
+        }
+        if (!preg_match('/[^A-Za-z0-9]/', $password)) {
+            $_SESSION['error'] = 'Password must contain at least one special character!';
+            header("Location: $redirect_back"); exit();
+        }
+        $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+
+        $stmt = $conn->prepare("UPDATE user SET firstname=?, lastname=?, email=?, contact=?, address=?, position=?, password=? WHERE id=?");
+        $stmt->bind_param("sssssssi", $firstname, $lastname, $email, $contact, $address, $position, $hashed_password, $id);
+    } else {
+        $stmt = $conn->prepare("UPDATE user SET firstname=?, lastname=?, email=?, contact=?, address=?, position=? WHERE id=?");
+        $stmt->bind_param("ssssssi", $firstname, $lastname, $email, $contact, $address, $position, $id);
+    }
 
     if ($stmt->execute()) {
         $_SESSION['success'] = "Staff member \"$firstname $lastname\" updated successfully!";

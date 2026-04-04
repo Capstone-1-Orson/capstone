@@ -250,9 +250,6 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 .pos-search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow);}
 .pos-search .sc{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;display:none;}
 .pos-search input:not(:placeholder-shown) ~ .sc{display:block;}
-.t-chip{display:flex;align-items:center;gap:7px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:8px 13px;font-size:12.5px;color:var(--muted2);white-space:nowrap;}
-.t-chip strong{color:var(--accent);font-weight:700;}
-
 /* STATS */
 .stats-strip{display:flex;gap:11px;flex-shrink:0;animation:fadeUp .4s .06s ease forwards;}
 .stat-card{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:13px 16px;display:flex;align-items:center;gap:13px;transition:all var(--tr);min-width:0;cursor:default;}
@@ -314,16 +311,11 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 .o-tab i{font-size:11px;}
 .o-tab.active{background:var(--accent);color:#fff;box-shadow:0 2px 10px var(--accent-glow);}
 .o-tab:hover:not(.active){background:var(--surface3);color:var(--muted2);}
-.tbl-row{display:flex;align-items:center;gap:7px;}
+.tbl-row{display:flex;align-items:center;gap:8px;}
 .tbl-label{font-size:11.5px;color:var(--muted);flex-shrink:0;}
-.tbl-chips{display:flex;gap:5px;flex-wrap:wrap;}
-.tbl-chip{padding:5px 10px;border-radius:7px;background:var(--surface2);border:1px solid var(--border2);font-size:12px;font-weight:600;color:var(--muted2);transition:all var(--tr);}
-.tbl-chip.active{background:var(--accent-soft);border-color:rgba(233,30,140,.4);color:var(--accent);}
-.tbl-chip:hover:not(.active){border-color:var(--accent);color:var(--accent);}
 .tbl-number-inp{width:72px;padding:6px 10px;background:var(--surface2);border:1.5px solid var(--border2);border-radius:9px;color:var(--text);font-size:15px;font-weight:700;text-align:center;transition:all var(--tr);}
 .tbl-number-inp:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow);}
 .tbl-number-inp::-webkit-inner-spin-button,.tbl-number-inp::-webkit-outer-spin-button{opacity:1;}
-
 /* CART */
 .cart-scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;min-height:0;}
 .empty-cart{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;color:var(--muted);font-size:13px;text-align:center;animation:fadeIn .4s ease;}
@@ -521,20 +513,6 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 .menu-panel-cat{font-size:11px;color:var(--muted);margin-top:2px;}
 .menu-panel-price{font-size:15px;font-weight:800;color:var(--accent);margin-top:4px;}
 
-/* Tables panel */
-.tables-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:14px;}
-.table-card{background:var(--surface);border:2px solid var(--border);border-radius:var(--radius);padding:18px 14px;display:flex;flex-direction:column;align-items:center;gap:7px;cursor:pointer;transition:all var(--tr);}
-.table-card:hover{border-color:var(--border2);transform:translateY(-2px);}
-.table-card.occupied{border-color:rgba(233,30,140,.4);background:var(--accent-soft);}
-.table-card.available{border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.05);}
-.table-card.reserved{border-color:rgba(59,130,246,.35);background:rgba(59,130,246,.07);}
-.table-num{font-size:22px;font-weight:800;}
-.table-status{font-size:11px;font-weight:600;}
-.table-card.occupied .table-status{color:var(--accent);}
-.table-card.available .table-status{color:var(--green);}
-.table-card.reserved .table-status{color:var(--blue);}
-.table-pax{font-size:11px;color:var(--muted);}
-
 /* History panel */
 .history-item{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 16px;margin-bottom:10px;transition:all var(--tr);}
 .history-item:hover{border-color:var(--border2);}
@@ -559,7 +537,6 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 [data-theme="light"] .panel-header{background:#fff;}
 [data-theme="light"] .panel-card{background:#fff;}
 [data-theme="light"] .menu-panel-card{background:#fff;}
-[data-theme="light"] .table-card{background:#fff;}
 [data-theme="light"] .history-item{background:#fff;}
 [data-theme="light"] .report-bar-wrap{background:#fff;}
 </style>
@@ -572,7 +549,6 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
   <button class="nav-btn active" title="Orders"><i class="fa-solid fa-receipt"></i>Orders</button>
   <button class="nav-btn" title="Dashboard"><i class="fa-solid fa-chart-pie"></i>Stats</button>
   <button class="nav-btn" title="Menu"><i class="fa-solid fa-utensils"></i>Menu</button>
-  <button class="nav-btn" title="Tables"><i class="fa-solid fa-table-cells-large"></i>Tables</button>
   <button class="nav-btn" title="History" style="position:relative">
     <i class="fa-solid fa-clock-rotate-left"></i>History
     <span class="bdot"></span>
@@ -596,10 +572,6 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
       <i class="fa-solid fa-magnifying-glass si"></i>
       <input type="text" id="searchInput" placeholder="Search menu items…" autocomplete="off">
       <button class="sc" id="searchClear"><i class="fa-solid fa-xmark"></i></button>
-    </div>
-    <div class="t-chip">
-      <i class="fa-solid fa-house-flag" style="color:var(--accent);font-size:11px"></i>
-      Table <strong id="tableChip">#01</strong>
     </div>
   </div>
 
@@ -641,7 +613,7 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
     <button class="o-tab" data-tab="del"><i class="fa-solid fa-motorcycle"></i> Delivery</button>
   </div>
   <div class="tbl-row">
-    <span class="tbl-label"><i class="fa-solid fa-chair" style="font-size:11px"></i> Table:</span>
+    <span class="tbl-label"><i class="fa-solid fa-hashtag" style="font-size:11px"></i> Number:</span>
     <input type="number" id="tableInput" class="tbl-number-inp" min="1" max="99" value="1" placeholder="#">
   </div>
   <div class="cart-scroll" id="cartScroll">
@@ -716,12 +688,6 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
         <div class="panel-card-l">Avg. Order Value</div>
         <div class="panel-card-trend flat"><i class="fa-solid fa-chart-line"></i> Per order</div>
       </div>
-      <div class="panel-card">
-        <div class="panel-card-ic" style="background:rgba(59,130,246,.12)"><i class="fa-solid fa-table-cells-large" style="color:var(--blue)"></i></div>
-        <div class="panel-card-v">8</div>
-        <div class="panel-card-l">Total Tables</div>
-        <div class="panel-card-trend flat"><i class="fa-solid fa-chair"></i> Dining capacity</div>
-      </div>
     </div>
 
     <div class="panel-section-title">Category Breakdown</div>
@@ -770,42 +736,6 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
     </div>
     <?php endif; ?>
     <?php endforeach; ?>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════════════════════ -->
-<!-- TABLES PANEL                                              -->
-<!-- ══════════════════════════════════════════════════════════ -->
-<div class="side-panel" id="panel-tables">
-  <div class="panel-header">
-    <div class="panel-header-icon"><i class="fa-solid fa-table-cells-large"></i></div>
-    <div class="panel-title">Table <span>Layout</span></div>
-    <button class="panel-close" onclick="closePanel()"><i class="fa-solid fa-xmark"></i></button>
-  </div>
-  <div class="panel-body">
-    <div style="display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap;">
-      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted2)"><div style="width:12px;height:12px;border-radius:3px;background:rgba(34,197,94,.2);border:1px solid rgba(34,197,94,.4)"></div>Available</div>
-      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted2)"><div style="width:12px;height:12px;border-radius:3px;background:var(--accent-soft);border:1px solid rgba(233,30,140,.4)"></div>Occupied</div>
-      <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted2)"><div style="width:12px;height:12px;border-radius:3px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.4)"></div>Reserved</div>
-    </div>
-    <div class="panel-section-title">Dining Area</div>
-    <div class="tables-grid" id="tablesGrid"></div>
-
-    <div class="panel-section-title" style="margin-top:28px;">Table Summary</div>
-    <div class="panel-grid" style="grid-template-columns:repeat(auto-fill,minmax(160px,1fr));">
-      <div class="panel-card" style="flex-direction:row;align-items:center;gap:12px;padding:14px 16px;">
-        <div class="panel-card-ic" style="background:rgba(34,197,94,.12);width:36px;height:36px;font-size:15px;"><i class="fa-solid fa-circle-check" style="color:var(--green)"></i></div>
-        <div><div class="panel-card-v" style="font-size:20px;" id="tbl-available">6</div><div class="panel-card-l">Available</div></div>
-      </div>
-      <div class="panel-card" style="flex-direction:row;align-items:center;gap:12px;padding:14px 16px;">
-        <div class="panel-card-ic" style="background:var(--accent-soft);width:36px;height:36px;font-size:15px;"><i class="fa-solid fa-user-group" style="color:var(--accent)"></i></div>
-        <div><div class="panel-card-v" style="font-size:20px;" id="tbl-occupied">1</div><div class="panel-card-l">Occupied</div></div>
-      </div>
-      <div class="panel-card" style="flex-direction:row;align-items:center;gap:12px;padding:14px 16px;">
-        <div class="panel-card-ic" style="background:rgba(59,130,246,.1);width:36px;height:36px;font-size:15px;"><i class="fa-solid fa-bookmark" style="color:var(--blue)"></i></div>
-        <div><div class="panel-card-v" style="font-size:20px;" id="tbl-reserved">1</div><div class="panel-card-l">Reserved</div></div>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -979,7 +909,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const navMap = {
     'Stats':   'panel-stats',
     'Menu':    'panel-menu',
-    'Tables':  'panel-tables',
     'History': 'panel-history',
     'Reports': 'panel-reports',
   };
@@ -1000,7 +929,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Close panel on Escape
   document.addEventListener('keydown', e => { if(e.key==='Escape') closePanel(); });
-  renderTablesGrid();
 });
 
 // ── Order history (session) ───────────────────────────────────
@@ -1018,7 +946,6 @@ function openPanel(id, navBtn) {
   if(id === 'panel-stats')   refreshStatsPanel();
   if(id === 'panel-history') refreshHistoryPanel();
   if(id === 'panel-reports') refreshReportsPanel();
-  if(id === 'panel-tables')  renderTablesGrid();
 }
 
 function closePanel() {
@@ -1035,45 +962,6 @@ function refreshStatsPanel() {
   document.getElementById('ps-orders').textContent  = sessionOrders;
   const avg = sessionOrders > 0 ? sessionRevenue / sessionOrders : 0;
   document.getElementById('ps-avg').textContent = '₱' + avg.toLocaleString('en',{minimumFractionDigits:2});
-}
-
-// ── Tables grid ───────────────────────────────────────────────
-function renderTablesGrid() {
-  const grid = document.getElementById('tablesGrid');
-  if(!grid) return;
-  // Demo statuses — in production you'd fetch from DB
-  const statuses = {
-    '01':'occupied','02':'available','03':'available','04':'reserved',
-    '05':'available','06':'available','07':'available','08':'available'
-  };
-  const pax = {'01':'4 pax','02':'2 pax','03':'4 pax','04':'6 pax','05':'2 pax','06':'4 pax','07':'4 pax','08':'6 pax'};
-  grid.innerHTML = '';
-  let avail=0, occ=0, res=0;
-  for(let i=1;i<=8;i++){
-    const t=String(i).padStart(2,'0');
-    const s=statuses[t]||'available';
-    if(s==='available') avail++; else if(s==='occupied') occ++; else res++;
-    const card=document.createElement('div');
-    card.className=`table-card ${s}`;
-    card.innerHTML=`
-      <i class="fa-solid fa-chair" style="font-size:28px;opacity:.6"></i>
-      <div class="table-num">T${t}</div>
-      <div class="table-status">${s.charAt(0).toUpperCase()+s.slice(1)}</div>
-      <div class="table-pax">${pax[t]||''}</div>`;
-    card.addEventListener('click',()=>{
-      // Jump to Orders and set table
-      closePanel();
-      const inp=document.getElementById('tableInput');
-      if(inp){ inp.value=i; inp.dispatchEvent(new Event('input')); }
-    });
-    grid.appendChild(card);
-  }
-  const ae=document.getElementById('tbl-available');
-  const oe=document.getElementById('tbl-occupied');
-  const re=document.getElementById('tbl-reserved');
-  if(ae) ae.textContent=avail;
-  if(oe) oe.textContent=occ;
-  if(re) re.textContent=res;
 }
 
 // ── History panel refresh ─────────────────────────────────────
@@ -1125,7 +1013,7 @@ function refreshHistoryPanel() {
           ${o.payMethod !== '—' ? `<span class="badge-pill pink">${o.payMethod}</span>` : ''}
           ${o.fromSession ? '<span class="badge-pill green" style="font-size:9px">New</span>' : ''}
         </div>
-        <div class="history-meta">Table #${o.table_no} · ${o.total_qty} item${o.total_qty!=1?'s':''} · ${o.created_at}</div>
+        <div class="history-meta">#${o.table_no} · ${o.total_qty} item${o.total_qty!=1?'s':''} · ${o.created_at}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px">${o.item_names}</div>
       </div>
       <div class="history-amt">₱${parseFloat(o.total_amt).toLocaleString('en',{minimumFractionDigits:2})}</div>
@@ -1189,11 +1077,10 @@ function refreshReportsPanel() {
   } else {
     txEl.innerHTML=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
       <table class="panel-table" style="width:100%">
-        <thead><tr><th>Order</th><th>Table</th><th>Items</th><th>Method</th><th style="text-align:right">Total</th></tr></thead>
+        <thead><tr><th>Order</th><th>Items</th><th>Method</th><th style="text-align:right">Total</th></tr></thead>
         <tbody>`+allTx.map(o=>`
           <tr>
             <td><strong>#${o.id}</strong>${o.isNew?'<span class="badge-pill green" style="font-size:9px;margin-left:4px">New</span>':''}</td>
-            <td>#${o.table}</td>
             <td>${o.items}</td>
             <td><span class="badge-pill ${o.payMethod==='Cash'?'green':o.payMethod==='Card'?'blue':o.payMethod==='—'?'':'pink'}">${o.payMethod}</span></td>
             <td style="text-align:right;font-weight:700;color:var(--accent)">₱${o.total.toLocaleString('en',{minimumFractionDigits:2})}</td>
@@ -1241,9 +1128,7 @@ function initTableInput() {
   inp.addEventListener('input',()=>{
     const v=parseInt(inp.value)||1;
     selTable=String(v).padStart(2,'0');
-    document.getElementById('tableChip').textContent='#'+selTable;
   });
-  // Init from default value
   selTable=String(parseInt(inp.value)||1).padStart(2,'0');
 }
 
@@ -1507,11 +1392,11 @@ function openPayModal() {
   // Populate summary strip
   const activeTab=document.querySelector('.o-tab.active');
   const orderType=activeTab?activeTab.textContent.trim():'Dine In';
-  document.getElementById('payModalSubtitle').textContent=orderType+' · Table #'+selTable;
+  document.getElementById('payModalSubtitle').textContent=orderType+' · #'+selTable;
   document.getElementById('payModalMeta').innerHTML=`
     <div>${cart.length} item${cart.length>1?'s':''}<br><small style="color:var(--muted)">Items</small></div>
     <div style="text-align:center">₱${currentTotal.toLocaleString('en',{minimumFractionDigits:2})}<br><small style="color:var(--muted)">Total</small></div>
-    <div style="text-align:right">#${selTable}<br><small style="color:var(--muted)">Table</small></div>`;
+    <div style="text-align:right">#${selTable}<br><small style="color:var(--muted)">Bill No.</small></div>`;
   // Reset to Cash selected
   document.querySelectorAll('#payModalMethods .pay-btn').forEach(b=>b.classList.remove('active'));
   document.querySelector('#payModalMethods .pay-btn[data-method="Cash"]').classList.add('active');
@@ -1570,7 +1455,6 @@ function placeOrder() {
   btn.disabled=true;
   btn.innerHTML='<i class="fa-solid fa-spinner fa-spin"></i> Saving…';
 
-  // Snapshot cart & order data BEFORE closing modal and resetting state
   const activeTab=document.querySelector('.o-tab.active');
   const cartSnapshot=cart.map(c=>({...c}));
   const orderData_base={
@@ -1730,7 +1614,7 @@ function showReceipt(data) {
         </div>
         <div class="receipt-meta">
           <div>Order <strong>#${data.orderId}</strong></div>
-          <div>Table <strong>#${data.table}</strong></div>
+          <div>Bill <strong>#${data.table}</strong></div>
           <div>Type <strong>${orderType}</strong></div>
           <div style="text-align:right"><strong>${dateStr}</strong><br>${timeStr}</div>
         </div>

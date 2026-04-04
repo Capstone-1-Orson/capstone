@@ -21,8 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pass'])) {
     $stmt->fetch();
     $stmt->close();
 
-    // Admin password is plain text
-    if ($db_pass && $pass === $db_pass && $db_position === 'admin') {
+    // Verify against bcrypt hash
+    if ($db_pass && password_verify($pass, $db_pass) && $db_position === 'admin') {
         session_regenerate_id(true);
         $_SESSION['user']     = $email;
         $_SESSION['position'] = 'admin';

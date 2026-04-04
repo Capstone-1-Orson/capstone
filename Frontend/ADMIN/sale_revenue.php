@@ -367,7 +367,6 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
                     <tr>
                       <th>Order ID</th>
                       <th>Date &amp; Time</th>
-                      <th>Table</th>
                       <th>Items</th>
                       <th>Revenue</th>
                     </tr>
@@ -378,7 +377,6 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
                       <tr>
                         <td><strong>#<?= (int)$lo['id'] ?></strong></td>
                         <td><?= htmlspecialchars($lo['created_at']) ?></td>
-                        <td>Table <?= htmlspecialchars($lo['table_no']) ?></td>
                         <td><?= htmlspecialchars($lo['items']) ?></td>
                         <td><span class="text-success font-weight-bold">&#8369;<?= number_format((float)$lo['total_amt'], 2) ?></span></td>
                       </tr>

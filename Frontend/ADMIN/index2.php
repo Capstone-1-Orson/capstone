@@ -32,7 +32,7 @@ if ($r && $row = $r->fetch_assoc()) $ordersToday = (int)$row['c'];
 
 // Staff count (from user table)
 $staffCount = 0;
-$r = $conn->query("SELECT COUNT(*) AS c FROM user");
+$r = $conn->query("SELECT COUNT(*) AS c FROM user WHERE position = 'staff'");
 if ($r && $row = $r->fetch_assoc()) $staffCount = (int)$row['c'];
 
 // ── Monthly recap chart (last 6 months) ────────────────────────
@@ -105,7 +105,7 @@ if ($r) while ($row = $r->fetch_assoc()) $newMenuItems[] = $row;
 
 // ── Staff list ────────────────────────────────────────────────
 $staffList = [];
-$r = $conn->query("SELECT firstname, lastname FROM user ORDER BY id DESC LIMIT 5");
+$r = $conn->query("SELECT firstname, lastname FROM user WHERE position = 'staff' ORDER BY id DESC LIMIT 5");
 if ($r) while ($row = $r->fetch_assoc()) $staffList[] = $row;
 
 // ── Recent orders ─────────────────────────────────────────────
@@ -257,7 +257,7 @@ $staffImages = [
           </div>
           <div class="col-12 col-sm-6 col-md-3">
             <div class="info-box mb-3">
-              <span class="info-box-icon bg-danger elevation-1"><i class="fas fa-peso-sign"></i></span>
+              <span class="info-box-icon bg-danger elevation-1"><i class="fas fa-chart-line"></i></span>
               <div class="info-box-content">
                 <span class="info-box-text">Total Revenue</span>
                 <span class="info-box-number">&#8369;<?= number_format($totalRevenue, 2) ?></span>
@@ -417,13 +417,13 @@ $staffImages = [
                     <span class="badge badge-info"><?= $staffCount ?> Staff</span>
                   </div>
                   <div class="card-body p-0">
-                    <ul class="users-list clearfix">
+                    <ul class="users-list clearfix" style="display:flex;flex-wrap:wrap;justify-content:center;">
                       <?php if (!empty($staffList)):
                         foreach ($staffList as $si => $staff): ?>
-                      <li>
+                      <li style="text-align:center;margin:8px;">
                         <img src="<?= $staffImages[$si % count($staffImages)] ?>" alt="<?= htmlspecialchars($staff['firstname']) ?>">
                         <a class="users-list-name" href="staff-list.php">
-                          <?= htmlspecialchars($staff['firstname']) ?>
+                          <?= htmlspecialchars($staff['firstname']) ?> <?= htmlspecialchars($staff['lastname']) ?>
                         </a>
                         <span class="users-list-date">Staff</span>
                       </li>
@@ -488,7 +488,6 @@ $staffImages = [
                     <thead>
                       <tr>
                         <th>Order ID</th>
-                        <th>Table</th>
                         <th>Items</th>
                         <th>Total</th>
                       </tr>
@@ -498,7 +497,6 @@ $staffImages = [
                         foreach ($recentOrders as $ro): ?>
                       <tr>
                         <td><strong>#<?= (int)$ro['id'] ?></strong></td>
-                        <td>Table <?= htmlspecialchars($ro['table_no']) ?></td>
                         <td><?= htmlspecialchars(mb_strimwidth($ro['items'], 0, 50, '…')) ?></td>
                         <td><span class="text-success font-weight-bold">&#8369;<?= number_format((float)$ro['total_amt'], 2) ?></span></td>
                       </tr>
