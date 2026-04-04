@@ -11,7 +11,6 @@ $action = $_REQUEST['action'] ?? '';
 
 switch ($action) {
 
-    // ── ADD ──────────────────────────────────────────────────────────────────
     case 'add':
         $name           = trim($_POST['name']           ?? '');
         $category       = trim($_POST['category']       ?? '');
@@ -42,7 +41,6 @@ switch ($action) {
         $stmt->close();
         break;
 
-    // ── UPDATE ───────────────────────────────────────────────────────────────
     case 'update':
         $id             = (int)($_POST['id']             ?? 0);
         $name           = trim($_POST['name']            ?? '');
@@ -75,7 +73,6 @@ switch ($action) {
         $stmt->close();
         break;
 
-    // ── DELETE ───────────────────────────────────────────────────────────────
     case 'delete':
         $id = (int)($_GET['id'] ?? 0);
 
@@ -85,7 +82,6 @@ switch ($action) {
             exit();
         }
 
-        // Grab name for the flash message before deleting
         $row = $conn->query("SELECT name FROM suppliers WHERE id = $id")->fetch_assoc();
         $supplierName = $row['name'] ?? 'Unknown';
 
@@ -100,7 +96,6 @@ switch ($action) {
         $stmt->close();
         break;
 
-    // ── UNKNOWN ──────────────────────────────────────────────────────────────
     default:
         $_SESSION['error'] = 'Unknown action.';
         break;

@@ -69,7 +69,6 @@ foreach ($items as $item) {
 }
 $stmtCheck->close();
 
-// Find any shortages
 $shortages = [];
 foreach ($needs as $ing) {
     if ($ing['needed'] > $ing['available']) {
@@ -94,12 +93,10 @@ if (!empty($shortages)) {
     exit();
 }
 
-// ── BEGIN TRANSACTION ─────────────────────────────────────────
 $conn->begin_transaction();
 
 try {
 
-    // 1. Insert into orders
     $stmt = $conn->prepare(
         "INSERT INTO orders (table_no, status, total_amt, created_at)
          VALUES (?, ?, ?, NOW())"
@@ -109,7 +106,6 @@ try {
     $order_id = $conn->insert_id;
     $stmt->close();
 
-    // 2. Insert each order item + deduct ingredients
     $stmtItem = $conn->prepare(
         "INSERT INTO order_items (order_id, menu_id, qty, unit_price)
          VALUES (?, ?, ?, ?)"

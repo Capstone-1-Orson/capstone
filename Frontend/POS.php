@@ -12,8 +12,11 @@ if (!isset($conn) || $conn->connect_error) {
     die("Database connection failed: " . ($conn->connect_error ?? 'conn.php did not define $conn'));
 }
 
+// ── NOTE: run this once in phpMyAdmin if the column doesn't exist yet ──
+// ALTER TABLE menu ADD COLUMN image VARCHAR(255) NULL DEFAULT NULL AFTER description;
+
 $menu_items = [];
-$res = $conn->query("SELECT id, name, description, price, category FROM menu WHERE is_available = 1 ORDER BY category, name");
+$res = $conn->query("SELECT id, name, description, price, category, image FROM menu WHERE is_available = 1 ORDER BY category, name");
 if ($res && $res->num_rows > 0) {
     while ($row = $res->fetch_assoc()) {
         $menu_items[] = $row;
@@ -164,6 +167,7 @@ $products_json = json_encode(array_map(function($item) use ($cat_emoji) {
         'name'  => $item['name'],
         'price' => (float)$item['price'],
         'desc'  => $item['description'] ?? '',
+        'image' => $item['image'] ?? '',
         'badge' => '',
     ];
 }, $menu_items));
@@ -280,7 +284,10 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 .product-card:hover .card-add-btn{opacity:1;transform:translateY(0);}
 .card-img-w{height:108px;min-height:108px;flex-shrink:0;position:relative;overflow:hidden;background:var(--surface2);}
 .card-emoji{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:42px;transition:transform .45s ease;}
-.product-card:hover .card-emoji{transform:scale(1.12);}
+.card-img-real{width:100%;height:100%;object-fit:cover;display:block;transition:transform .45s ease;}
+.card-img-placeholder{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:linear-gradient(135deg,var(--surface2),var(--surface3));color:var(--muted);font-size:11px;font-weight:500;letter-spacing:.03em;}
+.card-img-placeholder i{font-size:30px;opacity:.35;}
+.product-card:hover .card-emoji,.product-card:hover .card-img-real{transform:scale(1.12);}
 .card-bdg{position:absolute;top:8px;right:8px;background:var(--green);color:#fff;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:20px;}
 .card-bdg.hot{background:var(--red);}
 .card-bdg.new{background:var(--blue);}
@@ -323,7 +330,8 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 .empty-cart i{font-size:38px;color:var(--surface3);margin-bottom:3px;}
 .cart-item{display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);padding:10px 11px;border-radius:11px;transition:all var(--tr);animation:scaleIn .22s ease;}
 .cart-item:hover{border-color:var(--border2);}
-.ci-emoji{width:34px;height:34px;background:var(--surface3);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+.ci-emoji{width:34px;height:34px;background:var(--surface3);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;overflow:hidden;}
+.ci-emoji img{width:100%;height:100%;object-fit:cover;border-radius:8px;}
 .ci-info{flex:1;min-width:0;}
 .ci-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .ci-price{font-size:11px;color:var(--muted2);margin-top:1px;}
@@ -355,7 +363,7 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 
 /* PAYMENT */
 .pay-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);}
-.pay-methods{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;}
+.pay-methods{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;}
 .pay-btn{padding:10px 5px;border:1px solid var(--border2);border-radius:10px;background:var(--surface2);font-size:11px;font-weight:600;color:var(--muted2);display:flex;flex-direction:column;align-items:center;gap:5px;transition:all var(--tr);}
 .pay-btn i{font-size:17px;}
 .pay-btn:hover{background:var(--accent-soft);border-color:rgba(233,30,140,.35);color:var(--accent);}
@@ -654,7 +662,6 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
     </div>
     <div class="sum-row"><span class="sum-lbl">Subtotal</span><span class="sum-val" id="sumSub">₱ 0.00</span></div>
     <div class="sum-row" id="discRow" style="display:none"><span class="sum-lbl">Discount</span><span class="sum-val sum-disc" id="sumDisc">-₱ 0.00</span></div>
-    <div class="sum-row"><span class="sum-lbl">Tax (1% VAT)</span><span class="sum-val" id="sumTax">₱ 0.00</span></div>
     <hr class="sum-div">
     <div class="sum-row sum-total"><span>Total</span><span class="sum-val" id="sumTotal">₱ 0.00</span></div>
   </div>
@@ -894,9 +901,6 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
         </button>
         <button class="pay-btn" data-method="Card" onclick="selectModalPay(this)">
           <i class="fa-regular fa-credit-card"></i>Card
-        </button>
-        <button class="pay-btn" data-method="E-Pay" onclick="selectModalPay(this)">
-          <i class="fa-solid fa-mobile-screen-button"></i>E-Pay
         </button>
       </div>
     </div>
@@ -1272,7 +1276,16 @@ function renderProducts() {
     card.dataset.id=p.id;
     card.innerHTML=`
       <div class="card-img-w">
-        <div class="card-emoji">${p.emoji}</div>
+        ${p.image
+          ? `<img class="card-img-real" src="${p.image.replace('Frontend/','')}" alt="${p.name}" loading="lazy"
+               onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+             <div class="card-img-placeholder" style="display:none">
+               <i class="fa-solid fa-image"></i>${p.name.split(' ')[0]}
+             </div>`
+          : `<div class="card-img-placeholder">
+               <i class="fa-solid fa-image"></i>${p.name.split(' ')[0]}
+             </div>`
+        }
         ${p.badge?`<span class="card-bdg ${p.badge.toLowerCase()==='hot'?'hot':p.badge.toLowerCase()==='new'?'new':''}">${p.badge}</span>`:''}
       </div>
       <div class="card-body-i">
@@ -1354,7 +1367,12 @@ function updateCartUI() {
       const el=document.createElement('div');
       el.className='cart-item';
       el.innerHTML=`
-        <div class="ci-emoji">${item.emoji}</div>
+        <div class="ci-emoji">
+          ${item.image
+            ? `<img src="${item.image.replace('Frontend/','')}" alt="${item.name}" onerror="this.style.display='none';this.parentElement.innerHTML='${item.emoji}'">`
+            : item.emoji
+          }
+        </div>
         <div class="ci-info">
           <div class="ci-name">${item.name}</div>
           <div class="ci-price">₱${item.price.toLocaleString('en',{minimumFractionDigits:2})} each</div>
@@ -1373,12 +1391,10 @@ function updateCartUI() {
   }
 
   const sub=cart.reduce((s,c)=>s+c.price*c.qty,0);
-  const tax=sub*.01;
-  const tot=parseFloat(Math.max(sub+tax-discount,0).toFixed(2));
+  const tot=parseFloat(Math.max(sub-discount,0).toFixed(2));
   currentTotal=tot;
 
   document.getElementById('sumSub').textContent =`₱ ${sub.toLocaleString('en',{minimumFractionDigits:2})}`;
-  document.getElementById('sumTax').textContent =`₱ ${tax.toFixed(2)}`;
   document.getElementById('sumTotal').textContent=`₱ ${tot.toFixed(2)}`;
   const dr=document.getElementById('discRow');
   if(discount>0){ dr.style.display='flex'; document.getElementById('sumDisc').textContent=`-₱ ${discount.toFixed(2)}`; }
@@ -1540,8 +1556,7 @@ function placeOrder() {
   }
 
   const sub   =cart.reduce((s,c)=>s+c.price*c.qty,0);
-  const tax   =sub*.01;
-  const total =parseFloat(Math.max(sub+tax-discount,0).toFixed(2));
+  const total =parseFloat(Math.max(sub-discount,0).toFixed(2));
   const changeDue=payMethod==='Cash'?(cashTendered-total):0;
 
   const payload={
@@ -1562,7 +1577,6 @@ function placeOrder() {
     table:selTable,
     items:cartSnapshot,
     subtotal:sub,
-    tax,
     discount,
     total,
     payMethod,
@@ -1724,7 +1738,6 @@ function showReceipt(data) {
         <div class="receipt-totals">
           <div class="rt-row"><span class="rt-lbl">Subtotal</span><span class="rt-val">₱${data.subtotal.toLocaleString('en',{minimumFractionDigits:2})}</span></div>
           ${discHTML}
-          <div class="rt-row"><span class="rt-lbl">Tax (1% VAT)</span><span class="rt-val">₱${data.tax.toFixed(2)}</span></div>
           <hr class="rt-div">
           <div class="rt-total-row"><span>Total</span><span class="rt-val">₱${data.total.toFixed(2)}</span></div>
         </div>

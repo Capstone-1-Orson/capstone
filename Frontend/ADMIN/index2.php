@@ -207,7 +207,7 @@ $staffImages = [
       <div class="user-panel mt-3 pb-3 mb-3 d-flex">
         <div class="image"><img src="../dist/img/user2-160x160.jpg" class="img-circle elevation-2" alt="User Image"></div>
         <div class="info">
-          <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user']['firstname'] ?? 'Admin') ?></a>
+          <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user'] ?? 'Admin') ?></a>
         </div>
       </div>
       <nav class="mt-2">
@@ -293,7 +293,6 @@ $staffImages = [
                 <h5 class="card-title">Monthly Revenue — Last 6 Months</h5>
                 <div class="card-tools">
                   <button type="button" class="btn btn-tool" data-card-widget="collapse"><i class="fas fa-minus"></i></button>
-                  <button type="button" class="btn btn-tool" data-card-widget="remove"><i class="fas fa-times"></i></button>
                 </div>
               </div>
               <div class="card-body">

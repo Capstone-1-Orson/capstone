@@ -260,6 +260,7 @@ $conn->close();
                   <thead>
                     <tr>
                       <th>#</th>
+                      <th>Image</th>
                       <th>Item Name</th>
                       <th>Category</th>
                       <th>Price</th>
@@ -273,6 +274,18 @@ $conn->close();
                     <?php foreach ($items as $item): ?>
                     <tr>
                       <td><?= $item['id'] ?></td>
+                      <td>
+                        <?php if (!empty($item['image'])): ?>
+                          <img src="../<?= htmlspecialchars(str_replace('Frontend/', '', $item['image'])) ?>"
+                               alt="<?= htmlspecialchars($item['name']) ?>"
+                               style="width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid rgba(255,255,255,0.15);cursor:pointer;"
+                               onclick="showImagePreview('<?= htmlspecialchars($item['name'], ENT_QUOTES) ?>','../<?= htmlspecialchars(str_replace('Frontend/', '', $item['image'])) ?>')">
+                        <?php else: ?>
+                          <div style="width:48px;height:48px;border-radius:6px;background:rgba(255,255,255,0.07);border:1px dashed rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;">
+                            <i class="fas fa-image" style="color:rgba(255,255,255,0.25);font-size:16px;"></i>
+                          </div>
+                        <?php endif; ?>
+                      </td>
                       <td><?= htmlspecialchars($item['name']) ?></td>
                       <td><?= htmlspecialchars($item['category']) ?></td>
                       <td>₱<?= number_format($item['price'], 2) ?></td>
@@ -312,7 +325,8 @@ $conn->close();
                                 data-category="<?= htmlspecialchars($item['category'], ENT_QUOTES) ?>"
                                 data-price="<?= $item['price'] ?>"
                                 data-status="<?= $item['is_available'] ?>"
-                                data-description="<?= htmlspecialchars($item['description'] ?? '', ENT_QUOTES) ?>">
+                                data-description="<?= htmlspecialchars($item['description'] ?? '', ENT_QUOTES) ?>"
+                                data-image="<?= htmlspecialchars($item['image'] ?? '', ENT_QUOTES) ?>">
                           <i class="fas fa-edit"></i>
                         </button>
                         <button type="button" class="btn btn-sm btn-danger"
@@ -345,7 +359,7 @@ $conn->close();
           <button type="button" class="close" data-dismiss="modal">&times;</button>
         </div>
 
-        <form action="../../Backend/menu_process.php" method="POST">
+        <form action="../../Backend/menu_process.php" method="POST" enctype="multipart/form-data">
           <div class="modal-body">
 
             <div class="row">
@@ -410,6 +424,22 @@ $conn->close();
               <label>Description <small class="text-muted">(optional)</small></label>
               <textarea name="description" class="form-control" rows="2"
                         placeholder="e.g. Grilled to perfection with herbs and spices"></textarea>
+            </div>
+
+            <!-- Image Upload -->
+            <div class="form-group">
+              <label>Item Image <small class="text-muted">(optional — JPG, PNG, WEBP · max 2 MB)</small></label>
+              <div class="custom-file">
+                <input type="file" class="custom-file-input" id="addImageInput" name="image" accept="image/jpeg,image/png,image/webp">
+                <label class="custom-file-label" for="addImageInput">Choose image…</label>
+              </div>
+              <div id="addImagePreview" class="mt-2" style="display:none;">
+                <img id="addImageThumb" src="" alt="Preview"
+                     style="max-height:120px;max-width:100%;border-radius:8px;border:1px solid rgba(233,30,140,0.3);">
+                <button type="button" class="btn btn-sm btn-link text-danger ml-2" id="addImageClear">
+                  <i class="fas fa-times"></i> Remove
+                </button>
+              </div>
             </div>
 
             <!-- Ingredients linked to inventory -->
@@ -478,9 +508,10 @@ $conn->close();
           <button type="button" class="close" data-dismiss="modal">&times;</button>
         </div>
 
-        <form action="../../Backend/menu_process.php" method="POST">
+        <form action="../../Backend/menu_process.php" method="POST" enctype="multipart/form-data">
           <input type="hidden" name="update_menu" value="1">
           <input type="hidden" name="id" id="editId">
+          <input type="hidden" name="existing_image" id="editExistingImage">
 
           <div class="modal-body">
 
@@ -546,6 +577,30 @@ $conn->close();
               <textarea name="description" id="editDescription" class="form-control" rows="2"></textarea>
             </div>
 
+            <!-- Image Upload -->
+            <div class="form-group">
+              <label>Item Image <small class="text-muted">(optional — JPG, PNG, WEBP · max 2 MB)</small></label>
+              <div id="editCurrentImageWrap" class="mb-2" style="display:none;">
+                <p class="mb-1" style="font-size:12px;color:#aaa;">Current image:</p>
+                <img id="editCurrentThumb" src="" alt="Current"
+                     style="max-height:100px;max-width:160px;border-radius:8px;border:1px solid rgba(233,30,140,0.3);">
+                <button type="button" class="btn btn-sm btn-link text-danger ml-2" id="editRemoveCurrentBtn">
+                  <i class="fas fa-times"></i> Remove
+                </button>
+              </div>
+              <div class="custom-file">
+                <input type="file" class="custom-file-input" id="editImageInput" name="image" accept="image/jpeg,image/png,image/webp">
+                <label class="custom-file-label" for="editImageInput">Choose new image…</label>
+              </div>
+              <div id="editNewImagePreview" class="mt-2" style="display:none;">
+                <img id="editNewImageThumb" src="" alt="New Preview"
+                     style="max-height:120px;max-width:100%;border-radius:8px;border:1px solid rgba(233,30,140,0.3);">
+                <button type="button" class="btn btn-sm btn-link text-danger ml-2" id="editImageClear">
+                  <i class="fas fa-times"></i> Remove
+                </button>
+              </div>
+            </div>
+
             <!-- Edit Ingredients -->
             <div class="form-group">
               <label>Ingredients <small class="text-muted">(linked to Inventory)</small></label>
@@ -600,6 +655,22 @@ $conn->close();
   </div>
 
 </div><!-- /.wrapper -->
+
+<!-- ── Image Preview Modal ──────────────────────────────────── -->
+<div class="modal fade" id="imagePreviewModal" tabindex="-1" role="dialog">
+  <div class="modal-dialog modal-sm modal-dialog-centered" role="document">
+    <div class="modal-content" style="background:#1a1a2e;">
+      <div class="modal-header" style="border-bottom:1px solid rgba(233,30,140,0.3);">
+        <h6 class="modal-title" id="imgPreviewLabel" style="color:#e91e8c;"></h6>
+        <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+      </div>
+      <div class="modal-body text-center p-2">
+        <img id="imgPreviewFull" src="" alt="Menu Item"
+             style="max-width:100%;max-height:320px;border-radius:8px;">
+      </div>
+    </div>
+  </div>
+</div>
 <!-- ══════════════════════════════════════════════════════════
      DELETE CONFIRM MODAL
 ═══════════════════════════════════════════════════════════ -->
@@ -642,10 +713,16 @@ $conn->close();
 <!-- DataTable init -->
 <script>
   $(function () {
+    if ($.fn.DataTable.isDataTable('#menuTable')) {
+      $('#menuTable').DataTable().destroy();
+    }
     $("#menuTable").DataTable({
       "responsive": true,
       "autoWidth": false,
-      "columnDefs": [{ "orderable": false, "targets": [7] }],
+      "columnDefs": [
+        { "orderable": false, "targets": [1, 8] },
+        { "searchable": false, "targets": [1] }
+      ],
       "order": [[0, "desc"]]
     });
   });
@@ -768,9 +845,13 @@ $conn->close();
       modalId:  'addMenuModal'
     });
 
-    // Reset full Add form on close
+    // Reset full Add form on close (image clear is handled separately below)
     $('#addMenuModal').on('hidden.bs.modal', function () {
       $(this).find('form')[0].reset();
+      // Re-sync the custom-file label after form reset
+      $('#addImageInput').next('.custom-file-label').text('Choose image…');
+      $('#addImagePreview').hide();
+      $('#addImageThumb').attr('src', '');
     });
 
     // ── EDIT modal ────────────────────────────────────────────
@@ -840,6 +921,19 @@ $conn->close();
       $('#editStatus').val(btn.data('status'));
       $('#editDescription').val(btn.data('description'));
 
+      // Populate image fields
+      var img = btn.data('image') || '';
+      $('#editExistingImage').val(img);
+      $('#editImageInput').val('');
+      $('#editImageInput').next('.custom-file-label').text('Choose new image…');
+      $('#editNewImagePreview').hide();
+      if (img) {
+        $('#editCurrentThumb').attr('src', '../' + img.replace('Frontend/', ''));
+        $('#editCurrentImageWrap').show();
+      } else {
+        $('#editCurrentImageWrap').hide();
+      }
+
       // Load existing ingredients via AJAX
       editSelected.length = 0;
       var menuId = btn.data('id');
@@ -868,7 +962,58 @@ $conn->close();
     });
 
     editRenderTags();
-  });
+
+    // ── Image preview — Add modal ─────────────────────────────
+    $('#addImageInput').on('change', function () {
+      var file = this.files[0];
+      if (file) {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          $('#addImageThumb').attr('src', e.target.result);
+          $('#addImagePreview').show();
+        };
+        reader.readAsDataURL(file);
+        // update custom-file label
+        $('#addImageInput').next('.custom-file-label').text(file.name);
+      }
+    });
+    $('#addImageClear').on('click', function () {
+      $('#addImageInput').val('');
+      $('#addImageInput').next('.custom-file-label').text('Choose image…');
+      $('#addImagePreview').hide();
+      $('#addImageThumb').attr('src', '');
+    });
+    // ── Image preview — Edit modal ────────────────────────────
+    $('#editImageInput').on('change', function () {
+      var file = this.files[0];
+      if (file) {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          $('#editNewImageThumb').attr('src', e.target.result);
+          $('#editNewImagePreview').show();
+        };
+        reader.readAsDataURL(file);
+        $('#editImageInput').next('.custom-file-label').text(file.name);
+      }
+    });
+    $('#editImageClear').on('click', function () {
+      $('#editImageInput').val('');
+      $('#editImageInput').next('.custom-file-label').text('Choose new image…');
+      $('#editNewImagePreview').hide();
+    });
+    $('#editRemoveCurrentBtn').on('click', function () {
+      // Clear existing image — backend will see empty existing_image and no new file → sets NULL
+      $('#editExistingImage').val('');
+      $('#editCurrentImageWrap').hide();
+    });
+
+  }); // end $(function)
+
+  function showImagePreview(name, src) {
+    $('#imgPreviewLabel').text(name);
+    $('#imgPreviewFull').attr('src', src);
+    $('#imagePreviewModal').modal('show');
+  }
 
   function confirmDelete(id, name) {
     $('#deleteItemName').text(name);

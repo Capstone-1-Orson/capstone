@@ -146,6 +146,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' &&
     header("Location: $redirect"); exit;
 }
 
+// ═══════════════════════════════════════════════
+//  BULK UPDATE THRESHOLDS  (POST + name="bulk_update_thresholds")
+// ═══════════════════════════════════════════════
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_update_thresholds'])) {
+
+    $thresholds = $_POST['threshold'] ?? [];
+    $now        = date('Y-m-d H:i:s');
+    $updated    = 0;
+
+    if (empty($thresholds)) {
+        $_SESSION['error'] = "No threshold data received.";
+        header("Location: $redirect"); exit;
+    }
+
+    $stmt = $conn->prepare(
+        "UPDATE ingredients SET low_stock_threshold = ?, updated_at = ? WHERE id = ?"
+    );
+
+    foreach ($thresholds as $id => $threshold) {
+        $id        = intval($id);
+        $threshold = floatval($threshold);
+        if ($id <= 0) continue;
+
+        $stmt->bind_param('dsi', $threshold, $now, $id);
+        if ($stmt->execute()) $updated++;
+    }
+
+    $stmt->close();
+    $conn->close();
+
+    $_SESSION['success'] = "$updated threshold(s) updated successfully!";
+    header("Location: $redirect"); exit;
+}
+
 // ── Fallback ──────────────────────────────────────────────────
 $conn->close();
 header("Location: $redirect");

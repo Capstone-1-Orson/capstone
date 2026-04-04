@@ -1,13 +1,8 @@
 <?php
 session_start();
 
-session_unset(); 
-session_destroy(); 
+session_unset();
+session_destroy();
 
-
-header("Location: ../Frontend/lockscreen.html");
+header("Location: ../Frontend/login-v2.html");
 exit();
-?>
-
-
-ADMIN/staff-list.php"

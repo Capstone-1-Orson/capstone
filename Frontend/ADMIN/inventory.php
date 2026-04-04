@@ -95,7 +95,7 @@ $conn->close();
                     <img src="../dist/img/user2-160x160.jpg" class="img-circle elevation-2">
                 </div>
                 <div class="info">
-                     <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user']['firstname'] ?? 'Admin') ?></a>
+                     <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user'] ?? 'Admin') ?></a>
                 </div>
             </div>
             <nav class="mt-2">
