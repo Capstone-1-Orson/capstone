@@ -1,4 +1,3 @@
-# capstone
 <?php
 session_start();
 if (!isset($_SESSION['user'])) {
@@ -84,15 +83,31 @@ if (isset($_POST['action']) && $_POST['action'] === 'restore') {
             } else {
                 // Split and execute statements
                 $conn->query("SET FOREIGN_KEY_CHECKS=0");
+
+                // Remove comment lines, then split on statement-ending semicolons
+                $lines = explode("\n", $sqlContent);
+                $filteredLines = array_filter($lines, fn($line) => strpos(trim($line), '--') !== 0);
+                $cleanSql = implode("\n", $filteredLines);
+
+                // Split on semicolons followed by optional whitespace/newlines
                 $statements = array_filter(
-                    array_map('trim', preg_split('/;\s*\n/', $sqlContent)),
-                    fn($s) => !empty($s) && strpos($s, '--') !== 0
+                    array_map('trim', preg_split('/;\s*/m', $cleanSql)),
+                    fn($s) => !empty($s)
                 );
 
                 $errors = 0;
                 foreach ($statements as $stmt) {
-                    if (!empty($stmt) && $stmt !== 'SET FOREIGN_KEY_CHECKS=0' && $stmt !== 'SET FOREIGN_KEY_CHECKS=1') {
-                        if (!$conn->query($stmt)) {
+                    $upperStmt = strtoupper(trim($stmt));
+                    // Skip SET FOREIGN_KEY_CHECKS lines (we handle them manually)
+                    if (strpos($upperStmt, 'SET FOREIGN_KEY_CHECKS') === 0) {
+                        continue;
+                    }
+                    // For CREATE TABLE statements, rewrite to use IF NOT EXISTS
+                    // so tables that already exist are skipped rather than erroring
+                    $stmt = preg_replace('/^CREATE TABLE\s+`/i', 'CREATE TABLE IF NOT EXISTS `', $stmt);
+                    if (!$conn->query($stmt)) {
+                        // Ignore duplicate entry errors (1062) during INSERT — data already there
+                        if ($conn->errno !== 1062) {
                             $errors++;
                         }
                     }
