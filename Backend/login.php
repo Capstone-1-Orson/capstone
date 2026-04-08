@@ -12,7 +12,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pass'])) {
         exit();
     }
 
-    $email = "Admin";
+    // Admin email stored as a constant — change in one place if needed
+    if (!defined('ADMIN_EMAIL')) define('ADMIN_EMAIL', 'Admin');
+
+    $email = ADMIN_EMAIL;
     $sql   = "SELECT password, position FROM user WHERE email = ?";
     $stmt  = $conn->prepare($sql);
     $stmt->bind_param("s", $email);
@@ -21,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pass'])) {
     $stmt->fetch();
     $stmt->close();
 
-    // Verify against bcrypt hash
+    // Verify against bcrypt hash only — plain-text fallback removed for security
     if ($db_pass && password_verify($pass, $db_pass) && $db_position === 'admin') {
         session_regenerate_id(true);
         $_SESSION['user']     = $email;
@@ -54,12 +57,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['email'])) {
     $stmt->close();
 
     if ($db_pass) {
-        // Detect bcrypt hash or plain text and verify accordingly
-        $match = (str_starts_with($db_pass, '$2y$') || str_starts_with($db_pass, '$2b$'))
-            ? password_verify($pass, $db_pass)
-            : ($pass === $db_pass);
-
-        if ($match) {
+        // bcrypt verification only — plain-text fallback removed
+        // Run: UPDATE user SET password = PASSWORD_HASH(password, PASSWORD_DEFAULT)
+        // in phpMyAdmin for any legacy un-hashed accounts before deploying.
+        if (password_verify($pass, $db_pass)) {
             session_regenerate_id(true);
             $_SESSION['user']     = $email;
             $_SESSION['position'] = $db_position;

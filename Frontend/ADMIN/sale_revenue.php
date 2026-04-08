@@ -14,44 +14,65 @@ function tableExists($conn, $table) {
 }
 $hasOrderItems = tableExists($conn, 'order_items');
 
+// ── Valid order filter (exclude voided / refunded) ─────────────
+$VALID = "status NOT IN ('voided','refunded','partial_refund')";
+
 // ── Summary Stats ──────────────────────────────────────────────
 $totalRevenue = 0.0;
 $totalOrders  = 0;
-$r = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS rev FROM orders");
+$r = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE $VALID");
 if ($r && $row = $r->fetch_assoc()) {
     $totalOrders  = (int)$row['cnt'];
     $totalRevenue = (float)$row['rev'];
 }
 
+// Refund deduction
+$totalRefundAmt = 0.0;
+$rRef = $conn->query("SELECT COALESCE(SUM(refund_amt),0) AS amt FROM order_refunds");
+if ($rRef && $rowRef = $rRef->fetch_assoc()) $totalRefundAmt = (float)$rowRef['amt'];
+
 // Today's revenue
 $todayRevenue = 0.0;
-$r2 = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at) = CURDATE()");
+$r2 = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at) = CURDATE() AND $VALID");
 if ($r2 && $row2 = $r2->fetch_assoc()) $todayRevenue = (float)$row2['rev'];
 
 // This month's revenue
 $monthRevenue = 0.0;
-$r3 = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE MONTH(created_at)=MONTH(CURDATE()) AND YEAR(created_at)=YEAR(CURDATE())");
+$r3 = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE MONTH(created_at)=MONTH(CURDATE()) AND YEAR(created_at)=YEAR(CURDATE()) AND $VALID");
 if ($r3 && $row3 = $r3->fetch_assoc()) $monthRevenue = (float)$row3['rev'];
 
 // Average order value
 $avgOrder = $totalOrders > 0 ? $totalRevenue / $totalOrders : 0;
 
-// ── Monthly Sales Chart (last 6 months) ────────────────────────
+// ── Monthly Sales Chart (last 6 months) — single query ────────
 $monthLabels = [];
 $monthData   = [];
+
+// Build the 6 month slots first so we always show all 6 even if revenue is 0
+$monthSlots = [];
 for ($i = 5; $i >= 0; $i--) {
-    $y = date('Y', strtotime("-$i months"));
-    $m = date('m', strtotime("-$i months"));
-    $monthLabels[] = date('M Y', strtotime("-$i months"));
-    $stmt = $conn->prepare(
-        "SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders
-         WHERE MONTH(created_at)=? AND YEAR(created_at)=?"
-    );
-    $stmt->bind_param('ss', $m, $y);
-    $stmt->execute();
-    $monthData[] = (float)$stmt->get_result()->fetch_assoc()['rev'];
-    $stmt->close();
+    $key           = date('Y-m', strtotime("-$i months"));
+    $monthSlots[$key] = 0.0;
+    $monthLabels[]    = date('M Y', strtotime("-$i months"));
 }
+
+$mStmt = $conn->prepare(
+    "SELECT DATE_FORMAT(created_at,'%Y-%m') AS ym,
+            COALESCE(SUM(total_amt),0) AS rev
+     FROM orders
+     WHERE created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 5 MONTH),'%Y-%m-01')
+       AND $VALID
+     GROUP BY ym"
+);
+$mStmt->execute();
+$mRes = $mStmt->get_result();
+while ($row = $mRes->fetch_assoc()) {
+    if (isset($monthSlots[$row['ym']])) {
+        $monthSlots[$row['ym']] = (float)$row['rev'];
+    }
+}
+$mStmt->close();
+$monthData = array_values($monthSlots);
 
 // ── Top Selling Items (for donut chart + sales table) ──────────
 $topItems   = [];
@@ -63,6 +84,8 @@ if ($hasOrderItems) {
                 SUM(oi.qty * oi.unit_price) AS revenue
          FROM order_items oi
          JOIN menu m ON m.id = oi.menu_id
+         JOIN orders o ON o.id = oi.order_id
+         WHERE $VALID
          GROUP BY oi.menu_id
          ORDER BY qty_sold DESC
          LIMIT 10"
@@ -82,34 +105,54 @@ if ($hasOrderItems) {
          FROM orders o
          JOIN order_items oi ON oi.order_id = o.id
          JOIN menu m ON m.id = oi.menu_id
+         WHERE $VALID
          GROUP BY o.id
          ORDER BY o.created_at DESC LIMIT 10"
     );
     if ($r5) while ($row = $r5->fetch_assoc()) $latestOrders[] = $row;
 } else {
-    $r5 = $conn->query("SELECT id, created_at, table_no, total_amt, '—' AS items FROM orders ORDER BY created_at DESC LIMIT 10");
+    $r5 = $conn->query("SELECT id, created_at, table_no, total_amt, '—' AS items FROM orders WHERE $VALID ORDER BY created_at DESC LIMIT 10");
     if ($r5) while ($row = $r5->fetch_assoc()) $latestOrders[] = $row;
 }
 
-// ── Daily Revenue – last 7 days (line chart) ───────────────────
+// ── Daily Revenue – last 7 days — single query ─────────────────
 $dayLabels = [];
 $dayData   = [];
+
+// Build 7-day slots so missing days show as 0
+$daySlots = [];
 for ($i = 6; $i >= 0; $i--) {
-    $date = date('Y-m-d', strtotime("-$i days"));
-    $dayLabels[] = date('M d', strtotime("-$i days"));
-    $stmt = $conn->prepare("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at)=?");
-    $stmt->bind_param('s', $date);
-    $stmt->execute();
-    $dayData[] = (float)$stmt->get_result()->fetch_assoc()['rev'];
-    $stmt->close();
+    $key           = date('Y-m-d', strtotime("-$i days"));
+    $daySlots[$key] = 0.0;
+    $dayLabels[]    = date('M d', strtotime("-$i days"));
 }
 
-// ── Category Revenue (for progress bars) ──────────────────────
+$dStmt = $conn->prepare(
+    "SELECT DATE(created_at) AS d, COALESCE(SUM(total_amt),0) AS rev
+     FROM orders
+     WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+       AND $VALID
+     GROUP BY d"
+);
+$dStmt->execute();
+$dRes = $dStmt->get_result();
+while ($row = $dRes->fetch_assoc()) {
+    if (isset($daySlots[$row['d']])) {
+        $daySlots[$row['d']] = (float)$row['rev'];
+    }
+}
+$dStmt->close();
+$dayData = array_values($daySlots);
+
+// ── Category Revenue (valid orders only) ──────────────────────
 $catRevenue = [];
 if ($hasOrderItems) {
     $r6 = $conn->query(
         "SELECT m.category, SUM(oi.qty * oi.unit_price) AS revenue
-         FROM order_items oi JOIN menu m ON m.id = oi.menu_id
+         FROM order_items oi
+         JOIN menu m ON m.id = oi.menu_id
+         JOIN orders o ON o.id = oi.order_id
+         WHERE $VALID
          GROUP BY m.category ORDER BY revenue DESC LIMIT 5"
     );
     if ($r6) while ($row = $r6->fetch_assoc()) $catRevenue[] = $row;
@@ -250,8 +293,9 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
             <div class="info-box bg-info">
               <span class="info-box-icon"><i class="fas fa-peso-sign"></i></span>
               <div class="info-box-content">
-                <span class="info-box-text">Total Revenue</span>
+                <span class="info-box-text">Net Revenue</span>
                 <span class="info-box-number">&#8369;<?= number_format($totalRevenue, 2) ?></span>
+                <span class="progress-description" style="font-size:11px;opacity:.85;">Voided &amp; refunded excluded</span>
               </div>
             </div>
           </div>
@@ -277,12 +321,43 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
             <div class="info-box bg-danger">
               <span class="info-box-icon"><i class="fas fa-shopping-cart"></i></span>
               <div class="info-box-content">
-                <span class="info-box-text">Total Orders</span>
+                <span class="info-box-text">Valid Orders</span>
                 <span class="info-box-number"><?= number_format($totalOrders) ?></span>
               </div>
             </div>
           </div>
         </div>
+        <?php if ($totalRefundAmt > 0): ?>
+        <div class="row">
+          <div class="col-md-4 col-sm-6 col-12">
+            <div class="info-box" style="background:#fff3cd;border-left:4px solid #e74c3c;">
+              <span class="info-box-icon" style="background:#e74c3c;color:#fff;"><i class="fas fa-undo-alt"></i></span>
+              <div class="info-box-content">
+                <span class="info-box-text" style="color:#555;">Total Refunded</span>
+                <span class="info-box-number" style="color:#e74c3c;">&#8369;<?= number_format($totalRefundAmt, 2) ?></span>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 col-sm-6 col-12">
+            <div class="info-box" style="background:#d4edda;border-left:4px solid #28a745;">
+              <span class="info-box-icon" style="background:#28a745;color:#fff;"><i class="fas fa-check-circle"></i></span>
+              <div class="info-box-content">
+                <span class="info-box-text" style="color:#555;">Gross Revenue (before refunds)</span>
+                <span class="info-box-number" style="color:#28a745;">&#8369;<?= number_format($totalRevenue + $totalRefundAmt, 2) ?></span>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 col-sm-6 col-12">
+            <div class="info-box" style="background:#cce5ff;border-left:4px solid #3c8dbc;">
+              <span class="info-box-icon" style="background:#3c8dbc;color:#fff;"><i class="fas fa-calculator"></i></span>
+              <div class="info-box-content">
+                <span class="info-box-text" style="color:#555;">Net After Refunds</span>
+                <span class="info-box-number" style="color:#3c8dbc;">&#8369;<?= number_format(max(0, $totalRevenue - $totalRefundAmt), 2) ?></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <?php endif; ?>
 
         <!-- ── Monthly Revenue Chart + Category Breakdown ─── -->
         <div class="row">
@@ -456,7 +531,7 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
 <script src="../plugins/datatables-buttons/js/buttons.colVis.min.js"></script>
 
 <script>
-// ── Monthly Revenue Bar Chart ─────────────────────────────────
+// ── Monthly Revenue Bar Chart (Chart.js v4) ───────────────────
 $(function () {
   new Chart($('#salesChart').get(0).getContext('2d'), {
     type: 'bar',
@@ -473,20 +548,22 @@ $(function () {
     },
     options: {
       responsive: true,
-      legend: { display: false },
-      tooltips: {
-        callbacks: {
-          label: i => '₱' + parseFloat(i.yLabel).toLocaleString('en', {minimumFractionDigits:2})
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => '₱' + parseFloat(ctx.parsed.y).toLocaleString('en', { minimumFractionDigits: 2 })
+          }
         }
       },
       scales: {
-        yAxes: [{ ticks: { beginAtZero: true, callback: v => '₱' + v.toLocaleString() } }]
+        y: { beginAtZero: true, ticks: { callback: v => '₱' + v.toLocaleString() } }
       }
     }
   });
 });
 
-// ── Daily Revenue Line Chart ──────────────────────────────────
+// ── Daily Revenue Line Chart (Chart.js v4) ───────────────────
 $(function () {
   new Chart($('#lineChart').get(0).getContext('2d'), {
     type: 'line',
@@ -505,14 +582,16 @@ $(function () {
     },
     options: {
       responsive: true,
-      legend: { display: false },
-      tooltips: {
-        callbacks: {
-          label: i => '₱' + parseFloat(i.yLabel).toLocaleString('en', {minimumFractionDigits:2})
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => '₱' + parseFloat(ctx.parsed.y).toLocaleString('en', { minimumFractionDigits: 2 })
+          }
         }
       },
       scales: {
-        yAxes: [{ ticks: { beginAtZero: true, callback: v => '₱' + v.toLocaleString() } }]
+        y: { beginAtZero: true, ticks: { callback: v => '₱' + v.toLocaleString() } }
       }
     }
   });

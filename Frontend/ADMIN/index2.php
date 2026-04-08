@@ -14,20 +14,23 @@ function tableExists($conn, $table) {
 }
 $hasOrderItems = tableExists($conn, 'order_items');
 
+// ── Valid order filter (exclude voided / refunded) ─────────────
+$VALID = "status NOT IN ('voided','refunded','partial_refund')";
+
 // ── Top info-box stats ─────────────────────────────────────────
-// Daily customers served = distinct table_no ordered today
+// Daily customers served = distinct table_no ordered today (valid only)
 $dailyCustomers = 0;
-$r = $conn->query("SELECT COUNT(DISTINCT table_no) AS c FROM orders WHERE DATE(created_at)=CURDATE()");
+$r = $conn->query("SELECT COUNT(DISTINCT table_no) AS c FROM orders WHERE DATE(created_at)=CURDATE() AND $VALID");
 if ($r && $row = $r->fetch_assoc()) $dailyCustomers = (int)$row['c'];
 
-// Total revenue (all time)
+// Total revenue (all time, valid only)
 $totalRevenue = 0.0;
-$r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders");
+$r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE $VALID");
 if ($r && $row = $r->fetch_assoc()) $totalRevenue = (float)$row['rev'];
 
-// Orders today
+// Orders today (valid only)
 $ordersToday = 0;
-$r = $conn->query("SELECT COUNT(*) AS c FROM orders WHERE DATE(created_at)=CURDATE()");
+$r = $conn->query("SELECT COUNT(*) AS c FROM orders WHERE DATE(created_at)=CURDATE() AND $VALID");
 if ($r && $row = $r->fetch_assoc()) $ordersToday = (int)$row['c'];
 
 // Staff count (from user table)
@@ -44,7 +47,7 @@ for ($i = 5; $i >= 0; $i--) {
     $chartLabels[] = date('M Y', strtotime("-$i months"));
     $stmt = $conn->prepare(
         "SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders
-         WHERE MONTH(created_at)=? AND YEAR(created_at)=?"
+         WHERE MONTH(created_at)=? AND YEAR(created_at)=? AND $VALID"
     );
     $stmt->bind_param('ss', $m, $y);
     $stmt->execute();
@@ -55,22 +58,25 @@ for ($i = 5; $i >= 0; $i--) {
 // ── Monthly summary footer ─────────────────────────────────────
 $thisMonthRev = 0.0;
 $lastMonthRev = 0.0;
-$r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE MONTH(created_at)=MONTH(CURDATE()) AND YEAR(created_at)=YEAR(CURDATE())");
+$r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE MONTH(created_at)=MONTH(CURDATE()) AND YEAR(created_at)=YEAR(CURDATE()) AND $VALID");
 if ($r && $row = $r->fetch_assoc()) $thisMonthRev = (float)$row['rev'];
-$r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE MONTH(created_at)=MONTH(CURDATE()-INTERVAL 1 MONTH) AND YEAR(created_at)=YEAR(CURDATE()-INTERVAL 1 MONTH)");
+$r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE MONTH(created_at)=MONTH(CURDATE()-INTERVAL 1 MONTH) AND YEAR(created_at)=YEAR(CURDATE()-INTERVAL 1 MONTH) AND $VALID");
 if ($r && $row = $r->fetch_assoc()) $lastMonthRev = (float)$row['rev'];
 $revChange = $lastMonthRev > 0 ? round((($thisMonthRev - $lastMonthRev) / $lastMonthRev) * 100, 1) : 0;
 
 $totalOrders = 0;
-$r = $conn->query("SELECT COUNT(*) AS c FROM orders");
+$r = $conn->query("SELECT COUNT(*) AS c FROM orders WHERE $VALID");
 if ($r && $row = $r->fetch_assoc()) $totalOrders = (int)$row['c'];
 
-// ── Category revenue progress bars ────────────────────────────
+// ── Category revenue progress bars (valid only) ──────────────
 $catRevenue = [];
 if ($hasOrderItems) {
     $r = $conn->query(
         "SELECT m.category, SUM(oi.qty * oi.unit_price) AS revenue
-         FROM order_items oi JOIN menu m ON m.id = oi.menu_id
+         FROM order_items oi
+         JOIN menu m ON m.id = oi.menu_id
+         JOIN orders o ON o.id = oi.order_id
+         WHERE $VALID
          GROUP BY m.category ORDER BY revenue DESC LIMIT 4"
     );
     if ($r) while ($row = $r->fetch_assoc()) $catRevenue[] = $row;
@@ -78,19 +84,20 @@ if ($hasOrderItems) {
 $maxCatRev = !empty($catRevenue) ? (float)$catRevenue[0]['revenue'] : 1;
 
 // ── Right-side stats ───────────────────────────────────────────
-// Daily items sold from order_items (qty today)
+// Daily items sold (valid orders only)
 $dailyItemsSold = 0;
 if ($hasOrderItems) {
     $r = $conn->query(
         "SELECT COALESCE(SUM(oi.qty),0) AS c FROM order_items oi
-         JOIN orders o ON o.id=oi.order_id WHERE DATE(o.created_at)=CURDATE()"
+         JOIN orders o ON o.id=oi.order_id
+         WHERE DATE(o.created_at)=CURDATE() AND $VALID"
     );
     if ($r && $row = $r->fetch_assoc()) $dailyItemsSold = (int)$row['c'];
 }
 
-// Daily revenue
+// Daily revenue (valid only)
 $dailyRevenue = 0.0;
-$r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at)=CURDATE()");
+$r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at)=CURDATE() AND $VALID");
 if ($r && $row = $r->fetch_assoc()) $dailyRevenue = (float)$row['rev'];
 
 // Low stock count
@@ -105,10 +112,10 @@ if ($r) while ($row = $r->fetch_assoc()) $newMenuItems[] = $row;
 
 // ── Staff list ────────────────────────────────────────────────
 $staffList = [];
-$r = $conn->query("SELECT firstname, lastname FROM user WHERE position = 'staff' ORDER BY id DESC LIMIT 5");
+$r = $conn->query("SELECT firstname, lastname, image FROM user WHERE position = 'staff' ORDER BY id DESC LIMIT 5");
 if ($r) while ($row = $r->fetch_assoc()) $staffList[] = $row;
 
-// ── Recent orders ─────────────────────────────────────────────
+// ── Recent orders (valid only) ────────────────────────────────
 $recentOrders = [];
 if ($hasOrderItems) {
     $r = $conn->query(
@@ -117,11 +124,12 @@ if ($hasOrderItems) {
          FROM orders o
          JOIN order_items oi ON oi.order_id = o.id
          JOIN menu m ON m.id = oi.menu_id
+         WHERE $VALID
          GROUP BY o.id ORDER BY o.created_at DESC LIMIT 5"
     );
     if ($r) while ($row = $r->fetch_assoc()) $recentOrders[] = $row;
 } else {
-    $r = $conn->query("SELECT id, table_no, total_amt, '—' AS items FROM orders ORDER BY created_at DESC LIMIT 5");
+    $r = $conn->query("SELECT id, table_no, total_amt, '—' AS items FROM orders WHERE $VALID ORDER BY created_at DESC LIMIT 5");
     if ($r) while ($row = $r->fetch_assoc()) $recentOrders[] = $row;
 }
 
@@ -133,13 +141,6 @@ $revTrend        = $revChange >= 0 ? '+' . $revChange . '%' : $revChange . '%';
 $revTrendClass   = $revChange >= 0 ? 'text-success' : 'text-danger';
 $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
 
-$staffImages = [
-    '../dist/img/user1-128x128.jpg',
-    '../dist/img/user8-128x128.jpg',
-    '../dist/img/user7-128x128.jpg',
-    '../dist/img/user6-128x128.jpg',
-    '../dist/img/user5-128x128.jpg',
-];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -420,9 +421,14 @@ $staffImages = [
                   <div class="card-body p-0">
                     <ul class="users-list clearfix" style="display:flex;flex-wrap:wrap;justify-content:center;">
                       <?php if (!empty($staffList)):
-                        foreach ($staffList as $si => $staff): ?>
+                        foreach ($staffList as $staff): ?>
                       <li style="text-align:center;margin:8px;">
-                        <img src="<?= $staffImages[$si % count($staffImages)] ?>" alt="<?= htmlspecialchars($staff['firstname']) ?>">
+                        <?php
+                          $staffPhoto = (!empty($staff['image']))
+                            ? '../../' . htmlspecialchars($staff['image'])
+                            : '../dist/img/user2-160x160.jpg';
+                        ?>
+                        <img src="<?= $staffPhoto ?>" alt="<?= htmlspecialchars($staff['firstname']) ?>">
                         <a class="users-list-name" href="staff-list.php">
                           <?= htmlspecialchars($staff['firstname']) ?> <?= htmlspecialchars($staff['lastname']) ?>
                         </a>
@@ -489,6 +495,7 @@ $staffImages = [
                     <thead>
                       <tr>
                         <th>Order ID</th>
+                        <th>Table No</th>
                         <th>Items</th>
                         <th>Total</th>
                       </tr>
@@ -498,6 +505,7 @@ $staffImages = [
                         foreach ($recentOrders as $ro): ?>
                       <tr>
                         <td><strong>#<?= (int)$ro['id'] ?></strong></td>
+                        <td><span class="badge badge-secondary">Table <?= htmlspecialchars($ro['table_no']) ?></span></td>
                         <td><?= htmlspecialchars(mb_strimwidth($ro['items'], 0, 50, '…')) ?></td>
                         <td><span class="text-success font-weight-bold">&#8369;<?= number_format((float)$ro['total_amt'], 2) ?></span></td>
                       </tr>

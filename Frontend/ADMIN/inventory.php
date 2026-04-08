@@ -10,11 +10,20 @@ if (!isset($_SESSION['user'])) {
 // columns: id, name, unit, stock_qty, low_stock_threshold, created_at, updated_at
 require_once '../../Backend/conn.php';
 
-// ── Stats ─────────────────────────────────────────────────────
-$total     = $conn->query("SELECT COUNT(*) AS c FROM ingredients")->fetch_assoc()['c'] ?? 0;
-$in_stock  = $conn->query("SELECT COUNT(*) AS c FROM ingredients WHERE stock_qty > low_stock_threshold")->fetch_assoc()['c'] ?? 0;
-$low_stock = $conn->query("SELECT COUNT(*) AS c FROM ingredients WHERE stock_qty > 0 AND stock_qty <= low_stock_threshold")->fetch_assoc()['c'] ?? 0;
-$out_stock = $conn->query("SELECT COUNT(*) AS c FROM ingredients WHERE stock_qty = 0")->fetch_assoc()['c'] ?? 0;
+// ── Stats — single query instead of four separate ones ────────
+$stats_row = $conn->query(
+    "SELECT
+        COUNT(*) AS total,
+        SUM(stock_qty > low_stock_threshold) AS in_stock,
+        SUM(stock_qty > 0 AND stock_qty <= low_stock_threshold) AS low_stock,
+        SUM(stock_qty = 0) AS out_stock
+     FROM ingredients"
+)->fetch_assoc();
+
+$total     = (int)($stats_row['total']     ?? 0);
+$in_stock  = (int)($stats_row['in_stock']  ?? 0);
+$low_stock = (int)($stats_row['low_stock'] ?? 0);
+$out_stock = (int)($stats_row['out_stock'] ?? 0);
 
 // ── Fetch all ingredients ─────────────────────────────────────
 $items = [];

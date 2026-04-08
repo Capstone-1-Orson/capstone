@@ -2,6 +2,24 @@
 session_start();
 include('conn.php');
 
+// ── Role guard: admin only ────────────────────────────────────
+if (!isset($_SESSION['user']) || ($_SESSION['position'] ?? '') !== 'admin') {
+    http_response_code(403);
+    header("Location: ../Frontend/login-v2.html");
+    exit();
+}
+
+// ── CSRF verification ─────────────────────────────────────────
+$submitted_token = trim($_POST['csrf_token'] ?? '');
+$session_token   = $_SESSION['csrf_token'] ?? '';
+if (empty($submitted_token) || !hash_equals($session_token, $submitted_token)) {
+    $_SESSION['error'] = 'Invalid request. Please try again.';
+    header("Location: ../Frontend/ADMIN/staff-list.php");
+    exit();
+}
+// Regenerate token after use so each submission needs a fresh one
+$_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+
 $redirect_back = "../Frontend/ADMIN/staff-list.php";
 
 if (isset($_POST['save_user'])) {
@@ -68,8 +86,30 @@ if (isset($_POST['save_user'])) {
     }
     $checkContact->close();
 
-    $stmt = $conn->prepare("INSERT INTO user (firstname, lastname, email, password, position, contact, address) VALUES (?, ?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("sssssss", $firstname, $lastname, $email, $hashed_password, $position, $contact, $address);
+    // Handle profile image upload
+    $image_path = '';
+    if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+        $upload_dir = __DIR__ . '/../Frontend/ADMIN/uploads/staff/';
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0755, true);
+        }
+        $ext       = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
+        $allowed   = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        $allowedMime = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        $fileMime  = mime_content_type($_FILES['image']['tmp_name']);
+        if (!in_array($ext, $allowed) || !in_array($fileMime, $allowedMime)) {
+            $_SESSION['error'] = 'Only JPG, PNG, GIF, or WEBP images are allowed!';
+            header("Location: $redirect_back"); exit();
+        }
+        $filename   = 'staff_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+        $dest       = $upload_dir . $filename;
+        if (move_uploaded_file($_FILES['image']['tmp_name'], $dest)) {
+            $image_path = 'Frontend/ADMIN/uploads/staff/' . $filename;
+        }
+    }
+
+    $stmt = $conn->prepare("INSERT INTO user (firstname, lastname, email, password, position, contact, address, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssssssss", $firstname, $lastname, $email, $hashed_password, $position, $contact, $address, $image_path);
 
     if ($stmt->execute()) {
         $_SESSION['success'] = "Staff member \"$firstname $lastname\" added successfully!";
@@ -111,6 +151,34 @@ if (isset($_POST['update_user'])) {
     }
     $checkEmail->close();
 
+    // Handle profile image upload
+    $existing_image = trim($_POST['existing_image'] ?? '');
+    $image_path     = $existing_image; // default: keep current image
+
+    if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+        $upload_dir = __DIR__ . '/../Frontend/ADMIN/uploads/staff/';
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0755, true);
+        }
+        $ext     = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
+        $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        $allowedMime = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        $fileMime = mime_content_type($_FILES['image']['tmp_name']);
+        if (!in_array($ext, $allowed) || !in_array($fileMime, $allowedMime)) {
+            $_SESSION['error'] = 'Only JPG, PNG, GIF, or WEBP images are allowed!';
+            header("Location: $redirect_back"); exit();
+        }
+        $filename = 'staff_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+        $dest     = $upload_dir . $filename;
+        if (move_uploaded_file($_FILES['image']['tmp_name'], $dest)) {
+            // Delete old image if it exists
+            if ($existing_image && file_exists(__DIR__ . '/../' . $existing_image)) {
+                unlink(__DIR__ . '/../' . $existing_image);
+            }
+            $image_path = 'Frontend/ADMIN/uploads/staff/' . $filename;
+        }
+    }
+
     // Optional password update
     $password = $_POST['password'] ?? '';
     if ($password !== '') {
@@ -132,11 +200,11 @@ if (isset($_POST['update_user'])) {
         }
         $hashed_password = password_hash($password, PASSWORD_DEFAULT);
 
-        $stmt = $conn->prepare("UPDATE user SET firstname=?, lastname=?, email=?, contact=?, address=?, position=?, password=? WHERE id=?");
-        $stmt->bind_param("sssssssi", $firstname, $lastname, $email, $contact, $address, $position, $hashed_password, $id);
+        $stmt = $conn->prepare("UPDATE user SET firstname=?, lastname=?, email=?, contact=?, address=?, position=?, password=?, image=? WHERE id=?");
+        $stmt->bind_param("ssssssssi", $firstname, $lastname, $email, $contact, $address, $position, $hashed_password, $image_path, $id);
     } else {
-        $stmt = $conn->prepare("UPDATE user SET firstname=?, lastname=?, email=?, contact=?, address=?, position=? WHERE id=?");
-        $stmt->bind_param("ssssssi", $firstname, $lastname, $email, $contact, $address, $position, $id);
+        $stmt = $conn->prepare("UPDATE user SET firstname=?, lastname=?, email=?, contact=?, address=?, position=?, image=? WHERE id=?");
+        $stmt->bind_param("sssssssi", $firstname, $lastname, $email, $contact, $address, $position, $image_path, $id);
     }
 
     if ($stmt->execute()) {
@@ -153,14 +221,22 @@ if (isset($_POST['update_user'])) {
 if (isset($_POST['delete_user'])) {
     $id = intval($_POST['user_id']);
 
-    // Fetch name before deleting for the success message
-    $nameRow = $conn->query("SELECT firstname, lastname FROM user WHERE id = $id")->fetch_assoc();
+    // Fetch name and image before deleting — use prepared statement
+    $nameStmt = $conn->prepare("SELECT firstname, lastname, image FROM user WHERE id = ?");
+    $nameStmt->bind_param("i", $id);
+    $nameStmt->execute();
+    $nameRow  = $nameStmt->get_result()->fetch_assoc();
+    $nameStmt->close();
     $fullName = $nameRow ? htmlspecialchars($nameRow['firstname'] . ' ' . $nameRow['lastname']) : 'User';
 
     $stmt = $conn->prepare("DELETE FROM user WHERE id=?");
     $stmt->bind_param("i", $id);
 
     if ($stmt->execute()) {
+        // Remove profile photo file if it exists
+        if (!empty($nameRow['image']) && file_exists(__DIR__ . '/../' . $nameRow['image'])) {
+            unlink(__DIR__ . '/../' . $nameRow['image']);
+        }
         $_SESSION['success'] = "Staff member \"$fullName\" deleted successfully.";
     } else {
         $_SESSION['error'] = "Error: " . $stmt->error;

@@ -16,16 +16,28 @@ function tableExists($conn, $table) {
 $hasOrderItems = tableExists($conn, 'order_items');
 
 // ── Summary Stats ─────────────────────────────────────────────
+// NOTE: voided / refunded / partial_refund orders are excluded from all stats
+$VALID = "status NOT IN ('voided','refunded','partial_refund')";
+
 $totalOrders  = 0;
 $totalRevenue = 0.0;
-$res = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS rev FROM orders");
+$res = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE $VALID");
 if ($res && $row = $res->fetch_assoc()) {
     $totalOrders  = (int)$row['cnt'];
     $totalRevenue = (float)$row['rev'];
 }
 
+// Refund stats
+$totalRefunds   = 0;
+$totalRefundAmt = 0.0;
+$rRef = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(refund_amt),0) AS amt FROM order_refunds");
+if ($rRef && $rowRef = $rRef->fetch_assoc()) {
+    $totalRefunds   = (int)$rowRef['cnt'];
+    $totalRefundAmt = (float)$rowRef['amt'];
+}
+
 $totalTables = 0;
-$res2 = $conn->query("SELECT COUNT(DISTINCT table_no) AS cnt FROM orders");
+$res2 = $conn->query("SELECT COUNT(DISTINCT table_no) AS cnt FROM orders WHERE $VALID");
 if ($res2 && $row2 = $res2->fetch_assoc()) {
     $totalTables = (int)$row2['cnt'];
 }
@@ -36,6 +48,8 @@ if ($hasOrderItems) {
         "SELECT m.name, SUM(oi.qty) AS total_qty
          FROM order_items oi
          JOIN menu m ON m.id = oi.menu_id
+         JOIN orders o ON o.id = oi.order_id
+         WHERE $VALID
          GROUP BY oi.menu_id ORDER BY total_qty DESC LIMIT 1"
     );
     if ($res3 && $row3 = $res3->fetch_assoc()) {
@@ -49,7 +63,7 @@ $chartData   = [];
 for ($i = 6; $i >= 0; $i--) {
     $date = date('Y-m-d', strtotime("-$i days"));
     $chartLabels[] = date('M d', strtotime("-$i days"));
-    $stmt = $conn->prepare("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at) = ?");
+    $stmt = $conn->prepare("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at) = ? AND $VALID");
     $stmt->bind_param('s', $date);
     $stmt->execute();
     $chartData[] = (float)$stmt->get_result()->fetch_assoc()['rev'];
@@ -75,7 +89,6 @@ if ($hasOrderItems) {
     );
     if ($res5) while ($row = $res5->fetch_assoc()) $orderRows[] = $row;
 } else {
-    // Fallback: show orders without item detail if order_items doesn't exist yet
     $res5 = $conn->query(
         "SELECT id AS order_id, created_at, table_no, status, total_amt,
                 '—' AS items, 0 AS total_qty
@@ -84,12 +97,15 @@ if ($hasOrderItems) {
     if ($res5) while ($row = $res5->fetch_assoc()) $orderRows[] = $row;
 }
 
-// ── Category Sales ────────────────────────────────────────────
+// ── Category Sales (valid orders only) ───────────────────────
 $catSales = [];
 if ($hasOrderItems) {
     $res6 = $conn->query(
         "SELECT m.category, SUM(oi.qty * oi.unit_price) AS revenue
-         FROM order_items oi JOIN menu m ON m.id = oi.menu_id
+         FROM order_items oi
+         JOIN menu m ON m.id = oi.menu_id
+         JOIN orders o ON o.id = oi.order_id
+         WHERE $VALID
          GROUP BY m.category ORDER BY revenue DESC"
     );
     if ($res6) while ($row = $res6->fetch_assoc()) $catSales[] = $row;
@@ -222,18 +238,18 @@ $chartDataJson   = json_encode($chartData);
           <div class="card-header">
             <h3 class="card-title">
               <i class="fas fa-chart-pie mr-2"></i>Summary Report
-              <small class="text-muted ml-2" style="font-size:12px;">Live from POS database</small>
+              <small class="text-muted ml-2" style="font-size:12px;">Live from POS database · Voided &amp; refunded orders excluded</small>
             </h3>
           </div>
           <div class="card-body">
             <div class="row text-center">
               <div class="col-md-3 summary-stat">
                 <h5 class="text-primary"><?= number_format($totalOrders) ?></h5>
-                <span>Total Orders</span>
+                <span>Valid Orders</span>
               </div>
               <div class="col-md-3 summary-stat">
                 <h5 class="text-success">&#8369;<?= number_format($totalRevenue, 2) ?></h5>
-                <span>Total Revenue</span>
+                <span>Net Revenue</span>
               </div>
               <div class="col-md-3 summary-stat">
                 <h5 class="text-warning"><?= $totalTables ?></h5>
@@ -244,6 +260,23 @@ $chartDataJson   = json_encode($chartData);
                 <span>Top Selling Item</span>
               </div>
             </div>
+            <?php if ($totalRefunds > 0): ?>
+            <hr>
+            <div class="row text-center">
+              <div class="col-md-4 summary-stat">
+                <h5 class="text-danger"><?= number_format($totalRefunds) ?></h5>
+                <span>Total Voids &amp; Refunds</span>
+              </div>
+              <div class="col-md-4 summary-stat">
+                <h5 class="text-danger">&#8369;<?= number_format($totalRefundAmt, 2) ?></h5>
+                <span>Total Refunded Amount</span>
+              </div>
+              <div class="col-md-4 summary-stat">
+                <h5 class="text-info">&#8369;<?= number_format(max(0, $totalRevenue - $totalRefundAmt), 2) ?></h5>
+                <span>Net After Refunds</span>
+              </div>
+            </div>
+            <?php endif; ?>
           </div>
         </div>
 
@@ -325,20 +358,32 @@ $chartDataJson   = json_encode($chartData);
                   <th>Order ID</th>
                   <th>Date &amp; Time</th>
                   <th>Table</th>
+                  <th>Status</th>
                   <th>Items Ordered</th>
                   <th>Total Qty</th>
                   <th>Total (&#8369;)</th>
                 </tr>
               </thead>
               <tbody>
-                <?php foreach ($orderRows as $ord): ?>
-                <tr>
+                <?php foreach ($orderRows as $ord):
+                  $st = $ord['status'] ?? 'Done';
+                  if ($st === 'voided')          { $badge = '<span class="badge badge-danger">Voided</span>';          $rowClass = 'table-danger'; }
+                  elseif ($st === 'refunded')     { $badge = '<span class="badge badge-info">Refunded</span>';          $rowClass = 'table-info'; }
+                  elseif ($st === 'partial_refund'){ $badge = '<span class="badge badge-warning">Partial Refund</span>';$rowClass = 'table-warning'; }
+                  else                            { $badge = '<span class="badge badge-success">'.htmlspecialchars($st).'</span>'; $rowClass = ''; }
+                ?>
+                <tr class="<?= $rowClass ?>">
                   <td><strong>#<?= (int)$ord['order_id'] ?></strong></td>
                   <td><?= htmlspecialchars($ord['created_at']) ?></td>
                   <td>Table <?= htmlspecialchars($ord['table_no']) ?></td>
+                  <td><?= $badge ?></td>
                   <td><?= htmlspecialchars($ord['items']) ?></td>
                   <td><?= (int)$ord['total_qty'] ?></td>
-                  <td>&#8369;<?= number_format((float)$ord['total_amt'], 2) ?></td>
+                  <td><?php if (in_array($st, ['voided','refunded','partial_refund'])): ?>
+                    <s class="text-muted">&#8369;<?= number_format((float)$ord['total_amt'], 2) ?></s>
+                  <?php else: ?>
+                    &#8369;<?= number_format((float)$ord['total_amt'], 2) ?>
+                  <?php endif; ?></td>
                 </tr>
                 <?php endforeach; ?>
               </tbody>

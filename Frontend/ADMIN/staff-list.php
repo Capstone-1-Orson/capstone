@@ -216,6 +216,7 @@ if (!isset($_SESSION['user'])) {
                     <thead>
                       <tr>
                         <th>ID</th>
+                        <th>Photo</th>
                         <th>Name</th>
                         <th>Email</th>
                         <th>Password</th>
@@ -243,8 +244,16 @@ if (!isset($_SESSION['user'])) {
                         data-position="<?= $row['position']; ?>"
                         data-contact="<?= $row['contact']; ?>"
                         data-address="<?= $row['address']; ?>"
+                        data-image="<?= !empty($row['image']) ? htmlspecialchars($row['image']) : ''; ?>"
                       >
                         <td>*</td>
+                        <td>
+                          <?php if (!empty($row['image'])): ?>
+                            <img src="../../<?= htmlspecialchars($row['image']); ?>" alt="Staff Photo" class="img-circle elevation-1" style="width:38px;height:38px;object-fit:cover;">
+                          <?php else: ?>
+                            <img src="../dist/img/user2-160x160.jpg" alt="No Photo" class="img-circle elevation-1" style="width:38px;height:38px;object-fit:cover;">
+                          <?php endif; ?>
+                        </td>
                         <td><?= $fullname; ?></td>
                         <td><?= $row['email']; ?></td>
                         <td>****</td>
@@ -287,8 +296,20 @@ if (!isset($_SESSION['user'])) {
               <h5 class="modal-title">Add New Staff Member</h5>
               <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
-            <form action="../../Backend/process.php" method="POST">
+            <form action="../../Backend/process.php" method="POST" enctype="multipart/form-data">
               <div class="modal-body">
+                <div class="form-group text-center">
+                  <label>Profile Photo</label><br>
+                  <img id="add_image_preview" src="../dist/img/user2-160x160.jpg"
+                    class="img-circle elevation-2 mb-2"
+                    style="width:90px;height:90px;object-fit:cover;cursor:pointer;"
+                    onclick="document.getElementById('add_image_input').click()"
+                    title="Click to upload photo">
+                  <br>
+                  <input type="file" id="add_image_input" name="image" accept="image/*" class="d-none"
+                    onchange="previewImage(this,'add_image_preview')">
+                  <small class="text-muted">Click photo to upload (JPG, PNG, GIF)</small>
+                </div>
                 <div class="form-group">
                   <label>First Name</label>
                   <input type="text" name="firstname" class="form-control" required>
@@ -342,10 +363,24 @@ if (!isset($_SESSION['user'])) {
               <h5 class="modal-title">Staff Details</h5>
               <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
-            <form action="../../Backend/process.php" method="POST">
+            <form action="../../Backend/process.php" method="POST" enctype="multipart/form-data">
               <div class="modal-body">
 
                 <input type="hidden" name="user_id" id="view_id">
+                <input type="hidden" name="existing_image" id="view_existing_image">
+
+                <div class="form-group text-center">
+                  <label>Profile Photo</label><br>
+                  <img id="view_image_preview" src="../dist/img/user2-160x160.jpg"
+                    class="img-circle elevation-2 mb-2"
+                    style="width:90px;height:90px;object-fit:cover;cursor:pointer;"
+                    onclick="document.getElementById('view_image_input').click()"
+                    title="Click to change photo">
+                  <br>
+                  <input type="file" id="view_image_input" name="image" accept="image/*" class="d-none"
+                    onchange="previewImage(this,'view_image_preview')">
+                  <small class="text-muted">Click photo to change (leave unchanged to keep current)</small>
+                </div>
 
                 <div class="form-group">
                   <label>First Name</label>
@@ -521,15 +556,31 @@ if (!isset($_SESSION['user'])) {
   $(document).on('click', '.view-btn', function () {
     var row = $(this).closest('tr');
 
+    var image = row.data('image');
+    var defaultImg = '../dist/img/user2-160x160.jpg';
+
     $('#view_id').val(row.data('id'));
     $('#view_firstname').val(row.data('firstname'));
     $('#view_lastname').val(row.data('lastname'));
     $('#view_email').val(row.data('email'));
     $('#view_contact').val(row.data('contact'));
     $('#view_address').val(row.data('address'));
+    $('#view_existing_image').val(image || '');
+    $('#view_image_preview').attr('src', image ? '../../' + image : defaultImg);
+    $('#view_image_input').val(''); // clear any previous file selection
 
     $('#viewUserModal').modal('show');
   });
+
+  function previewImage(input, previewId) {
+    if (input.files && input.files[0]) {
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        document.getElementById(previewId).src = e.target.result;
+      };
+      reader.readAsDataURL(input.files[0]);
+    }
+  }
 
   // Delete button click - open confirm modal
   $('#deleteBtn').on('click', function () {

@@ -33,15 +33,19 @@ if ($res2 && $res2->num_rows > 0) {
 
 // ── Helper: check table exists ─────────────────────────────────
 function tableExists($conn, $table) {
-    $r = $conn->query("SHOW TABLES LIKE '$table'");
+    $safe = $conn->real_escape_string($table);
+    $r = $conn->query("SHOW TABLES LIKE '$safe'");
     return $r && $r->num_rows > 0;
 }
 $hasOrderItems = tableExists($conn, 'order_items');
 
+// ── Valid order filter ─────────────────────────────────────────
+$VALID = "status NOT IN ('voided','refunded','partial_refund')";
+
 // ── Today's DB stats (for Reports panel initial load) ──────────
 $db_today_revenue = 0.0;
 $db_today_orders  = 0;
-$r = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at)=CURDATE()");
+$r = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at)=CURDATE() AND $VALID");
 if ($r && $row = $r->fetch_assoc()) {
     $db_today_revenue = (float)$row['rev'];
     $db_today_orders  = (int)$row['cnt'];
@@ -50,7 +54,7 @@ if ($r && $row = $r->fetch_assoc()) {
 // ── All-time DB stats ──────────────────────────────────────────
 $db_total_revenue = 0.0;
 $db_total_orders  = 0;
-$r = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS rev FROM orders");
+$r = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE $VALID");
 if ($r && $row = $r->fetch_assoc()) {
     $db_total_revenue = (float)$row['rev'];
     $db_total_orders  = (int)$row['cnt'];
@@ -61,7 +65,10 @@ $db_top_item = '—';
 if ($hasOrderItems) {
     $r = $conn->query(
         "SELECT m.name, SUM(oi.qty) AS total_qty
-         FROM order_items oi JOIN menu m ON m.id = oi.menu_id
+         FROM order_items oi
+         JOIN menu m ON m.id = oi.menu_id
+         JOIN orders o ON o.id = oi.order_id
+         WHERE $VALID
          GROUP BY oi.menu_id ORDER BY total_qty DESC LIMIT 1"
     );
     if ($r && $row = $r->fetch_assoc()) {
@@ -73,7 +80,7 @@ if ($hasOrderItems) {
 $db_history = [];
 if ($hasOrderItems) {
     $r = $conn->query(
-        "SELECT o.id, o.table_no, o.total_amt, o.created_at,
+        "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
                 SUM(oi.qty) AS total_qty,
                 GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS item_names
          FROM orders o
@@ -85,13 +92,13 @@ if ($hasOrderItems) {
     if ($r) while ($row = $r->fetch_assoc()) $db_history[] = $row;
 } else {
     $r = $conn->query(
-        "SELECT id, table_no, total_amt, created_at, 0 AS total_qty, '—' AS item_names
+        "SELECT id, table_no, total_amt, status, created_at, 0 AS total_qty, '—' AS item_names
          FROM orders WHERE DATE(created_at)=CURDATE() ORDER BY created_at DESC LIMIT 50"
     );
     if ($r) while ($row = $r->fetch_assoc()) $db_history[] = $row;
 }
 
-// ── Category revenue today ─────────────────────────────────────
+// ── Category revenue today (valid only) ───────────────────────
 $db_cat_revenue = [];
 if ($hasOrderItems) {
     $r = $conn->query(
@@ -99,13 +106,13 @@ if ($hasOrderItems) {
          FROM order_items oi
          JOIN menu m ON m.id = oi.menu_id
          JOIN orders o ON o.id = oi.order_id
-         WHERE DATE(o.created_at) = CURDATE()
+         WHERE DATE(o.created_at) = CURDATE() AND $VALID
          GROUP BY m.category ORDER BY revenue DESC"
     );
     if ($r) while ($row = $r->fetch_assoc()) $db_cat_revenue[] = $row;
 }
 
-// ── Recent transactions today ──────────────────────────────────
+// ── Recent transactions today (valid only) ────────────────────
 $db_transactions = [];
 if ($hasOrderItems) {
     $r = $conn->query(
@@ -113,14 +120,14 @@ if ($hasOrderItems) {
                 SUM(oi.qty) AS total_qty
          FROM orders o
          JOIN order_items oi ON oi.order_id = o.id
-         WHERE DATE(o.created_at) = CURDATE()
+         WHERE DATE(o.created_at) = CURDATE() AND $VALID
          GROUP BY o.id ORDER BY o.created_at DESC LIMIT 20"
     );
     if ($r) while ($row = $r->fetch_assoc()) $db_transactions[] = $row;
 } else {
     $r = $conn->query(
         "SELECT id, table_no, total_amt, created_at, 0 AS total_qty
-         FROM orders WHERE DATE(created_at)=CURDATE() ORDER BY created_at DESC LIMIT 20"
+         FROM orders WHERE DATE(created_at)=CURDATE() AND $VALID ORDER BY created_at DESC LIMIT 20"
     );
     if ($r) while ($row = $r->fetch_assoc()) $db_transactions[] = $row;
 }
@@ -860,6 +867,52 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════════ -->
+<!-- VOID / REFUND MODAL                                       -->
+<!-- ══════════════════════════════════════════════════════════ -->
+<div class="receipt-backdrop" id="vrModal" style="display:none;z-index:3500;" onclick="if(event.target.id==='vrModal')closeVrModal()">
+  <div class="receipt-modal" style="max-width:420px;" onclick="event.stopPropagation()">
+    <div class="receipt-header" style="padding:18px 20px 14px;">
+      <button class="receipt-close-x" onclick="closeVrModal()"><i class="fa-solid fa-xmark"></i></button>
+      <div class="receipt-store-name" id="vrModalTitle" style="font-size:18px;">Void <span>Order</span></div>
+      <div class="receipt-subtitle" id="vrModalSubtitle"></div>
+    </div>
+
+    <!-- Order info strip -->
+    <div class="receipt-meta" id="vrOrderMeta" style="grid-template-columns:1fr 1fr 1fr;"></div>
+
+    <!-- Items list (shown for refund partial) -->
+    <div id="vrItemsSection" style="padding:14px 20px 0;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;" id="vrItemsLabel">Items to Refund</div>
+      <div id="vrItemsList" style="display:flex;flex-direction:column;gap:8px;max-height:220px;overflow-y:auto;padding-right:4px;"></div>
+    </div>
+
+    <!-- Refund amount display -->
+    <div style="padding:14px 20px 0;">
+      <div class="change-display positive" id="vrAmtDisplay" style="margin-top:0;">
+        <span class="change-label positive" id="vrAmtLabel">Refund Amount</span>
+        <span class="change-amount positive" id="vrAmtValue">₱ 0.00</span>
+      </div>
+    </div>
+
+    <!-- Reason input -->
+    <div style="padding:12px 20px 0;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px;">Reason <span style="font-weight:400;text-transform:none;color:var(--muted2)">(optional)</span></div>
+      <input type="text" id="vrReason" placeholder="e.g. Customer changed mind, wrong order…"
+        style="width:100%;padding:10px 13px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .2s;"
+        onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
+    </div>
+
+    <!-- Action button -->
+    <div style="padding:16px 20px 20px;">
+      <button id="vrConfirmBtn" class="btn-place" style="font-size:14px;padding:13px;background:var(--red);box-shadow:none;"
+        onclick="submitVoidRefund()">
+        <i class="fa-solid fa-ban"></i> <span id="vrConfirmLabel">Confirm Void</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <div class="pos-toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -983,6 +1036,7 @@ function refreshHistoryPanel() {
       total_qty: o.items,
       item_names: o.itemNames ? o.itemNames.join(', ') : '—',
       payMethod: o.payMethod,
+      status:    o.status || 'pending',
       fromSession: true,
     })),
     ...dbRows.map(r => ({
@@ -993,6 +1047,7 @@ function refreshHistoryPanel() {
       total_qty: r.total_qty,
       item_names: r.item_names,
       payMethod: '—',
+      status:    r.status || 'pending',
       fromSession: false,
     }))
   ];
@@ -1005,19 +1060,46 @@ function refreshHistoryPanel() {
     return;
   }
 
-  list.innerHTML = combined.map(o=>`
-    <div class="history-item">
-      <div class="history-ic" style="background:var(--accent-soft)"><i class="fa-solid fa-receipt" style="color:var(--accent)"></i></div>
-      <div class="history-info">
+  list.innerHTML = combined.map(o=>{
+    const isVoided   = o.status === 'voided';
+    const isRefunded = o.status === 'refunded' || o.status === 'partial_refund';
+    const isDone     = isVoided || isRefunded;
+    const statusBadge = isVoided
+      ? `<span class="badge-pill red" style="font-size:9px"><i class="fa-solid fa-ban" style="font-size:8px"></i> Voided</span>`
+      : isRefunded
+        ? `<span class="badge-pill blue" style="font-size:9px"><i class="fa-solid fa-rotate-left" style="font-size:8px"></i> Refunded</span>`
+        : '';
+    const actionBtns = isDone ? '' : `
+      <div style="display:flex;gap:5px;margin-top:8px;">
+        <button class="badge-pill red" style="cursor:pointer;font-size:10px;padding:4px 9px;"
+          onclick="openVoidModal(${o.id},'${o.table_no}',${parseFloat(o.total_amt)})">
+          <i class="fa-solid fa-ban"></i> Void
+        </button>
+        <button class="badge-pill blue" style="cursor:pointer;font-size:10px;padding:4px 9px;"
+          onclick="openRefundModal(${o.id},'${o.table_no}',${parseFloat(o.total_amt)})">
+          <i class="fa-solid fa-rotate-left"></i> Refund
+        </button>
+      </div>`;
+    return `
+    <div class="history-item" id="hist-order-${o.id}">
+      <div class="history-ic" style="background:${isDone?'var(--surface3)':'var(--accent-soft)'}">
+        <i class="fa-solid fa-receipt" style="color:${isDone?'var(--muted)':'var(--accent)'}"></i>
+      </div>
+      <div class="history-info" style="flex:1;">
         <div class="history-id">Order #${o.id} &nbsp;
-          ${o.payMethod !== '—' ? `<span class="badge-pill pink">${o.payMethod}</span>` : ''}
-          ${o.fromSession ? '<span class="badge-pill green" style="font-size:9px">New</span>' : ''}
+          ${statusBadge}
+          ${!isDone && o.payMethod !== '—' ? `<span class="badge-pill pink">${o.payMethod}</span>` : ''}
+          ${o.fromSession && !isDone ? '<span class="badge-pill green" style="font-size:9px">New</span>' : ''}
         </div>
         <div class="history-meta">#${o.table_no} · ${o.total_qty} item${o.total_qty!=1?'s':''} · ${o.created_at}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px">${o.item_names}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px">${o.item_names}</div>
+        ${actionBtns}
       </div>
-      <div class="history-amt">₱${parseFloat(o.total_amt).toLocaleString('en',{minimumFractionDigits:2})}</div>
-    </div>`).join('');
+      <div class="history-amt" style="color:${isDone?'var(--muted)':'var(--accent)'}">
+        ${isDone ? `<s style="font-size:11px;">₱${parseFloat(o.total_amt).toLocaleString('en',{minimumFractionDigits:2})}</s>` : `₱${parseFloat(o.total_amt).toLocaleString('en',{minimumFractionDigits:2})}`}
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ── Reports panel refresh ─────────────────────────────────────
@@ -1545,16 +1627,31 @@ function placeOrder() {
 }
 
 // ── Coupon ────────────────────────────────────────────────────
+// Coupon codes are validated server-side via pos_coupon.php — codes are
+// never exposed in this JS file. The server returns the discount amount.
 function initCoupon() {
-  document.getElementById('btnCoupon').addEventListener('click',()=>{
-    const code=document.getElementById('couponInput').value.trim().toUpperCase();
-    if(!cart.length){ showToast('<i class="fa-solid fa-cart-shopping me-1"></i> Add items first!','var(--red)'); return; }
-    const sub=cart.reduce((s,c)=>s+c.price*c.qty,0);
-    if     (code==='EMBER10'){ discount=sub*.10; showToast('<i class="fa-solid fa-tag me-1"></i> 10% discount applied!','var(--accent)'); }
-    else if(code==='SAVE20') { discount=sub*.20; showToast('<i class="fa-solid fa-tag me-1"></i> 20% discount applied!','var(--accent)'); }
-    else if(code==='FLAT50') { discount=50;      showToast('<i class="fa-solid fa-tag me-1"></i> ₱50 flat discount!','var(--accent)'); }
-    else{ showToast('<i class="fa-solid fa-circle-xmark me-1"></i> Invalid coupon code','var(--red)'); return; }
-    updateCartUI();
+  document.getElementById('btnCoupon').addEventListener('click', async () => {
+    const code = document.getElementById('couponInput').value.trim().toUpperCase();
+    if (!cart.length) { showToast('<i class="fa-solid fa-cart-shopping me-1"></i> Add items first!', 'var(--red)'); return; }
+    const sub = cart.reduce((s, c) => s + c.price * c.qty, 0);
+
+    try {
+      const res = await fetch('../Backend/pos_coupon.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, subtotal: sub })
+      });
+      const data = await res.json();
+      if (data.success) {
+        discount = parseFloat(data.discount);
+        showToast('<i class="fa-solid fa-tag me-1"></i> ' + data.message, 'var(--accent)');
+        updateCartUI();
+      } else {
+        showToast('<i class="fa-solid fa-circle-xmark me-1"></i> ' + (data.message || 'Invalid coupon code'), 'var(--red)');
+      }
+    } catch (err) {
+      showToast('<i class="fa-solid fa-triangle-exclamation me-1"></i> Could not validate coupon. Try again.', 'var(--red)');
+    }
   });
 }
 
@@ -1684,6 +1781,214 @@ function printReceipt(){
   w.document.close();
   w.focus();
   setTimeout(()=>{ w.print(); },600);
+}
+
+// ── Void / Refund ─────────────────────────────────────────────
+let vrCurrentOrderId   = null;
+let vrCurrentTable     = '';
+let vrCurrentTotal     = 0;
+let vrCurrentAction    = 'void';
+let vrCurrentItems     = []; // for partial refund: [{menu_id, name, qty, unit_price, refundQty}]
+
+function openVoidModal(orderId, tableNo, total) {
+  vrCurrentOrderId = orderId;
+  vrCurrentTable   = tableNo;
+  vrCurrentTotal   = total;
+  vrCurrentAction  = 'void';
+  vrCurrentItems   = [];
+
+  document.getElementById('vrModalTitle').innerHTML   = 'Void <span>Order</span>';
+  document.getElementById('vrModalSubtitle').textContent = `Table #${tableNo}`;
+  document.getElementById('vrOrderMeta').innerHTML = `
+    <div>Order <strong>#${orderId}</strong></div>
+    <div style="text-align:center">₱${total.toLocaleString('en',{minimumFractionDigits:2})}<br><small style="color:var(--muted)">Total</small></div>
+    <div style="text-align:right">Table <strong>#${tableNo}</strong></div>`;
+
+  // Hide items section for full void
+  document.getElementById('vrItemsSection').style.display = 'none';
+
+  document.getElementById('vrAmtLabel').textContent = 'Amount to Reverse';
+  document.getElementById('vrAmtValue').textContent = `₱ ${total.toLocaleString('en',{minimumFractionDigits:2})}`;
+  document.getElementById('vrAmtDisplay').className = 'change-display negative';
+  document.getElementById('vrAmtValue').className   = 'change-amount negative';
+  document.getElementById('vrAmtLabel').className   = 'change-label negative';
+
+  document.getElementById('vrConfirmLabel').textContent = 'Confirm Void';
+  document.getElementById('vrConfirmBtn').style.background = 'var(--red)';
+  document.getElementById('vrReason').value = '';
+
+  const m = document.getElementById('vrModal');
+  m.style.display = 'flex';
+  m.style.animation = 'fadeIn .22s ease';
+}
+
+async function openRefundModal(orderId, tableNo, total) {
+  vrCurrentOrderId = orderId;
+  vrCurrentTable   = tableNo;
+  vrCurrentTotal   = total;
+  vrCurrentAction  = 'refund';
+
+  document.getElementById('vrModalTitle').innerHTML   = 'Refund <span>Order</span>';
+  document.getElementById('vrModalSubtitle').textContent = `Table #${tableNo}`;
+  document.getElementById('vrOrderMeta').innerHTML = `
+    <div>Order <strong>#${orderId}</strong></div>
+    <div style="text-align:center">₱${total.toLocaleString('en',{minimumFractionDigits:2})}<br><small style="color:var(--muted)">Total</small></div>
+    <div style="text-align:right">Table <strong>#${tableNo}</strong></div>`;
+
+  document.getElementById('vrItemsSection').style.display = 'block';
+  document.getElementById('vrItemsLabel').textContent = 'Select items to refund:';
+
+  // Fetch order items from server
+  const listEl = document.getElementById('vrItemsList');
+  listEl.innerHTML = `<div style="text-align:center;padding:20px;color:var(--muted);"><i class="fa-solid fa-spinner fa-spin"></i> Loading…</div>`;
+
+  try {
+    const res  = await fetch(`../Backend/pos_get_order_items.php?order_id=${orderId}`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message);
+    vrCurrentItems = data.items.map(i => ({...i, refundQty: i.qty}));
+    renderVrItems();
+  } catch(e) {
+    // Fallback: show full refund only
+    vrCurrentItems = [];
+    listEl.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:8px 0;">Could not load items — full refund will be applied.</div>`;
+  }
+
+  document.getElementById('vrAmtLabel').textContent = 'Refund Amount';
+  document.getElementById('vrConfirmLabel').textContent = 'Confirm Refund';
+  document.getElementById('vrConfirmBtn').style.background = 'var(--blue)';
+  document.getElementById('vrReason').value = '';
+
+  updateVrTotal();
+
+  const m = document.getElementById('vrModal');
+  m.style.display = 'flex';
+  m.style.animation = 'fadeIn .22s ease';
+}
+
+function renderVrItems() {
+  const listEl = document.getElementById('vrItemsList');
+  if (!vrCurrentItems.length) return;
+  listEl.innerHTML = vrCurrentItems.map((item, idx) => `
+    <div style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${item.menu_name}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">₱${parseFloat(item.unit_price).toLocaleString('en',{minimumFractionDigits:2})} × ordered: ${item.qty}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+        <button class="qty-btn" onclick="changeVrQty(${idx},-1)" style="width:28px;height:28px;border-radius:7px;"><i class="fa-solid fa-minus" style="font-size:9px"></i></button>
+        <span style="font-size:13px;font-weight:700;min-width:18px;text-align:center;" id="vr-qty-${idx}">${item.refundQty}</span>
+        <button class="qty-btn" onclick="changeVrQty(${idx},1)" style="width:28px;height:28px;border-radius:7px;"><i class="fa-solid fa-plus" style="font-size:9px"></i></button>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:var(--blue);min-width:68px;text-align:right;" id="vr-sub-${idx}">
+        ₱${(parseFloat(item.unit_price)*item.refundQty).toLocaleString('en',{minimumFractionDigits:2})}
+      </div>
+    </div>`).join('');
+  updateVrTotal();
+}
+
+function changeVrQty(idx, delta) {
+  const item = vrCurrentItems[idx];
+  if (!item) return;
+  item.refundQty = Math.max(0, Math.min(item.qty, item.refundQty + delta));
+  document.getElementById(`vr-qty-${idx}`).textContent = item.refundQty;
+  document.getElementById(`vr-sub-${idx}`).textContent =
+    '₱' + (parseFloat(item.unit_price) * item.refundQty).toLocaleString('en',{minimumFractionDigits:2});
+  updateVrTotal();
+}
+
+function updateVrTotal() {
+  let amt = 0;
+  if (vrCurrentAction === 'void') {
+    amt = vrCurrentTotal;
+  } else if (vrCurrentItems.length) {
+    amt = vrCurrentItems.reduce((s, i) => s + parseFloat(i.unit_price) * i.refundQty, 0);
+  } else {
+    amt = vrCurrentTotal;
+  }
+  document.getElementById('vrAmtValue').textContent = `₱ ${amt.toLocaleString('en',{minimumFractionDigits:2})}`;
+}
+
+function closeVrModal() {
+  const m = document.getElementById('vrModal');
+  m.style.transition = 'opacity .18s ease';
+  m.style.opacity = '0';
+  setTimeout(() => { m.style.display = 'none'; m.style.opacity = ''; m.style.transition = ''; }, 180);
+}
+
+async function submitVoidRefund() {
+  const btn    = document.getElementById('vrConfirmBtn');
+  const reason = document.getElementById('vrReason').value.trim();
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing…';
+
+  const payload = {
+    action:   vrCurrentAction,
+    order_id: vrCurrentOrderId,
+    reason,
+  };
+
+  if (vrCurrentAction === 'refund' && vrCurrentItems.length) {
+    const refundItems = vrCurrentItems
+      .filter(i => i.refundQty > 0)
+      .map(i => ({ menu_id: i.menu_id, qty: i.refundQty }));
+    if (!refundItems.length) {
+      showToast('<i class="fa-solid fa-triangle-exclamation me-1"></i> Select at least 1 item to refund.', 'var(--red)', 3000);
+      btn.disabled = false;
+      btn.innerHTML = `<i class="fa-solid fa-rotate-left"></i> <span id="vrConfirmLabel">Confirm Refund</span>`;
+      return;
+    }
+    // If all items at full qty, omit refund_items to trigger full refund path
+    const isFullRefund = refundItems.every((ri, idx) => ri.qty === vrCurrentItems[idx]?.qty);
+    if (!isFullRefund) payload.refund_items = refundItems;
+  }
+
+  try {
+    const res  = await fetch('../Backend/pos_void_refund.php', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+    const data = await res.json();
+    btn.disabled = false;
+
+    if (data.success) {
+      closeVrModal();
+      const color = vrCurrentAction === 'void' ? 'var(--red)' : 'var(--blue)';
+      const icon  = vrCurrentAction === 'void' ? 'fa-ban' : 'fa-rotate-left';
+      showToast(`<i class="fa-solid ${icon} me-1"></i> ${data.message}`, color, 4000);
+
+      // Update history row in DOM
+      const histRow = document.getElementById(`hist-order-${vrCurrentOrderId}`);
+      if (histRow) {
+        const statusLabel = data.new_status === 'voided' ? 'Voided' : 'Refunded';
+        const statusColor = data.new_status === 'voided' ? 'red'    : 'blue';
+        const actionBtnsEl = histRow.querySelector('[style*="display:flex;gap:5px"]');
+        if (actionBtnsEl) actionBtnsEl.remove();
+        const idEl = histRow.querySelector('.history-id');
+        if (idEl) idEl.insertAdjacentHTML('beforeend',
+          `<span class="badge-pill ${statusColor}" style="font-size:9px"><i class="fa-solid fa-${data.new_status==='voided'?'ban':'rotate-left'}" style="font-size:8px"></i> ${statusLabel}</span>`);
+        const amtEl = histRow.querySelector('.history-amt');
+        if (amtEl) { amtEl.style.color = 'var(--muted)'; amtEl.innerHTML = `<s style="font-size:11px;">${amtEl.textContent}</s>`; }
+        const ic = histRow.querySelector('.history-ic');
+        if (ic) { ic.style.background = 'var(--surface3)'; ic.querySelector('i').style.color = 'var(--muted)'; }
+      }
+
+      // Mark in session orderHistory
+      const oh = orderHistory.find(o => o.id === vrCurrentOrderId);
+      if (oh) oh.status = data.new_status;
+
+    } else {
+      showToast(`<i class="fa-solid fa-circle-xmark me-1"></i> ${data.message}`, 'var(--red)', 4000);
+      const lbl = vrCurrentAction === 'void' ? 'Confirm Void' : 'Confirm Refund';
+      btn.innerHTML = `<i class="fa-solid fa-${vrCurrentAction==='void'?'ban':'rotate-left'}"></i> ${lbl}`;
+    }
+  } catch (err) {
+    btn.disabled = false;
+    showToast('<i class="fa-solid fa-triangle-exclamation me-1"></i> Network error. Try again.', 'var(--red)', 3000);
+    btn.innerHTML = `<i class="fa-solid fa-${vrCurrentAction==='void'?'ban':'rotate-left'}"></i> Confirm`;
+  }
 }
 
 // ── Theme ─────────────────────────────────────────────────────
