@@ -1,7 +1,7 @@
 <?php
 // Frontend/POS.php  (sits directly inside Frontend/)
 session_start();
-if (!isset($_SESSION['user'])) {
+if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'staff') {
     header("Location:login-v2.html");
     exit();
 }
@@ -552,7 +552,7 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 
 <!-- ── Sidebar ─────────────────────────────────────────────── -->
 <aside class="pos-sidebar">
-  <div class="s-logo">E</div>
+  <div class="s-logo">♛</div>
   <button class="nav-btn active" title="Orders"><i class="fa-solid fa-receipt"></i>Orders</button>
   <button class="nav-btn" title="Dashboard"><i class="fa-solid fa-chart-pie"></i>Stats</button>
   <button class="nav-btn" title="Menu"><i class="fa-solid fa-utensils"></i>Menu</button>
@@ -566,8 +566,20 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
   <a href="../Backend/logout.php" class="nav-btn nav-logout" title="Log Out">
     <i class="fa-solid fa-right-from-bracket"></i>Logout
   </a>
-  <div class="s-avatar" title="<?= htmlspecialchars($_SESSION['user']['firstname'] ?? 'User') ?>">
-    <?= strtoupper(substr($_SESSION['user']['firstname'] ?? 'U', 0, 1) . substr($_SESSION['user']['lastname'] ?? '', 0, 1)) ?>
+  <?php
+    $av_firstname = $_SESSION['user']     ?? 'User';
+    $av_lastname  = $_SESSION['lastname'] ?? '';
+    $av_image     = $_SESSION['image']    ?? '';
+    $av_initials  = strtoupper(substr($av_firstname, 0, 1) . substr($av_lastname, 0, 1));
+    $av_title     = htmlspecialchars(trim($av_firstname . ' ' . $av_lastname));
+  ?>
+  <div class="s-avatar" title="<?= $av_title ?>">
+    <?php if (!empty($av_image)): ?>
+      <img src="../<?= htmlspecialchars($av_image) ?>" alt="<?= $av_title ?>"
+           style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
+    <?php else: ?>
+      <?= $av_initials ?>
+    <?php endif; ?>
   </div>
 </aside>
 
@@ -1798,11 +1810,11 @@ function openVoidModal(orderId, tableNo, total) {
   vrCurrentItems   = [];
 
   document.getElementById('vrModalTitle').innerHTML   = 'Void <span>Order</span>';
-  document.getElementById('vrModalSubtitle').textContent = `Table #${tableNo}`;
+  document.getElementById('vrModalSubtitle').textContent = `Bill No. ${tableNo}`;
   document.getElementById('vrOrderMeta').innerHTML = `
     <div>Order <strong>#${orderId}</strong></div>
     <div style="text-align:center">₱${total.toLocaleString('en',{minimumFractionDigits:2})}<br><small style="color:var(--muted)">Total</small></div>
-    <div style="text-align:right">Table <strong>#${tableNo}</strong></div>`;
+    <div style="text-align:right">Bill No. <strong>${tableNo}</strong></div>`;
 
   // Hide items section for full void
   document.getElementById('vrItemsSection').style.display = 'none';
@@ -1829,11 +1841,11 @@ async function openRefundModal(orderId, tableNo, total) {
   vrCurrentAction  = 'refund';
 
   document.getElementById('vrModalTitle').innerHTML   = 'Refund <span>Order</span>';
-  document.getElementById('vrModalSubtitle').textContent = `Table #${tableNo}`;
+  document.getElementById('vrModalSubtitle').textContent = `Bill No. ${tableNo}`;
   document.getElementById('vrOrderMeta').innerHTML = `
     <div>Order <strong>#${orderId}</strong></div>
     <div style="text-align:center">₱${total.toLocaleString('en',{minimumFractionDigits:2})}<br><small style="color:var(--muted)">Total</small></div>
-    <div style="text-align:right">Table <strong>#${tableNo}</strong></div>`;
+    <div style="text-align:right">Bill No. <strong>${tableNo}</strong></div>`;
 
   document.getElementById('vrItemsSection').style.display = 'block';
   document.getElementById('vrItemsLabel').textContent = 'Select items to refund:';

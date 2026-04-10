@@ -1,8 +1,12 @@
 ﻿<?php
 session_start();
-if (!isset($_SESSION['user'])) {
+if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
   header("Location: ../../Frontend/lockscreen.html"); 
   exit();
+}
+// Generate CSRF token if not set
+if (empty($_SESSION['csrf_token'])) {
+  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 ?>
 
@@ -47,17 +51,21 @@ if (!isset($_SESSION['user'])) {
   #darkModeToggle.clicked i {
     transform: rotate(180deg) scale(1.2);
   }
+
+  .password-strength-bar {
+    height: 5px;
+    border-radius: 3px;
+    margin-top: 5px;
+    transition: width 0.3s ease, background-color 0.3s ease;
+    width: 0%;
+  }
 </style>
 
 <body class="hold-transition dark-mode sidebar-mini layout-fixed layout-navbar-fixed layout-footer-fixed">
   <div class="wrapper">
 
-    <!-- Preloader -->
-    
-
     <!-- Navbar -->
     <nav class="main-header navbar navbar-expand navbar-dark">
-      <!-- Left navbar links -->
       <ul class="navbar-nav">
         <li class="nav-item">
           <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
@@ -67,9 +75,7 @@ if (!isset($_SESSION['user'])) {
         </li>
       </ul>
 
-      <!-- Right navbar links -->
       <ul class="navbar-nav ml-auto">
-        <!-- Navbar Search -->
         <li class="nav-item">
           <a class="nav-link" data-widget="navbar-search" href="#" role="button">
             <i class="fas fa-search"></i>
@@ -90,7 +96,6 @@ if (!isset($_SESSION['user'])) {
             </form>
           </div>
         </li>
-
         <li class="nav-item">
           <a class="nav-link" data-widget="fullscreen" href="#" role="button">
             <i class="fas fa-expand-arrows-alt"></i>
@@ -103,64 +108,56 @@ if (!isset($_SESSION['user'])) {
         </li>
       </ul>
     </nav>
-    <!-- /.navbar -->
 
     <!-- Main Sidebar Container -->
     <aside class="main-sidebar sidebar-dark-primary elevation-4">
-      <!-- Brand Logo -->
       <a href="#" class="brand-link">
         <img src="../dist/img/Empress%27 Cafe Boracay.jpg" alt="AdminLTE Logo" class="brand-image img-circle elevation-3"
           style="opacity: .8">
         <span class="brand-text font-weight-light">Empress' Cafe</span>
       </a>
 
-
-      <!-- Sidebar -->
       <div class="sidebar">
-        <!-- Sidebar user panel (optional) -->
         <div class="user-panel mt-3 pb-3 mb-3 d-flex">
-          <div class="image"><img src="../dist/img/user2-160x160.jpg" class="img-circle elevation-2" alt="User Image"></div>
+        <div class="image"><img src="../dist/img/avatar.png" class="img-circle elevation-2" alt="User Image"></div>
           <div class="info">
              <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user'] ?? 'Admin') ?></a>
           </div>
         </div>
 
-        <!-- Sidebar Menu -->
-         <nav class="mt-2">
-        <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
-          <li class="nav-item">
-            <a href="./index2.php" class="nav-link"><i class="nav-icon fas fa-tachometer-alt"></i><p>Overview</p></a>
-          </li>
-          <li class="nav-item">
-            <a href="./menu-management.php" class="nav-link"><i class="nav-icon fas fa-utensils"></i><p>Menu Management</p></a>
-          </li>
-          <li class="nav-item">
-            <a href="./inventory.php" class="nav-link"><i class="nav-icon fas fa-boxes"></i><p>Inventory Tracking</p></a>
-          </li>
-          <li class="nav-item">
-            <a href="./suppliers.php" class="nav-link"><i class="nav-icon fas fa-truck"></i><p>Supplier Info</p></a>
-          </li>
-          <li class="nav-item">
-            <a href="./staff-list.php" class="nav-link active"><i class="far fa-user nav-icon"></i><p>Staff List</p></a>
-          </li>
-          <li class="nav-item">
-            <a href="./sale_revenue.php" class="nav-link"><i class="nav-icon fas fa-chart-line"></i><p>Sales & Revenue</p></a>
-          </li>
-          <li class="nav-item">
-            <a href="./report.php" class="nav-link"><i class="nav-icon fas fa-file-alt"></i><p>Reports</p></a>
-          </li>
-          <li class="nav-item"><a href="./settings.php" class="nav-link"><i class="nav-icon fas fa-cog"></i><p>Settings</p></a></li>
-          <li class="nav-item mt-auto">
-            <a href="../../Backend/logout.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p></a>
-          </li>
-        </ul>
-      </nav>
-        <!-- /.sidebar-menu -->
+        <nav class="mt-2">
+          <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
+            <li class="nav-item">
+              <a href="./index2.php" class="nav-link"><i class="nav-icon fas fa-tachometer-alt"></i><p>Overview</p></a>
+            </li>
+            <li class="nav-item">
+              <a href="./menu-management.php" class="nav-link"><i class="nav-icon fas fa-utensils"></i><p>Menu Management</p></a>
+            </li>
+            <li class="nav-item">
+              <a href="./inventory.php" class="nav-link"><i class="nav-icon fas fa-boxes"></i><p>Inventory Tracking</p></a>
+            </li>
+            <li class="nav-item">
+              <a href="./suppliers.php" class="nav-link"><i class="nav-icon fas fa-truck"></i><p>Supplier Info</p></a>
+            </li>
+            <li class="nav-item">
+              <a href="./staff-list.php" class="nav-link active"><i class="far fa-user nav-icon"></i><p>Staff List</p></a>
+            </li>
+            <li class="nav-item">
+              <a href="./sale_revenue.php" class="nav-link"><i class="nav-icon fas fa-chart-line"></i><p>Sales & Revenue</p></a>
+            </li>
+            <li class="nav-item">
+              <a href="./report.php" class="nav-link"><i class="nav-icon fas fa-file-alt"></i><p>Reports</p></a>
+            </li>
+            <li class="nav-item"><a href="./settings.php" class="nav-link"><i class="nav-icon fas fa-cog"></i><p>Settings</p></a></li>
+            <li class="nav-item mt-auto">
+              <a href="../../Backend/logout.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p></a>
+            </li>
+          </ul>
+        </nav>
       </div>
-      <!-- /.sidebar -->
     </aside>
 
-    <!-- Content Wrapper. Contains page content -->
+    <!-- Content Wrapper -->
     <div class="content-wrapper">
 
       <!-- Flash messages -->
@@ -179,7 +176,7 @@ if (!isset($_SESSION['user'])) {
         <?php unset($_SESSION['error']); ?>
       <?php endif; ?>
 
-      <!-- Content Header (Page header) -->
+      <!-- Content Header -->
       <div class="content-header">
         <div class="container-fluid">
           <div class="row mb-2">
@@ -212,10 +209,9 @@ if (!isset($_SESSION['user'])) {
 
                 <div class="card-body table-responsive p-0">
                   <table class="table table-hover text-nowrap">
-                    
                     <thead>
                       <tr>
-                        <th>ID</th>
+                        <!-- <th>ID</th> -->
                         <th>Photo</th>
                         <th>Name</th>
                         <th>Email</th>
@@ -227,26 +223,24 @@ if (!isset($_SESSION['user'])) {
                       </tr>
                     </thead>
 
-                   <tbody>
+                    <tbody>
                       <?php
                       include('../../Backend/conn.php');
-
                       $result = mysqli_query($conn, "SELECT * FROM user WHERE position = 'staff'");
-
                       while ($row = mysqli_fetch_assoc($result)) {
-                        $fullname = $row['firstname'] . ' ' . $row['lastname'];
+                        $fullname = htmlspecialchars($row['firstname'] . ' ' . $row['lastname']);
                       ?>
                       <tr
                         data-id="<?= $row['id']; ?>"
-                        data-firstname="<?= $row['firstname']; ?>"
-                        data-lastname="<?= $row['lastname']; ?>"
-                        data-email="<?= $row['email']; ?>"
-                        data-position="<?= $row['position']; ?>"
-                        data-contact="<?= $row['contact']; ?>"
-                        data-address="<?= $row['address']; ?>"
-                        data-image="<?= !empty($row['image']) ? htmlspecialchars($row['image']) : ''; ?>"
+                        data-firstname="<?= htmlspecialchars($row['firstname'], ENT_QUOTES); ?>"
+                        data-lastname="<?= htmlspecialchars($row['lastname'], ENT_QUOTES); ?>"
+                        data-email="<?= htmlspecialchars($row['email'], ENT_QUOTES); ?>"
+                        data-position="<?= htmlspecialchars($row['position'], ENT_QUOTES); ?>"
+                        data-contact="<?= htmlspecialchars($row['contact'], ENT_QUOTES); ?>"
+                        data-address="<?= htmlspecialchars($row['address'], ENT_QUOTES); ?>"
+                        data-image="<?= htmlspecialchars($row['image'] ?? '', ENT_QUOTES); ?>"
                       >
-                        <td>*</td>
+                        <!-- <td>*</td> -->
                         <td>
                           <?php if (!empty($row['image'])): ?>
                             <img src="../../<?= htmlspecialchars($row['image']); ?>" alt="Staff Photo" class="img-circle elevation-1" style="width:38px;height:38px;object-fit:cover;">
@@ -255,29 +249,23 @@ if (!isset($_SESSION['user'])) {
                           <?php endif; ?>
                         </td>
                         <td><?= $fullname; ?></td>
-                        <td><?= $row['email']; ?></td>
-                        <td>****</td>
-
+                        <td><?= htmlspecialchars($row['email']); ?></td>
+                        <td>*****</td>
                         <td>
-                          <?php 
-                          if ($row['position'] == 'admin') {
-                            echo "<span class='badge badge-danger'>Admin</span>";
-                          } else {
-                            echo "<span class='badge badge-success'>Staff</span>";
-                          }
-                          ?>
+                          <?php if ($row['position'] == 'admin'): ?>
+                            <span class='badge badge-danger'>Admin</span>
+                          <?php else: ?>
+                            <span class='badge badge-success'>Staff</span>
+                          <?php endif; ?>
                         </td>
-
-                        <td><?= $row['contact']; ?></td>
-                        <td><?= $row['address']; ?></td>
-
+                        <td><?= htmlspecialchars($row['contact']); ?></td>
+                        <td><?= htmlspecialchars($row['address']); ?></td>
                         <td>
                           <button class="btn btn-sm btn-primary view-btn">View</button>
                         </td>
                       </tr>
                       <?php } ?>
                     </tbody>
-
                   </table>
                 </div>
 
@@ -287,218 +275,288 @@ if (!isset($_SESSION['user'])) {
         </div>
       </section>
 
-     
     </div>
-      <div class="modal fade" id="addUserModal" tabindex="-1" role="dialog">
-        <div class="modal-dialog" role="document">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">Add New Staff Member</h5>
-              <button type="button" class="close" data-dismiss="modal">&times;</button>
-            </div>
-            <form action="../../Backend/process.php" method="POST" enctype="multipart/form-data">
-              <div class="modal-body">
-                <div class="form-group text-center">
-                  <label>Profile Photo</label><br>
-                  <img id="add_image_preview" src="../dist/img/user2-160x160.jpg"
-                    class="img-circle elevation-2 mb-2"
-                    style="width:90px;height:90px;object-fit:cover;cursor:pointer;"
-                    onclick="document.getElementById('add_image_input').click()"
-                    title="Click to upload photo">
-                  <br>
-                  <input type="file" id="add_image_input" name="image" accept="image/*" class="d-none"
-                    onchange="previewImage(this,'add_image_preview')">
-                  <small class="text-muted">Click photo to upload (JPG, PNG, GIF)</small>
-                </div>
-                <div class="form-group">
-                  <label>First Name</label>
-                  <input type="text" name="firstname" class="form-control" required>
-                </div>
+    <!-- /.content-wrapper -->
 
-                <div class="form-group">
-                  <label>Last Name</label>
-                  <input type="text" name="lastname" class="form-control" required>
-                </div>
-                
-                <div class="form-group">
-                  <label>Email Address</label>
-                  <input type="email" name="email" class="form-control" pattern="[a-zA-Z0-9._%+\-]+@(gmail|yahoo)\.(com|com\.ph)" title="Only Gmail or Yahoo email addresses are allowed (e.g. example@gmail.com)" placeholder="example@gmail.com or example@yahoo.com" required>
-                </div>
-
-                <div class="form-group">
-                  <label>Password</label>
-                  <input type="password" name="password" id="password" class="form-control" required oninput="checkPasswordStrength(this.value)">
-                  <small id="password-strength" class="form-text"></small>
-                </div>
-
-                <div class="form-group">
-                  <label>Contact Number</label>
-                  <input type="tel" name="contact" class="form-control" placeholder="e.g. 09123456789" pattern="[0-9]{11}" maxlength="11" title="Contact number must be exactly 11 digits"  oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11)" required>
-                </div>
-
-                <div class="form-group">
-                  <label>Address</label>
-                  <textarea name="address" class="form-control" rows="3" placeholder="Enter full address" required></textarea>
-                </div>
-                <div class="form-group">
-                  <label>Position</label>
-                  <input type="text" class="form-control" value="staff" readonly>
-                  <input type="hidden" name="position" value="staff">
-                </div>
-              </div>
-              <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                <button type="submit" name="save_user" class="btn btn-primary">Save Staff</button>
-              </div>
-            </form>
+    <!-- ==================== ADD USER MODAL ==================== -->
+    <div class="modal fade" id="addUserModal" tabindex="-1" role="dialog">
+      <div class="modal-dialog" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Add New Staff Member</h5>
+            <button type="button" class="close" data-dismiss="modal">&times;</button>
           </div>
-        </div>
-      </div> 
-
-      <!-- View/Edit/Delete Modal -->
-      <div class="modal fade" id="viewUserModal" tabindex="-1" role="dialog">
-        <div class="modal-dialog" role="document">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">Staff Details</h5>
-              <button type="button" class="close" data-dismiss="modal">&times;</button>
-            </div>
-            <form action="../../Backend/process.php" method="POST" enctype="multipart/form-data">
-              <div class="modal-body">
-
-                <input type="hidden" name="user_id" id="view_id">
-                <input type="hidden" name="existing_image" id="view_existing_image">
-
-                <div class="form-group text-center">
-                  <label>Profile Photo</label><br>
-                  <img id="view_image_preview" src="../dist/img/user2-160x160.jpg"
-                    class="img-circle elevation-2 mb-2"
-                    style="width:90px;height:90px;object-fit:cover;cursor:pointer;"
-                    onclick="document.getElementById('view_image_input').click()"
-                    title="Click to change photo">
-                  <br>
-                  <input type="file" id="view_image_input" name="image" accept="image/*" class="d-none"
-                    onchange="previewImage(this,'view_image_preview')">
-                  <small class="text-muted">Click photo to change (leave unchanged to keep current)</small>
-                </div>
-
-                <div class="form-group">
-                  <label>First Name</label>
-                  <input type="text" name="firstname" id="view_firstname" class="form-control" required>
-                </div>
-
-                <div class="form-group">
-                  <label>Last Name</label>
-                  <input type="text" name="lastname" id="view_lastname" class="form-control" required>
-                </div>
-
-                <div class="form-group">
-                  <label>Email Address</label>
-                  <input type="email" name="email" id="view_email" class="form-control"
-                        pattern="[a-zA-Z0-9._%+\-]+@(gmail|yahoo)\.(com|com\.ph)"
-                        title="Only Gmail or Yahoo email addresses are allowed"
-                        required>
-                </div>
-
-                <div class="form-group">
-                  <label>New Password <small class="text-muted">(leave blank to keep current)</small></label>
-                  <input type="password" name="password" id="view_password" class="form-control" oninput="checkPasswordStrength(this.value)">
-                  <small id="password-strength" class="form-text"></small>
-                </div>
-
-                <div class="form-group">
-                  <label>Contact Number</label>
-                  <input type="tel" name="contact" id="view_contact" class="form-control"
-                        pattern="[0-9]{11}"
-                        maxlength="11"
-                        title="Contact number must be exactly 11 digits"
-                        oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11)"
-                        required>
-                </div>
-
-                <div class="form-group">
-                  <label>Address</label>
-                  <textarea name="address" id="view_address" class="form-control" rows="3" required></textarea>
-                </div>
-
-                <div class="form-group">
-                  <label>Position</label>
-                  <input type="text" class="form-control" value="staff" readonly>
-                  <input type="hidden" name="position" value="staff">
-                </div>
-
-              </div>
-              <div class="modal-footer">
-                <button type="button" class="btn btn-danger" id="deleteBtn">Delete</button>
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                <button type="submit" name="update_user" class="btn btn-primary">Update</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-
-      <!-- Delete Confirmation Modal -->
-      <div class="modal fade" id="deleteConfirmModal" tabindex="-1" role="dialog">
-        <div class="modal-dialog modal-sm" role="document">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">Confirm Delete</h5>
-              <button type="button" class="close" data-dismiss="modal">&times;</button>
-            </div>
+          <form action="../../Backend/process.php" method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
             <div class="modal-body">
-              <p>Are you sure you want to delete <strong id="delete_name"></strong>?</p>
+
+              <div class="form-group text-center">
+                <label>Profile Photo</label><br>
+                <img id="add_image_preview" src="../dist/img/blank.jpg"
+                  class="img-circle elevation-2 mb-2"
+                  style="width:90px;height:90px;object-fit:cover;cursor:pointer;"
+                  onclick="document.getElementById('add_image_input').click()"
+                  title="Click to upload photo">
+                <br>
+                <input type="file" id="add_image_input" name="image" accept="image/*" class="d-none"
+                  onchange="previewImage(this,'add_image_preview')">
+                <small class="text-muted">Click photo to upload (JPG, PNG, GIF, WEBP)</small>
+              </div>
+
+              <div class="form-group">
+                <label>First Name</label>
+                <input type="text" name="firstname" class="form-control" required>
+              </div>
+
+              <div class="form-group">
+                <label>Last Name</label>
+                <input type="text" name="lastname" class="form-control" required>
+              </div>
+
+              <div class="form-group">
+                <label>Email Address</label>
+                <input type="email" name="email" class="form-control"
+                  pattern="[a-zA-Z0-9._%+\-]+@(gmail|yahoo)\.(com|com\.ph)"
+                  title="Only Gmail or Yahoo email addresses are allowed"
+                  placeholder="example@gmail.com or example@yahoo.com" required>
+              </div>
+
+              <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" id="add_password" class="form-control" required
+                  oninput="checkPasswordStrength(this.value, 'add_password_strength', 'add_password_bar')">
+                <div class="password-strength-bar" id="add_password_bar"></div>
+                <small id="add_password_strength" class="form-text"></small>
+              </div>
+
+              <div class="form-group">
+                <label>Contact Number</label>
+                <input type="tel" name="contact" class="form-control"
+                  placeholder="e.g. 09123456789"
+                  pattern="[0-9]{11}" maxlength="11"
+                  title="Contact number must be exactly 11 digits"
+                  oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11)" required>
+              </div>
+
+              <div class="form-group">
+                <label>Address</label>
+                <textarea name="address" class="form-control" rows="3" placeholder="Enter full address" required></textarea>
+              </div>
+
+              <div class="form-group">
+                <label>Position</label>
+                <input type="text" class="form-control" value="staff" readonly>
+                <input type="hidden" name="position" value="staff">
+              </div>
+
             </div>
             <div class="modal-footer">
-              <form action="../../Backend/process.php" method="POST">
-                <input type="hidden" name="user_id" id="delete_id">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <button type="submit" name="delete_user" class="btn btn-danger">Yes, Delete</button>
-              </form>
+              <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+              <button type="submit" name="save_user" class="btn btn-primary">Save Staff</button>
             </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== VIEW / EDIT MODAL ==================== -->
+    <div class="modal fade" id="viewUserModal" tabindex="-1" role="dialog">
+      <div class="modal-dialog" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Staff Details</h5>
+            <button type="button" class="close" data-dismiss="modal">&times;</button>
+          </div>
+          <form action="../../Backend/process.php" method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+            <div class="modal-body">
+
+              <input type="hidden" name="user_id" id="view_id">
+              <input type="hidden" name="existing_image" id="view_existing_image">
+
+              <div class="form-group text-center">
+                <label>Profile Photo</label><br>
+                <img id="view_image_preview" src="../dist/img/user2-160x160.jpg"
+                  class="img-circle elevation-2 mb-2"
+                  style="width:90px;height:90px;object-fit:cover;cursor:pointer;"
+                  onclick="document.getElementById('view_image_input').click()"
+                  title="Click to change photo">
+                <br>
+                <input type="file" id="view_image_input" name="image" accept="image/*" class="d-none"
+                  onchange="previewImage(this,'view_image_preview')">
+                <small class="text-muted">Click photo to change (leave as-is to keep current)</small>
+              </div>
+
+              <div class="form-group">
+                <label>First Name</label>
+                <input type="text" name="firstname" id="view_firstname" class="form-control" required>
+              </div>
+
+              <div class="form-group">
+                <label>Last Name</label>
+                <input type="text" name="lastname" id="view_lastname" class="form-control" required>
+              </div>
+
+              <div class="form-group">
+                <label>Email Address</label>
+                <input type="email" name="email" id="view_email" class="form-control"
+                  pattern="[a-zA-Z0-9._%+\-]+@(gmail|yahoo)\.(com|com\.ph)"
+                  title="Only Gmail or Yahoo email addresses are allowed" required>
+              </div>
+
+              <div class="form-group">
+                <label>New Password <small class="text-muted">(leave blank to keep current)</small></label>
+                <input type="password" name="password" id="view_password" class="form-control"
+                  oninput="checkPasswordStrength(this.value, 'update_password_strength', 'update_password_bar')">
+                <div class="password-strength-bar" id="update_password_bar"></div>
+                <small id="update_password_strength" class="form-text"></small>
+              </div>
+
+              <div class="form-group">
+                <label>Contact Number</label>
+                <input type="tel" name="contact" id="view_contact" class="form-control"
+                  pattern="[0-9]{11}" maxlength="11"
+                  title="Contact number must be exactly 11 digits"
+                  oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11)" required>
+              </div>
+
+              <div class="form-group">
+                <label>Address</label>
+                <textarea name="address" id="view_address" class="form-control" rows="3" required></textarea>
+              </div>
+
+              <div class="form-group">
+                <label>Position</label>
+                <input type="text" class="form-control" value="staff" readonly>
+                <input type="hidden" name="position" value="staff">
+              </div>
+
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-danger" id="deleteBtn">Delete</button>
+              <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+              <button type="submit" name="update_user" class="btn btn-primary">Update</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== DELETE CONFIRM MODAL ==================== -->
+    <div class="modal fade" id="deleteConfirmModal" tabindex="-1" role="dialog">
+      <div class="modal-dialog modal-sm" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Confirm Delete</h5>
+            <button type="button" class="close" data-dismiss="modal">&times;</button>
+          </div>
+          <div class="modal-body">
+            <p>Are you sure you want to delete <strong id="delete_name"></strong>?</p>
+          </div>
+          <div class="modal-footer">
+            <form action="../../Backend/process.php" method="POST">
+              <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+              <input type="hidden" name="user_id" id="delete_id">
+              <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+              <button type="submit" name="delete_user" class="btn btn-danger">Yes, Delete</button>
+            </form>
           </div>
         </div>
       </div>
+    </div>
 
   </div>
   <!-- ./wrapper -->
 
   <!-- REQUIRED SCRIPTS -->
-  <!-- jQuery -->
   <script src="../plugins/jquery/jquery.min.js"></script>
-  <!-- Bootstrap -->
   <script src="../plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
-  <!-- overlayScrollbars -->
   <script src="../plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js"></script>
-  <!-- AdminLTE App -->
   <script src="../dist/js/adminlte.js"></script>
-
-  <!-- AdminLTE for demo purposes -->
   <script src="../dist/js/pages/dashboard2.js"></script>
 
-  <!-- Staff list modal handler -->
   <script>
-    $(function() {
-      $('.view-staff-btn').on('click', function() {
-        var staff = $(this).closest('tr').data('staff');
-        if (!staff) {
-          return;
-        }
+    // ── Password strength checker ────────────────────────────────
+    function checkPasswordStrength(password, textId, barId) {
+      const indicator = document.getElementById(textId);
+      const bar       = document.getElementById(barId);
+      let strength    = 0;
 
-        $('#staffProfileAvatar').attr('src', staff.image);
-        $('#staffProfileName').text(staff.name);
-        $('#staffProfileRole').text(staff.role);
-        $('#staffProfileEmail').text(staff.email);
-        $('#staffProfilePhone').text(staff.phone);
-        $('#staffProfileBio').text(staff.bio);
+      if (password.length >= 8)           strength++;
+      if (/[A-Z]/.test(password))         strength++;
+      if (/[0-9]/.test(password))         strength++;
+      if (/[^A-Za-z0-9]/.test(password))  strength++;
+
+      if (password.length === 0) {
+        indicator.textContent  = '';
+        indicator.style.color  = '';
+        bar.style.width        = '0%';
+        bar.style.background   = 'transparent';
+      } else if (strength <= 1) {
+        indicator.textContent  = 'Weak';
+        indicator.style.color  = '#dc3545';
+        bar.style.width        = '25%';
+        bar.style.background   = '#dc3545';
+      } else if (strength === 2) {
+        indicator.textContent  = 'Fair';
+        indicator.style.color  = '#fd7e14';
+        bar.style.width        = '50%';
+        bar.style.background   = '#fd7e14';
+      } else if (strength === 3) {
+        indicator.textContent  = 'Medium';
+        indicator.style.color  = '#ffc107';
+        bar.style.width        = '75%';
+        bar.style.background   = '#ffc107';
+      } else {
+        indicator.textContent  = 'Strong';
+        indicator.style.color  = '#28a745';
+        bar.style.width        = '100%';
+        bar.style.background   = '#28a745';
+      }
+    }
+
+    $(function () {
+
+      // ── View button: populate modal ────────────────────────────
+      $(document).on('click', '.view-btn', function () {
+        var row = $(this).closest('tr');
+
+        $('#view_id').val(row.data('id'));
+        $('#view_firstname').val(row.data('firstname'));
+        $('#view_lastname').val(row.data('lastname'));
+        $('#view_email').val(row.data('email'));
+        $('#view_contact').val(row.data('contact'));
+        $('#view_address').val(row.data('address'));
+
+        // Populate image
+        var image = row.data('image');
+        var defaultImg = '../dist/img/user2-160x160.jpg';
+        $('#view_existing_image').val(image || '');
+        $('#view_image_preview').attr('src', image ? '../../' + image : defaultImg);
+        $('#view_image_input').val(''); // clear previous file selection
+
+        // Clear password field and strength indicator when opening modal
+        $('#view_password').val('');
+        $('#update_password_strength').text('');
+        $('#update_password_bar').css({ width: '0%', background: 'transparent' });
+
+        $('#viewUserModal').modal('show');
       });
-    });
-  </script>
 
-  <!-- Dark mode toggle -->
-  <script>
-    $(function() {
-      // Check for saved dark mode preference
+      // ── Delete button: open confirm modal ─────────────────────
+      $('#deleteBtn').on('click', function () {
+        var id        = $('#view_id').val();
+        var firstname = $('#view_firstname').val();
+        var lastname  = $('#view_lastname').val();
+
+        $('#delete_id').val(id);
+        $('#delete_name').text(firstname + ' ' + lastname);
+
+        $('#viewUserModal').modal('hide');
+        $('#deleteConfirmModal').modal('show');
+      });
+
+      // ── Dark mode toggle ───────────────────────────────────────
       const darkMode = localStorage.getItem('darkMode');
       if (darkMode === 'true') {
         $('body').addClass('dark-mode');
@@ -509,93 +567,30 @@ if (!isset($_SESSION['user'])) {
         $('.main-header.navbar').removeClass('navbar-dark').addClass('navbar-white navbar-light bg-white');
         $('#darkModeToggle i').removeClass('fa-sun').addClass('fa-moon');
       }
-      $('#darkModeToggle').on('click', function(e) {
+
+      $('#darkModeToggle').on('click', function (e) {
         e.preventDefault();
         $('body').toggleClass('dark-mode');
         $('.main-header.navbar').toggleClass('navbar-dark navbar-white navbar-light bg-white');
-        // Toggle icon between moon and sun
         $(this).find('i').toggleClass('fa-moon fa-sun');
-        // Save preference
         const isDark = $('body').hasClass('dark-mode');
         localStorage.setItem('darkMode', isDark);
-        // Animate the icon and button
         $(this).addClass('clicked');
-        $(this).find('i').addClass('clicked');
-        setTimeout(() => {
-          $(this).removeClass('clicked');
-          $(this).find('i').removeClass('clicked');
-        }, 300);
+        setTimeout(() => $(this).removeClass('clicked'), 300);
       });
+
     });
 
-    function checkPasswordStrength(password) {
-  const indicator = document.getElementById('password-strength');
-  let strength = 0;
-
-  if (password.length >= 8)          strength++; // min length
-  if (/[A-Z]/.test(password))        strength++; // uppercase
-  if (/[0-9]/.test(password))        strength++; // number
-  if (/[^A-Za-z0-9]/.test(password)) strength++; // special char
-
-  if (password.length === 0) {
-    indicator.textContent = '';
-    indicator.style.color = '';
-  } else if (strength <= 1) {
-    indicator.textContent = '🔴 Weak';
-    indicator.style.color = 'red';
-  } else if (strength === 2 || strength === 3) {
-    indicator.textContent = '🟠 Medium';
-    indicator.style.color = 'orange';
-  } else {
-    indicator.textContent = '🟢 Strong password!';
-    indicator.style.color = 'green';
-  }
-}
-
- // View button click - populate modal
-  $(document).on('click', '.view-btn', function () {
-    var row = $(this).closest('tr');
-
-    var image = row.data('image');
-    var defaultImg = '../dist/img/user2-160x160.jpg';
-
-    $('#view_id').val(row.data('id'));
-    $('#view_firstname').val(row.data('firstname'));
-    $('#view_lastname').val(row.data('lastname'));
-    $('#view_email').val(row.data('email'));
-    $('#view_contact').val(row.data('contact'));
-    $('#view_address').val(row.data('address'));
-    $('#view_existing_image').val(image || '');
-    $('#view_image_preview').attr('src', image ? '../../' + image : defaultImg);
-    $('#view_image_input').val(''); // clear any previous file selection
-
-    $('#viewUserModal').modal('show');
-  });
-
-  function previewImage(input, previewId) {
-    if (input.files && input.files[0]) {
-      var reader = new FileReader();
-      reader.onload = function(e) {
-        document.getElementById(previewId).src = e.target.result;
-      };
-      reader.readAsDataURL(input.files[0]);
+    function previewImage(input, previewId) {
+      if (input.files && input.files[0]) {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          document.getElementById(previewId).src = e.target.result;
+        };
+        reader.readAsDataURL(input.files[0]);
+      }
     }
-  }
-
-  // Delete button click - open confirm modal
-  $('#deleteBtn').on('click', function () {
-    var id        = $('#view_id').val();
-    var firstname = $('#view_firstname').val();
-    var lastname  = $('#view_lastname').val();
-
-    $('#delete_id').val(id);
-    $('#delete_name').text(firstname + ' ' + lastname);
-
-    $('#viewUserModal').modal('hide');
-    $('#deleteConfirmModal').modal('show');
-  });
   </script>
 
 </body>
-
 </html>

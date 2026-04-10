@@ -1,6 +1,6 @@
 <?php
 session_start();
-if (!isset($_SESSION['user'])) {
+if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
     header("Location: ../../Frontend/lockscreen.html");
     exit();
 }
@@ -183,8 +183,8 @@ $chartDataJson   = json_encode($chartData);
     </a>
     <div class="sidebar">
       <div class="user-panel mt-3 pb-3 mb-3 d-flex">
-        <div class="image"><img src="../dist/img/user2-160x160.jpg" class="img-circle elevation-2" alt="User Image"></div>
-        <div class="info">
+      <div class="image"><img src="../dist/img/avatar.png" class="img-circle elevation-2" alt="User Image"></div>
+      <div class="info">
           <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user'] ?? 'Admin') ?></a>
         </div>
       </div>
@@ -357,7 +357,7 @@ $chartDataJson   = json_encode($chartData);
                 <tr>
                   <th>Order ID</th>
                   <th>Date &amp; Time</th>
-                  <th>Table</th>
+                  <th>Number</th>
                   <th>Status</th>
                   <th>Items Ordered</th>
                   <th>Total Qty</th>
@@ -375,7 +375,7 @@ $chartDataJson   = json_encode($chartData);
                 <tr class="<?= $rowClass ?>">
                   <td><strong>#<?= (int)$ord['order_id'] ?></strong></td>
                   <td><?= htmlspecialchars($ord['created_at']) ?></td>
-                  <td>Table <?= htmlspecialchars($ord['table_no']) ?></td>
+                  <td><?= htmlspecialchars($ord['table_no']) ?></td>
                   <td><?= $badge ?></td>
                   <td><?= htmlspecialchars($ord['items']) ?></td>
                   <td><?= (int)$ord['total_qty'] ?></td>

@@ -22,7 +22,7 @@ if (!$data || empty($data['items'])) {
 }
 
 $table_no  = $conn->real_escape_string($data['table_no']  ?? '01');
-$status    = 'pending';
+$status    = 'Done';
 $total_amt = floatval($data['total_amt'] ?? 0);
 $items     = $data['items'];  // [ { menu_id, qty, unit_price }, … ]
 

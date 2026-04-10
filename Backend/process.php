@@ -17,11 +17,12 @@ if (empty($submitted_token) || !hash_equals($session_token, $submitted_token)) {
     header("Location: ../Frontend/ADMIN/staff-list.php");
     exit();
 }
-// Regenerate token after use so each submission needs a fresh one
+// Regenerate token after use
 $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 
 $redirect_back = "../Frontend/ADMIN/staff-list.php";
 
+// ==================== ADD USER ====================
 if (isset($_POST['save_user'])) {
 
     $firstname = trim($_POST['firstname']);
@@ -64,23 +65,21 @@ if (isset($_POST['save_user'])) {
 
     $hashed_password = password_hash($password, PASSWORD_DEFAULT);
 
+    // Check duplicate email
     $check = $conn->prepare("SELECT id FROM user WHERE email = ?");
     $check->bind_param("s", $email);
     $check->execute();
-    $result = $check->get_result();
-
-    if ($result->num_rows > 0) {
+    if ($check->get_result()->num_rows > 0) {
         $_SESSION['error'] = 'Email already exists!';
         header("Location: $redirect_back"); exit();
     }
     $check->close();
 
+    // Check duplicate contact
     $checkContact = $conn->prepare("SELECT id FROM user WHERE contact = ?");
     $checkContact->bind_param("s", $contact);
     $checkContact->execute();
-    $contactResult = $checkContact->get_result();
-
-    if ($contactResult->num_rows > 0) {
+    if ($checkContact->get_result()->num_rows > 0) {
         $_SESSION['error'] = 'Contact number already exists!';
         header("Location: $redirect_back"); exit();
     }
@@ -93,16 +92,16 @@ if (isset($_POST['save_user'])) {
         if (!is_dir($upload_dir)) {
             mkdir($upload_dir, 0755, true);
         }
-        $ext       = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
-        $allowed   = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        $ext         = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
+        $allowed     = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
         $allowedMime = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-        $fileMime  = mime_content_type($_FILES['image']['tmp_name']);
+        $fileMime    = mime_content_type($_FILES['image']['tmp_name']);
         if (!in_array($ext, $allowed) || !in_array($fileMime, $allowedMime)) {
             $_SESSION['error'] = 'Only JPG, PNG, GIF, or WEBP images are allowed!';
             header("Location: $redirect_back"); exit();
         }
-        $filename   = 'staff_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
-        $dest       = $upload_dir . $filename;
+        $filename = 'staff_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+        $dest     = $upload_dir . $filename;
         if (move_uploaded_file($_FILES['image']['tmp_name'], $dest)) {
             $image_path = 'Frontend/ADMIN/uploads/staff/' . $filename;
         }
@@ -160,10 +159,10 @@ if (isset($_POST['update_user'])) {
         if (!is_dir($upload_dir)) {
             mkdir($upload_dir, 0755, true);
         }
-        $ext     = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
-        $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        $ext         = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
+        $allowed     = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
         $allowedMime = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-        $fileMime = mime_content_type($_FILES['image']['tmp_name']);
+        $fileMime    = mime_content_type($_FILES['image']['tmp_name']);
         if (!in_array($ext, $allowed) || !in_array($fileMime, $allowedMime)) {
             $_SESSION['error'] = 'Only JPG, PNG, GIF, or WEBP images are allowed!';
             header("Location: $redirect_back"); exit();
@@ -171,7 +170,7 @@ if (isset($_POST['update_user'])) {
         $filename = 'staff_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
         $dest     = $upload_dir . $filename;
         if (move_uploaded_file($_FILES['image']['tmp_name'], $dest)) {
-            // Delete old image if it exists
+            // Delete old image file if it exists
             if ($existing_image && file_exists(__DIR__ . '/../' . $existing_image)) {
                 unlink(__DIR__ . '/../' . $existing_image);
             }
@@ -221,7 +220,6 @@ if (isset($_POST['update_user'])) {
 if (isset($_POST['delete_user'])) {
     $id = intval($_POST['user_id']);
 
-    // Fetch name and image before deleting — use prepared statement
     $nameStmt = $conn->prepare("SELECT firstname, lastname, image FROM user WHERE id = ?");
     $nameStmt->bind_param("i", $id);
     $nameStmt->execute();
