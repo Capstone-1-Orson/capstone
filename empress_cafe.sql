@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Apr 04, 2026 at 03:53 AM
+-- Generation Time: Apr 15, 2026 at 10:51 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -42,11 +42,11 @@ CREATE TABLE `ingredients` (
 --
 
 INSERT INTO `ingredients` (`id`, `name`, `unit`, `stock_qty`, `low_stock_threshold`, `created_at`, `updated_at`) VALUES
-(1, '12oz Ice Cup', 'pcs', 500.000, 100.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
+(1, '12oz Ice Cup', 'pcs', 50.000, 100.000, '2026-03-27 11:08:19', '2026-04-08 10:47:28'),
 (2, '16oz Ice Cup', 'pcs', 499.000, 100.000, '2026-03-27 11:08:19', '2026-04-03 12:05:55'),
 (3, '22oz Ice Cup', 'pcs', 500.000, 100.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (4, '8oz Hot Cup', 'pcs', 500.000, 100.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
-(5, '12oz Hot Cup', 'pcs', 499.000, 100.000, '2026-03-27 11:08:19', '2026-04-03 12:14:29'),
+(5, '12oz Hot Cup', 'pcs', 100.000, 100.000, '2026-03-27 11:08:19', '2026-04-08 10:47:18'),
 (6, 'Take Out Single', 'pcs', 300.000, 50.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (7, 'Take Out Double', 'pcs', 300.000, 50.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (8, 'Straw Small', 'pcs', 500.000, 100.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
@@ -55,7 +55,7 @@ INSERT INTO `ingredients` (`id`, `name`, `unit`, `stock_qty`, `low_stock_thresho
 (11, 'Coffee Beans', 'g', 5000.000, 500.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (12, 'Fresh Milk', 'ml', 4760.000, 500.000, '2026-03-27 11:08:19', '2026-04-03 12:14:29'),
 (13, 'Soya Milk', 'ml', 2000.000, 300.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
-(14, 'Ever Whip', 'g', 2000.000, 200.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
+(14, 'Ever Whip', 'g', 1960.000, 200.000, '2026-03-27 11:08:19', '2026-04-08 17:23:01'),
 (15, 'Whip Cream Powder', 'g', 2000.000, 200.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (16, 'Frappe Base', 'g', 3000.000, 300.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (17, 'Cream Cheese Powder', 'g', 1000.000, 150.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
@@ -76,9 +76,9 @@ INSERT INTO `ingredients` (`id`, `name`, `unit`, `stock_qty`, `low_stock_thresho
 (32, 'Powdered Sugar', 'g', 2000.000, 200.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (33, 'Thai Tea', 'g', 1000.000, 100.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (34, 'Strawberry Syrup', 'ml', 2000.000, 200.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
-(35, 'Strawberry Puree', 'ml', 2000.000, 200.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
+(35, 'Strawberry Puree', 'ml', 1970.000, 200.000, '2026-03-27 11:08:19', '2026-04-08 17:23:01'),
 (36, 'Blueberry Puree', 'ml', 2000.000, 200.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
-(37, 'Brown Sugar', 'g', 2000.000, 200.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
+(37, 'Brown Sugar', 'g', 0.000, 200.000, '2026-03-27 11:08:19', '2026-04-08 10:47:50'),
 (38, 'Bread', 'pcs', 200.000, 50.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (39, 'Egg', 'pcs', 300.000, 50.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (40, 'Ham', 'g', 2000.000, 200.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
@@ -87,10 +87,10 @@ INSERT INTO `ingredients` (`id`, `name`, `unit`, `stock_qty`, `low_stock_thresho
 (43, 'Tomato', 'g', 500.000, 50.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (44, 'Mayonnaise', 'ml', 1000.000, 100.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (45, 'Tuna', 'g', 2000.000, 200.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
-(46, 'Frozen Fries', 'g', 4550.000, 500.000, '2026-03-27 11:08:19', '2026-03-27 11:11:28'),
-(47, 'Cheese Powder', 'g', 500.000, 50.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
-(48, 'BBQ Powder', 'g', 500.000, 50.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
-(49, 'Sour Cream Powder', 'g', 470.000, 50.000, '2026-03-27 11:08:19', '2026-03-27 11:11:28'),
+(46, 'Frozen Fries', 'g', 3950.000, 500.000, '2026-03-27 11:08:19', '2026-04-10 10:55:38'),
+(47, 'Cheese Powder', 'g', 490.000, 50.000, '2026-03-27 11:08:19', '2026-04-04 15:41:07'),
+(48, 'BBQ Powder', 'g', 5.000, 50.000, '2026-03-27 11:08:19', '2026-04-10 04:58:52'),
+(49, 'Sour Cream Powder', 'g', 460.000, 50.000, '2026-03-27 11:08:19', '2026-04-08 17:11:01'),
 (50, 'Donut Mix', 'g', 3000.000, 300.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (51, 'Cookie Dough', 'g', 3000.000, 300.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (52, 'Garlic', 'g', 500.000, 50.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
@@ -106,9 +106,9 @@ INSERT INTO `ingredients` (`id`, `name`, `unit`, `stock_qty`, `low_stock_thresho
 (62, 'Pasta Noodles', 'g', 3000.000, 300.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (63, 'All Purpose Cream', 'ml', 2000.000, 200.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (64, 'Butter', 'g', 1000.000, 100.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
-(65, 'Croffle Dough', 'g', 5000.000, 500.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
+(65, 'Croffle Dough', 'g', 4400.000, 500.000, '2026-03-27 11:08:19', '2026-04-10 10:55:38'),
 (66, 'Nutella', 'g', 2000.000, 200.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
-(67, 'Biscoff Spread', 'g', 2000.000, 200.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
+(67, 'Biscoff Spread', 'g', 1965.000, 200.000, '2026-03-27 11:08:19', '2026-04-04 15:19:41'),
 (68, 'Oreo', 'g', 1000.000, 100.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (69, 'Graham', 'g', 500.000, 50.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (70, 'Marshmallow', 'g', 500.000, 50.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
@@ -117,7 +117,7 @@ INSERT INTO `ingredients` (`id`, `name`, `unit`, `stock_qty`, `low_stock_thresho
 (73, 'Banana', 'pcs', 200.000, 50.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (74, 'Avocado', 'g', 2000.000, 200.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (75, 'Carrot', 'g', 1000.000, 100.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
-(76, 'Apple', 'g', 2000.000, 200.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
+(76, 'Apple', 'g', 0.000, 200.000, '2026-03-27 11:08:19', '2026-04-08 10:47:37'),
 (77, 'Lemon', 'pcs', 100.000, 20.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (78, 'Cucumber', 'g', 1000.000, 100.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (79, 'Calamansi', 'pcs', 200.000, 30.000, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
@@ -331,9 +331,9 @@ INSERT INTO `menu` (`id`, `name`, `description`, `image`, `price`, `category`, `
 (161, 'Tuna Carbonara', 'Creamy tuna carbonara pasta', NULL, 170.00, 'Pasta', 0, '2026-03-27 11:08:19'),
 (162, 'Clubhouse Sandwich', 'Sliced bread with ham, cheese, egg, veggies, dressing and fries on the side', NULL, 160.00, 'Bites & Treats', 0, '2026-03-27 11:08:19'),
 (163, 'Tuna Melt Sandwich', 'Sliced bread with tuna, cheese, egg, veggies, dressing and fries on the side', NULL, 170.00, 'Bites & Treats', 0, '2026-03-27 11:08:19'),
-(164, 'French Fries (Cheese)', 'Crispy french fries with cheese flavor', NULL, 130.00, 'Bites & Treats', 0, '2026-03-27 11:08:19'),
-(165, 'French Fries (BBQ)', 'Crispy french fries with BBQ flavor', NULL, 130.00, 'Bites & Treats', 0, '2026-03-27 11:08:19'),
-(166, 'French Fries (Sour Cream)', 'Crispy french fries with sour cream flavor', NULL, 130.00, 'Bites & Treats', 0, '2026-03-27 11:08:19'),
+(164, 'French Fries (Cheese)', 'Crispy french fries with cheese flavor', 'Frontend/uploads/menu/menu_69d0c079909327.39811927.png', 130.00, 'Bites & Treats', 1, '2026-03-27 11:08:19'),
+(165, 'French Fries (BBQ)', 'Crispy french fries with BBQ flavor', 'Frontend/uploads/menu/menu_69d0bfe66f1890.15578134.png', 130.00, 'Bites & Treats', 1, '2026-03-27 11:08:19'),
+(166, 'French Fries (Sour Cream)', 'Crispy french fries with sour cream flavor', 'Frontend/uploads/menu/menu_69d0bf4aa19f27.44666271.png', 130.00, 'Bites & Treats', 1, '2026-03-27 11:08:19'),
 (167, 'Mini Donut Pancake (6pcs)', 'Mini donut pancakes - 6 pieces', NULL, 60.00, 'Bites & Treats', 0, '2026-03-27 11:08:19'),
 (168, 'Mini Donut Pancake (12pcs)', 'Mini donut pancakes - 12 pieces', NULL, 100.00, 'Bites & Treats', 0, '2026-03-27 11:08:19'),
 (169, 'Cookie (1pc)', 'Single homemade cookie', NULL, 50.00, 'Bites & Treats', 0, '2026-03-27 11:08:19'),
@@ -1101,12 +1101,6 @@ INSERT INTO `menu_ingredients` (`id`, `menu_id`, `ingredient_id`, `qty_needed`) 
 (729, 163, 43, 20.000),
 (730, 163, 44, 15.000),
 (731, 163, 46, 100.000),
-(732, 164, 46, 150.000),
-(733, 164, 47, 10.000),
-(734, 165, 46, 150.000),
-(735, 165, 48, 10.000),
-(736, 166, 46, 150.000),
-(737, 166, 49, 10.000),
 (738, 167, 50, 80.000),
 (739, 167, 39, 1.000),
 (740, 168, 50, 160.000),
@@ -1149,7 +1143,13 @@ INSERT INTO `menu_ingredients` (`id`, `menu_id`, `ingredient_id`, `qty_needed`) 
 (827, 183, 35, 30.000),
 (828, 182, 67, 35.000),
 (829, 182, 65, 100.000),
-(830, 182, 14, 20.000);
+(830, 182, 14, 20.000),
+(831, 166, 46, 150.000),
+(832, 166, 49, 10.000),
+(833, 165, 48, 10.000),
+(834, 165, 46, 150.000),
+(835, 164, 47, 10.000),
+(836, 164, 46, 150.000);
 
 -- --------------------------------------------------------
 
@@ -1172,7 +1172,12 @@ CREATE TABLE `orders` (
 INSERT INTO `orders` (`id`, `table_no`, `status`, `total_amt`, `created_at`) VALUES
 (1, '01', 'pending', 393.90, '2026-03-27 11:11:28'),
 (2, '01', 'pending', 161.60, '2026-04-03 12:05:55'),
-(3, '01', 'pending', 120.00, '2026-04-03 12:14:29');
+(3, '01', 'pending', 120.00, '2026-04-03 12:14:29'),
+(4, '02', 'pending', 340.00, '2026-04-04 15:19:41'),
+(5, '05', 'pending', 390.00, '2026-04-04 15:41:07'),
+(6, '01', 'refunded', 130.00, '2026-04-08 16:50:52'),
+(7, '01', 'refunded', 170.00, '2026-04-08 17:22:18'),
+(8, '01', 'done', 680.00, '2026-04-10 10:55:38');
 
 -- --------------------------------------------------------
 
@@ -1195,7 +1200,41 @@ CREATE TABLE `order_items` (
 INSERT INTO `order_items` (`id`, `order_id`, `menu_id`, `qty`, `unit_price`) VALUES
 (1, 1, 166, 3, 130.00),
 (2, 2, 26, 1, 160.00),
-(3, 3, 4, 1, 120.00);
+(3, 3, 4, 1, 120.00),
+(4, 4, 183, 1, 170.00),
+(5, 4, 182, 1, 170.00),
+(6, 5, 165, 1, 130.00),
+(7, 5, 164, 1, 130.00),
+(8, 5, 166, 1, 130.00),
+(9, 6, 166, 1, 130.00),
+(10, 7, 183, 1, 170.00),
+(11, 8, 165, 1, 130.00),
+(12, 8, 184, 1, 550.00);
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `order_refunds`
+--
+
+CREATE TABLE `order_refunds` (
+  `id` int(11) NOT NULL,
+  `order_id` int(11) NOT NULL,
+  `action` enum('void','refund') NOT NULL,
+  `refund_amt` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `reason` varchar(255) DEFAULT NULL,
+  `items_json` text DEFAULT NULL,
+  `created_by` varchar(100) DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `order_refunds`
+--
+
+INSERT INTO `order_refunds` (`id`, `order_id`, `action`, `refund_amt`, `reason`, `items_json`, `created_by`, `created_at`) VALUES
+(1, 6, 'refund', 130.00, 'change', '[{\"menu_id\":166,\"qty\":1}]', 'staff', '2026-04-08 17:11:01'),
+(2, 7, 'refund', 170.00, '', '[{\"menu_id\":183,\"qty\":1}]', 'staff', '2026-04-08 17:23:01');
 
 -- --------------------------------------------------------
 
@@ -1249,16 +1288,18 @@ CREATE TABLE `user` (
   `password` varchar(255) NOT NULL,
   `position` enum('staff','admin','','') NOT NULL,
   `contact` varchar(20) DEFAULT NULL,
-  `address` text DEFAULT NULL
+  `address` text DEFAULT NULL,
+  `image` varchar(255) DEFAULT ''
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `user`
 --
 
-INSERT INTO `user` (`id`, `firstname`, `lastname`, `email`, `password`, `position`, `contact`, `address`) VALUES
-(1, NULL, NULL, 'Admin', 'admin123', 'admin', NULL, NULL),
-(4, 'micheal', 'sablon', 'mic@gmail.com', '$2y$10$zRE/MFKIl6b5oYzQtTRsU.k.ufwMoFBQfHxbj.S3RxEDphOPKhqHe', 'staff', '09123456789', 'villa');
+INSERT INTO `user` (`id`, `firstname`, `lastname`, `email`, `password`, `position`, `contact`, `address`, `image`) VALUES
+(1, '', '', 'admin', '$2y$10$KNTescTlNCQezdG/KK6Xcu.1HYW2xJiDLidG0sgmpE9eGYWsoHI7C', 'admin', '', '', ''),
+(4, 'micheal', 'sablon', 'mic@gmail.com', '$2y$10$2MMFTU8wR4U90JPMQn2Do.EbzoOCaPHtkG3ampSwz6.CAZ6dJnbH6', 'staff', '09123456788', 'villa', 'Frontend/ADMIN/uploads/staff/staff_1775631999_22302282.jpg'),
+(5, 'Sean', 'Peniero', 'sean@gmail.com', '$2y$10$kPn4EQPZQ7nXS7adE2TZ..mlIfEwVi8e1eXxOiy0Qgx7O/Vflez0u', 'staff', '09630374759', 'Leon', 'Frontend/ADMIN/uploads/staff/staff_1775796015_5b73ef60.jpg');
 
 --
 -- Indexes for dumped tables
@@ -1297,6 +1338,12 @@ ALTER TABLE `order_items`
   ADD PRIMARY KEY (`id`),
   ADD KEY `order_id` (`order_id`),
   ADD KEY `menu_id` (`menu_id`);
+
+--
+-- Indexes for table `order_refunds`
+--
+ALTER TABLE `order_refunds`
+  ADD PRIMARY KEY (`id`);
 
 --
 -- Indexes for table `sales_report`
@@ -1339,19 +1386,25 @@ ALTER TABLE `menu`
 -- AUTO_INCREMENT for table `menu_ingredients`
 --
 ALTER TABLE `menu_ingredients`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=831;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=837;
 
 --
 -- AUTO_INCREMENT for table `orders`
 --
 ALTER TABLE `orders`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `order_items`
 --
 ALTER TABLE `order_items`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+
+--
+-- AUTO_INCREMENT for table `order_refunds`
+--
+ALTER TABLE `order_refunds`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `sales_report`
@@ -1369,7 +1422,7 @@ ALTER TABLE `suppliers`
 -- AUTO_INCREMENT for table `user`
 --
 ALTER TABLE `user`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- Constraints for dumped tables
