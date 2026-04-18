@@ -1490,7 +1490,7 @@ function openPayModal() {
   document.getElementById('payModalMeta').innerHTML=`
     <div>${cart.length} item${cart.length>1?'s':''}<br><small style="color:var(--muted)">Items</small></div>
     <div style="text-align:center">₱${currentTotal.toLocaleString('en',{minimumFractionDigits:2})}<br><small style="color:var(--muted)">Total</small></div>
-    <div style="text-align:right">#${selTable}<br><small style="color:var(--muted)">Bill No.</small></div>`;
+    <div style="text-align:right">#${selTable}<br><small style="color:var(--muted)">Number No.</small></div>`;
   // Reset to Cash selected
   document.querySelectorAll('#payModalMethods .pay-btn').forEach(b=>b.classList.remove('active'));
   document.querySelector('#payModalMethods .pay-btn[data-method="Cash"]').classList.add('active');
@@ -1686,7 +1686,6 @@ function showReceipt(data) {
 
   const itemsHTML=data.items.map(item=>`
     <div class="receipt-item-row">
-      <span style="font-size:17px;flex-shrink:0">${item.emoji}</span>
       <span class="ri-name">${item.name}</span>
       <span class="ri-qty">×${item.qty}</span>
       <span class="ri-subtotal">₱${(item.price*item.qty).toLocaleString('en',{minimumFractionDigits:2})}</span>
@@ -1723,7 +1722,7 @@ function showReceipt(data) {
         </div>
         <div class="receipt-meta">
           <div>Order <strong>#${data.orderId}</strong></div>
-          <div>Bill <strong>#${data.table}</strong></div>
+          <div>Number <strong>#${data.table}</strong></div>
           <div>Type <strong>${orderType}</strong></div>
           <div style="text-align:right"><strong>${dateStr}</strong><br>${timeStr}</div>
         </div>

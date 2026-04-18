@@ -74,6 +74,45 @@ while ($row = $mRes->fetch_assoc()) {
 $mStmt->close();
 $monthData = array_values($monthSlots);
 
+// ── Revenue Forecasting — Linear Regression on 6-month data ───
+// Uses least-squares linear regression to project next 3 months
+function linearRegression(array $y): array {
+    $n = count($y);
+    if ($n < 2) return ['slope' => 0, 'intercept' => 0];
+    $sumX = 0; $sumY = 0; $sumXY = 0; $sumX2 = 0;
+    for ($i = 0; $i < $n; $i++) {
+        $sumX  += $i;
+        $sumY  += $y[$i];
+        $sumXY += $i * $y[$i];
+        $sumX2 += $i * $i;
+    }
+    $denom = $n * $sumX2 - $sumX * $sumX;
+    if ($denom == 0) return ['slope' => 0, 'intercept' => $sumY / $n];
+    $slope     = ($n * $sumXY - $sumX * $sumY) / $denom;
+    $intercept = ($sumY - $slope * $sumX) / $n;
+    return ['slope' => $slope, 'intercept' => $intercept];
+}
+
+$reg = linearRegression($monthData);
+$forecastData   = [];
+$forecastLabels = [];
+$n = count($monthData);
+for ($f = 1; $f <= 3; $f++) {
+    $forecastVal      = max(0, $reg['intercept'] + $reg['slope'] * ($n - 1 + $f));
+    $forecastData[]   = round($forecastVal, 2);
+    $forecastLabels[] = date('M Y', strtotime("+$f months"));
+}
+
+// Projected next-month revenue & growth rate
+$projNextMonth   = $forecastData[0];
+$lastMonthActual = end($monthData);
+$projGrowthPct   = $lastMonthActual > 0
+    ? (($projNextMonth - $lastMonthActual) / $lastMonthActual) * 100
+    : 0;
+
+$forecastDataJson   = json_encode($forecastData);
+$forecastLabelsJson = json_encode($forecastLabels);
+
 // ── Top Selling Items (for donut chart + sales table) ──────────
 $topItems   = [];
 $tableItems = [];
@@ -359,12 +398,47 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
         </div>
         <?php endif; ?>
 
-        <!-- ── Monthly Revenue Chart + Category Breakdown ─── -->
+        <!-- ── Forecast Stat Cards ─────────────────────────── -->
+        <div class="row">
+          <div class="col-md-4 col-sm-6 col-12">
+            <div class="info-box" style="background:#f0e6ff;border-left:4px solid #8e44ad;">
+              <span class="info-box-icon" style="background:#8e44ad;color:#fff;"><i class="fas fa-chart-line"></i></span>
+              <div class="info-box-content">
+                <span class="info-box-text" style="color:#555;">Next Month Forecast</span>
+                <span class="info-box-number" style="color:#8e44ad;">&#8369;<?= number_format($projNextMonth, 2) ?></span>
+                <span class="progress-description" style="font-size:11px;color:#888;">Linear regression estimate</span>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 col-sm-6 col-12">
+            <?php $growthColor = $projGrowthPct >= 0 ? '#28a745' : '#e74c3c';
+                  $growthBg    = $projGrowthPct >= 0 ? '#d4edda'  : '#fde8e8';
+                  $growthIcon  = $projGrowthPct >= 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'; ?>
+            <div class="info-box" style="background:<?= $growthBg ?>;border-left:4px solid <?= $growthColor ?>;">
+              <span class="info-box-icon" style="background:<?= $growthColor ?>;color:#fff;"><i class="fas <?= $growthIcon ?>"></i></span>
+              <div class="info-box-content">
+                <span class="info-box-text" style="color:#555;">Projected Growth</span>
+                <span class="info-box-number" style="color:<?= $growthColor ?>;"><?= ($projGrowthPct >= 0 ? '+' : '') . number_format($projGrowthPct, 1) ?>%</span>
+                <span class="progress-description" style="font-size:11px;color:#888;">vs. current month</span>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 col-sm-6 col-12">
+            <div class="info-box" style="background:#e8f4fd;border-left:4px solid #3c8dbc;">
+              <span class="info-box-icon" style="background:#3c8dbc;color:#fff;"><i class="fas fa-calculator"></i></span>
+              <div class="info-box-content">
+                <span class="info-box-text" style="color:#555;">Avg Monthly Revenue</span>
+                <span class="info-box-number" style="color:#3c8dbc;">&#8369;<?= number_format(array_sum($monthData) / max(1, count(array_filter($monthData))), 2) ?></span>
+                <span class="progress-description" style="font-size:11px;color:#888;">Based on last 6 months</span>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="row">
           <div class="col-md-8">
             <div class="card">
               <div class="card-header">
-                <h3 class="card-title"><i class="fas fa-chart-bar mr-2"></i>Monthly Revenue — Last 6 Months</h3>
+                <h3 class="card-title"><i class="fas fa-chart-bar mr-2"></i>Monthly Revenue — Last 6 Months + 3-Month Forecast</h3>
               </div>
               <div class="card-body">
                 <canvas id="salesChart" height="120"></canvas>
@@ -531,28 +605,51 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
 <script src="../plugins/datatables-buttons/js/buttons.colVis.min.js"></script>
 
 <script>
-// ── Monthly Revenue Bar Chart (Chart.js v4) ───────────────────
+// ── Monthly Revenue Bar Chart with Forecast (Chart.js v4) ────
 $(function () {
+  var actualLabels   = <?= $monthLabelsJson ?>;
+  var actualData     = <?= $monthDataJson ?>;
+  var forecastLabels = <?= $forecastLabelsJson ?>;
+  var forecastData   = <?= $forecastDataJson ?>;
+
+  var allLabels = actualLabels.concat(forecastLabels);
+
+  // Pad actual data with nulls for forecast months
+  var paddedActual   = actualData.concat(forecastLabels.map(() => null));
+  // Pad forecast data with nulls for actual months
+  var paddedForecast = actualLabels.map(() => null).concat(forecastData);
+
   new Chart($('#salesChart').get(0).getContext('2d'), {
     type: 'bar',
     data: {
-      labels: <?= $monthLabelsJson ?>,
-      datasets: [{
-        label: 'Revenue (₱)',
-        data: <?= $monthDataJson ?>,
-        backgroundColor: 'rgba(233,30,140,0.55)',
-        borderColor:     'rgba(233,30,140,1)',
-        borderWidth: 2,
-        hoverBackgroundColor: 'rgba(233,30,140,0.8)'
-      }]
+      labels: allLabels,
+      datasets: [
+        {
+          label: 'Actual Revenue (₱)',
+          data: paddedActual,
+          backgroundColor: 'rgba(233,30,140,0.55)',
+          borderColor:     'rgba(233,30,140,1)',
+          borderWidth: 2,
+          hoverBackgroundColor: 'rgba(233,30,140,0.8)'
+        },
+        {
+          label: 'Forecast Revenue (₱)',
+          data: paddedForecast,
+          backgroundColor: 'rgba(142,68,173,0.35)',
+          borderColor:     'rgba(142,68,173,1)',
+          borderWidth: 2,
+          borderDash: [6, 3],
+          hoverBackgroundColor: 'rgba(142,68,173,0.6)'
+        }
+      ]
     },
     options: {
       responsive: true,
       plugins: {
-        legend: { display: false },
+        legend: { display: true },
         tooltip: {
           callbacks: {
-            label: ctx => '₱' + parseFloat(ctx.parsed.y).toLocaleString('en', { minimumFractionDigits: 2 })
+            label: ctx => ctx.dataset.label + ': ₱' + parseFloat(ctx.parsed.y).toLocaleString('en', { minimumFractionDigits: 2 })
           }
         }
       },
