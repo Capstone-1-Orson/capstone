@@ -554,7 +554,6 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 <aside class="pos-sidebar">
   <div class="s-logo">♛</div>
   <button class="nav-btn active" title="Orders"><i class="fa-solid fa-receipt"></i>Orders</button>
-  <button class="nav-btn" title="Dashboard"><i class="fa-solid fa-chart-pie"></i>Stats</button>
   <button class="nav-btn" title="Menu"><i class="fa-solid fa-utensils"></i>Menu</button>
   <button class="nav-btn" title="History" style="position:relative">
     <i class="fa-solid fa-clock-rotate-left"></i>History
