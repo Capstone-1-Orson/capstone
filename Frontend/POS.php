@@ -913,15 +913,12 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
     <!-- Order summary strip -->
     <div class="receipt-meta" id="payModalMeta" style="grid-template-columns:1fr 1fr 1fr;"></div>
 
-    <!-- Payment method -->
+    <!-- Payment method: Cash Only -->
     <div style="padding:14px 20px 0;">
       <div class="pay-label mb-2">Payment Method</div>
       <div class="pay-methods" id="payModalMethods">
-        <button class="pay-btn active" data-method="Cash" onclick="selectModalPay(this)">
-          <i class="fa-solid fa-money-bill-wave"></i>Cash
-        </button>
-        <button class="pay-btn" data-method="Card" onclick="selectModalPay(this)">
-          <i class="fa-regular fa-credit-card"></i>Card
+        <button class="pay-btn active" data-method="Cash" style="flex:1;pointer-events:none;opacity:1;">
+          <i class="fa-solid fa-money-bill-wave"></i>Cash Only
         </button>
       </div>
     </div>
@@ -1795,9 +1792,7 @@ function openPayModal() {
     <div>${cart.length} item${cart.length>1?'s':''}<br><small style="color:var(--muted)">Items</small></div>
     <div style="text-align:center">₱${currentTotal.toLocaleString('en',{minimumFractionDigits:2})}<br><small style="color:var(--muted)">Total</small></div>
     <div style="text-align:right">#${selTable}<br><small style="color:var(--muted)">Number No.</small></div>`;
-  // Reset to Cash selected
-  document.querySelectorAll('#payModalMethods .pay-btn').forEach(b=>b.classList.remove('active'));
-  document.querySelector('#payModalMethods .pay-btn[data-method="Cash"]').classList.add('active');
+  // Reset to Cash (always)
   document.getElementById('payModalCashSection').style.display='flex';
   document.getElementById('cashInput').value='';
   renderQuickAmounts(currentTotal);
@@ -1824,7 +1819,7 @@ function placeOrder() {
   if(!cart.length) return;
 
   const activePayBtn=document.querySelector('#payModalMethods .pay-btn.active');
-  const payMethod=activePayBtn?.dataset.method||'Cash';
+  const payMethod='Cash';
 
   // Capture cash tendered BEFORE closing modal
   const cashTendered=payMethod==='Cash'?(parseFloat(document.getElementById('cashInput').value)||0):0;
