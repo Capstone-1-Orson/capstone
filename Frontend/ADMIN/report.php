@@ -129,6 +129,7 @@ $chartDataJson   = json_encode($chartData);
   <link rel="stylesheet" href="../plugins/datatables-buttons/css/buttons.bootstrap4.min.css">
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
   <link rel="stylesheet" href="../dist/css/empress-cafe-theme.css">
+  <link rel="stylesheet" href="../dist/css/empress-animations.css">
   <style>
     body,.main-header.navbar{transition:background-color .5s ease,color .5s ease;}
     #darkModeToggle{transition:box-shadow .3s ease;}

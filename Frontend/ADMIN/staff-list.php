@@ -29,6 +29,7 @@ if (empty($_SESSION['csrf_token'])) {
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
 
   <link rel="stylesheet" href="../dist/css/empress-cafe-theme.css">
+  <link rel="stylesheet" href="../dist/css/empress-animations.css">
 </head>
 <style>
   body,

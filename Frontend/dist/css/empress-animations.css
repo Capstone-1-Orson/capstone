@@ -1,0 +1,531 @@
+/* ═══════════════════════════════════════════════════════════════════
+   OPERLYTICS — Empress' Cafe  |  Enhanced Animations & UI Upgrades
+   empress-animations.css  →  place in: dist/css/
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Google Fonts ─────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap');
+
+/* ── Design Tokens ────────────────────────────────────────────── */
+:root {
+  --cafe-rose:       #e91e8c;
+  --cafe-rose-soft:  rgba(233,30,140,.12);
+  --cafe-gold:       #f5a623;
+  --cafe-gold-soft:  rgba(245,166,35,.12);
+  --cafe-cream:      #fdf6ee;
+  --cafe-dark:       #1a1a2e;
+  --cafe-slate:      #16213e;
+  --cafe-navy:       #0f3460;
+  --ease-spring:     cubic-bezier(.34,1.56,.64,1);
+  --ease-smooth:     cubic-bezier(.4,0,.2,1);
+  --ease-out:        cubic-bezier(0,0,.2,1);
+  --dur-fast:        160ms;
+  --dur-mid:         300ms;
+  --dur-slow:        520ms;
+  --radius-card:     14px;
+  --shadow-lift:     0 8px 32px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.10);
+  --shadow-glow:     0 0 24px var(--cafe-rose-soft), 0 4px 16px rgba(233,30,140,.15);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   1. PAGE ENTRANCE — staggered reveal on load
+   ════════════════════════════════════════════════════════════════ */
+@keyframes fadeSlideUp {
+  from { opacity:0; transform:translateY(28px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+@keyframes fadeSlideLeft {
+  from { opacity:0; transform:translateX(-24px); }
+  to   { opacity:1; transform:translateX(0); }
+}
+@keyframes fadeScaleIn {
+  from { opacity:0; transform:scale(.93); }
+  to   { opacity:1; transform:scale(1); }
+}
+@keyframes shimmer {
+  0%   { background-position:-400px 0; }
+  100% { background-position:400px 0; }
+}
+@keyframes countUp {
+  from { opacity:0; transform:translateY(10px) scale(.9); }
+  to   { opacity:1; transform:translateY(0) scale(1); }
+}
+
+/* Apply entrance animation to key containers */
+.content-header {
+  animation: fadeSlideLeft var(--dur-slow) var(--ease-out) both;
+}
+.content-header .breadcrumb {
+  animation: fadeSlideUp var(--dur-slow) 80ms var(--ease-out) both;
+}
+
+/* Info boxes staggered */
+.col-12.col-sm-6.col-md-3:nth-child(1) .info-box,
+.col-md-3:nth-child(1) .info-box { animation: fadeSlideUp var(--dur-slow) 60ms  var(--ease-out) both; }
+.col-12.col-sm-6.col-md-3:nth-child(2) .info-box,
+.col-md-3:nth-child(2) .info-box { animation: fadeSlideUp var(--dur-slow) 140ms var(--ease-out) both; }
+.col-12.col-sm-6.col-md-3:nth-child(3) .info-box,
+.col-md-3:nth-child(3) .info-box { animation: fadeSlideUp var(--dur-slow) 220ms var(--ease-out) both; }
+.col-12.col-sm-6.col-md-3:nth-child(4) .info-box,
+.col-md-3:nth-child(4) .info-box { animation: fadeSlideUp var(--dur-slow) 300ms var(--ease-out) both; }
+
+/* Cards staggered */
+.card {
+  animation: fadeScaleIn var(--dur-slow) 180ms var(--ease-out) both;
+}
+
+
+/* Stat numbers pop in */
+.info-box-number {
+  animation: countUp var(--dur-slow) 400ms var(--ease-spring) both;
+  display: inline-block;
+}
+
+
+/* ════════════════════════════════════════════════════════════════
+   3. INFO BOXES — lift & glow on hover
+   ════════════════════════════════════════════════════════════════ */
+.info-box {
+  border-radius: var(--radius-card) !important;
+  transition:
+    transform  var(--dur-mid) var(--ease-spring),
+    box-shadow var(--dur-mid) var(--ease-smooth) !important;
+  overflow: hidden;
+  position: relative;
+}
+.info-box::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,.06) 0%, transparent 60%);
+  pointer-events: none;
+  border-radius: var(--radius-card);
+}
+.info-box:hover {
+  transform: translateY(-4px) scale(1.012);
+  box-shadow: var(--shadow-lift) !important;
+}
+.info-box-icon {
+  transition: transform var(--dur-mid) var(--ease-spring) !important;
+}
+.info-box:hover .info-box-icon {
+  transform: scale(1.15) rotate(-6deg);
+}
+.info-box-text {
+  font-family: 'DM Sans', sans-serif;
+  font-size: .78rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.info-box-number {
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  font-size: 1.55rem;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   4. CARDS — premium hover lift
+   ════════════════════════════════════════════════════════════════ */
+.card {
+  border-radius: var(--radius-card) !important;
+  border: 1px solid rgba(255,255,255,.06) !important;
+  transition:
+    transform  var(--dur-mid) var(--ease-spring),
+    box-shadow var(--dur-mid) var(--ease-smooth) !important;
+  overflow: hidden;
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lift) !important;
+}
+.card-header {
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid rgba(255,255,255,.07) !important;
+}
+.card-title {
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+
+
+/* ════════════════════════════════════════════════════════════════
+   6. NAVBAR — frosted glass effect
+   ════════════════════════════════════════════════════════════════ */
+.main-header.navbar {
+  backdrop-filter: blur(12px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(1.4) !important;
+  border-bottom: 1px solid rgba(255,255,255,.08) !important;
+}
+.nav-link {
+  transition:
+    color      var(--dur-fast) var(--ease-smooth),
+    transform  var(--dur-fast) var(--ease-spring),
+    opacity    var(--dur-fast) var(--ease-smooth) !important;
+}
+.nav-link:hover {
+  transform: scale(1.1);
+  opacity: .85;
+}
+
+/* Dark mode toggle spin */
+@keyframes moonSpin {
+  from { transform: rotate(0deg) scale(1); }
+  to   { transform: rotate(360deg) scale(1.3); }
+}
+#darkModeToggle.clicked i {
+  animation: moonSpin .4s var(--ease-spring) both;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   7. BUTTONS — ripple & spring press
+   ════════════════════════════════════════════════════════════════ */
+.btn {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform  var(--dur-fast) var(--ease-spring),
+    box-shadow var(--dur-fast) var(--ease-smooth),
+    filter     var(--dur-fast) var(--ease-smooth) !important;
+  border-radius: 8px !important;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  letter-spacing: .03em;
+}
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,.2) !important;
+  filter: brightness(1.08);
+}
+.btn:active {
+  transform: translateY(0) scale(.97);
+}
+/* Ripple */
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 50%;
+  width: 0; height: 0;
+  background: rgba(255,255,255,.22);
+  border-radius: 50%;
+  transition: all .5s ease;
+  opacity: 0;
+}
+.btn:active::after {
+  inset: -20%;
+  width: 140%; height: 140%;
+  opacity: 1;
+  transition: 0s;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   8. TABLE ROWS — smooth hover highlight
+   ════════════════════════════════════════════════════════════════ */
+.table tbody tr {
+  transition:
+    background var(--dur-fast) var(--ease-smooth),
+    transform  var(--dur-fast) var(--ease-spring) !important;
+}
+.table tbody tr:hover {
+  background: rgba(233,30,140,.07) !important;
+  transform: scale(1.002);
+}
+.table thead th {
+  font-family: 'DM Sans', sans-serif;
+  text-transform: uppercase;
+  font-size: .72rem;
+  letter-spacing: .1em;
+  font-weight: 600;
+  border-bottom: 2px solid var(--cafe-rose) !important;
+}
+.badge {
+  border-radius: 20px !important;
+  font-family: 'DM Sans', sans-serif;
+  font-size: .7rem;
+  font-weight: 600;
+  letter-spacing: .05em;
+  transition: transform var(--dur-fast) var(--ease-spring) !important;
+}
+.badge:hover { transform: scale(1.1); }
+
+/* ════════════════════════════════════════════════════════════════
+   9. PROGRESS BARS — animated fill on load
+   ════════════════════════════════════════════════════════════════ */
+@keyframes growBar {
+  from { width: 0 !important; }
+}
+.progress-bar {
+  animation: growBar .9s var(--ease-out) both;
+  border-radius: 99px !important;
+  transition: filter var(--dur-mid) ease !important;
+}
+.progress-bar:hover { filter: brightness(1.15); }
+.progress {
+  border-radius: 99px !important;
+  overflow: visible !important;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   10. CHART CANVAS — subtle entrance
+   ════════════════════════════════════════════════════════════════ */
+canvas {
+  animation: fadeScaleIn var(--dur-slow) 320ms var(--ease-out) both;
+  border-radius: 8px;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   11. PRODUCT / USERS LIST items
+   ════════════════════════════════════════════════════════════════ */
+.products-list .item {
+  border-radius: 10px;
+  padding: 8px 10px !important;
+  transition:
+    background  var(--dur-fast) var(--ease-smooth),
+    transform   var(--dur-fast) var(--ease-spring) !important;
+  margin-bottom: 4px;
+}
+.products-list .item:hover {
+  background: rgba(233,30,140,.08) !important;
+  transform: translateX(4px);
+}
+.products-list .item img {
+  border-radius: 8px !important;
+  transition: transform var(--dur-mid) var(--ease-spring) !important;
+}
+.products-list .item:hover img { transform: scale(1.1) rotate(-2deg); }
+
+.users-list li {
+  transition: transform var(--dur-mid) var(--ease-spring) !important;
+}
+.users-list li:hover { transform: translateY(-4px); }
+.users-list li img {
+  border-radius: 50% !important;
+  border: 2px solid transparent;
+  transition:
+    border-color var(--dur-mid) ease,
+    box-shadow   var(--dur-mid) ease !important;
+}
+.users-list li:hover img {
+  border-color: var(--cafe-rose);
+  box-shadow: 0 0 0 4px rgba(233,30,140,.2);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   12. FORECAST INFO BOXES — glowing borders
+   ════════════════════════════════════════════════════════════════ */
+@keyframes borderGlow {
+  0%,100% { opacity:.4; }
+  50%      { opacity:1; }
+}
+[style*="border-left:4px solid"] {
+  transition: box-shadow var(--dur-mid) ease !important;
+}
+[style*="border-left:4px solid"]:hover {
+  box-shadow: var(--shadow-lift) !important;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   13. MODAL — elegant slide up
+   ════════════════════════════════════════════════════════════════ */
+@keyframes modalIn {
+  from { opacity:0; transform:translateY(40px) scale(.95); }
+  to   { opacity:1; transform:translateY(0)   scale(1); }
+}
+.modal.show .modal-dialog {
+  animation: modalIn var(--dur-slow) var(--ease-spring) both;
+}
+.modal-content {
+  border-radius: var(--radius-card) !important;
+  border: 1px solid rgba(255,255,255,.08) !important;
+  backdrop-filter: blur(16px) !important;
+  overflow: hidden;
+}
+.modal-header {
+  background: linear-gradient(135deg, rgba(233,30,140,.15) 0%, transparent 80%);
+  border-bottom: 1px solid rgba(233,30,140,.2) !important;
+}
+.modal-footer {
+  border-top: 1px solid rgba(255,255,255,.06) !important;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   14. FORM INPUTS — animated focus ring
+   ════════════════════════════════════════════════════════════════ */
+.form-control, .custom-select {
+  border-radius: 8px !important;
+  transition:
+    border-color var(--dur-fast) ease,
+    box-shadow   var(--dur-fast) ease,
+    transform    var(--dur-fast) var(--ease-spring) !important;
+  font-family: 'DM Sans', sans-serif;
+}
+.form-control:focus, .custom-select:focus {
+  border-color: var(--cafe-rose) !important;
+  box-shadow: 0 0 0 3px rgba(233,30,140,.18) !important;
+  transform: scale(1.008);
+}
+.form-group label {
+  font-family: 'DM Sans', sans-serif;
+  font-size: .8rem;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   15. SCROLLBAR — custom thin track
+   ════════════════════════════════════════════════════════════════ */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(233,30,140,.35);
+  border-radius: 99px;
+  transition: background .2s;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--cafe-rose); }
+
+/* ════════════════════════════════════════════════════════════════
+   16. LOADING SKELETON (optional shimmer placeholder)
+   ════════════════════════════════════════════════════════════════ */
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(255,255,255,.06) 25%,
+    rgba(255,255,255,.12) 50%,
+    rgba(255,255,255,.06) 75%
+  );
+  background-size: 400px 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 6px;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   17. PAGE TITLE typography upgrade
+   ════════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════
+   17. PAGE TITLE typography upgrade
+   ════════════════════════════════════════════════════════════════ */
+.content-header h1 {
+  font-family: 'Playfair Display', serif !important;
+  font-weight: 700;
+  font-size: 1.8rem;
+  letter-spacing: -.01em;
+  /* Light mode: plain dark text — no gradient */
+  color: #1a1a2e;
+  background: none;
+  -webkit-text-fill-color: unset;
+}
+/* Dark mode only: white gradient text */
+body.dark-mode .content-header h1 {
+  color: transparent;
+  background: linear-gradient(90deg, #fff 0%, rgba(255,255,255,.75) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   18. FOOTER descriptions — subtle fade in
+   ════════════════════════════════════════════════════════════════ */
+.description-block {
+  animation: fadeSlideUp var(--dur-slow) 500ms var(--ease-out) both;
+  transition: transform var(--dur-mid) var(--ease-spring) !important;
+}
+.description-block:hover { transform: translateY(-2px); }
+.description-header {
+  font-family: 'Playfair Display', serif;
+  font-weight: 700;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   19. ALERT / TOAST — slide in from top-right
+   ════════════════════════════════════════════════════════════════ */
+@keyframes toastIn {
+  from { opacity:0; transform:translateX(60px); }
+  to   { opacity:1; transform:translateX(0); }
+}
+@keyframes toastOut {
+  from { opacity:1; transform:translateX(0); }
+  to   { opacity:0; transform:translateX(60px); }
+}
+.toast, .alert {
+  border-radius: 10px !important;
+  animation: toastIn var(--dur-slow) var(--ease-spring) both;
+}
+
+
+/* ════════════════════════════════════════════════════════════════
+   21. BREADCRUMB — refined styling
+   ════════════════════════════════════════════════════════════════ */
+.breadcrumb {
+  background: rgba(255,255,255,.04) !important;
+  border-radius: 20px !important;
+  padding: 4px 16px !important;
+  border: 1px solid rgba(255,255,255,.08);
+  backdrop-filter: blur(6px);
+}
+.breadcrumb-item a {
+  color: var(--cafe-rose) !important;
+  font-family: 'DM Sans', sans-serif;
+  font-size: .82rem;
+  transition: opacity var(--dur-fast) ease !important;
+}
+.breadcrumb-item a:hover { opacity: .7; }
+.breadcrumb-item.active {
+  font-family: 'DM Sans', sans-serif;
+  font-size: .82rem;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   22. CARD FOOTER BUTTONS — link style
+   ════════════════════════════════════════════════════════════════ */
+.card-footer a {
+  font-family: 'DM Sans', sans-serif;
+  font-size: .82rem;
+  font-weight: 500;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  transition:
+    color     var(--dur-fast) ease,
+    transform var(--dur-fast) var(--ease-spring) !important;
+  display: inline-block;
+}
+.card-footer a:hover { transform: translateX(3px); }
+
+/* ════════════════════════════════════════════════════════════════
+   23. DARK MODE POLISH
+   ════════════════════════════════════════════════════════════════ */
+body.dark-mode .card {
+  background: rgba(26,26,46,.85) !important;
+  border-color: rgba(255,255,255,.06) !important;
+}
+body.dark-mode .info-box {
+  border: 1px solid rgba(255,255,255,.05);
+}
+body.dark-mode .table-hover tbody tr:hover {
+  background-color: rgba(233,30,140,.08) !important;
+}
+body.dark-mode .form-control {
+  background: rgba(255,255,255,.06) !important;
+  border-color: rgba(255,255,255,.1) !important;
+  color: #e0e0e0 !important;
+}
+body.dark-mode .modal-content {
+  background: rgba(22,33,62,.96) !important;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   24. RESPONSIVE tweaks
+   ════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .info-box:hover { transform: translateY(-2px) scale(1.008); }
+  .card:hover     { transform: translateY(-2px); }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   25. SELECTION color
+   ════════════════════════════════════════════════════════════════ */
+::selection {
+  background: rgba(233,30,140,.3);
+  color: #fff;
+}

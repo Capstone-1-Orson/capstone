@@ -182,19 +182,123 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
   <link rel="stylesheet" href="../plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
   <link rel="stylesheet" href="../dist/css/empress-cafe-theme.css">
+  <link rel="stylesheet" href="../dist/css/empress-animations.css">
   <style>
-    body, .main-header.navbar { transition: background-color .5s ease, color .5s ease; }
-    #darkModeToggle           { transition: box-shadow .3s ease; }
-    #darkModeToggle i         { transition: transform .3s ease; }
-    #darkModeToggle.clicked   { box-shadow: 0 0 15px rgba(255,255,255,.8); }
-    #darkModeToggle.clicked i { transform: rotate(180deg) scale(1.2); }
+    /* Dark-mode toggle */
+    body, .main-header.navbar, .main-sidebar, .content-wrapper, .main-footer {
+      transition: background-color .4s ease, color .4s ease, border-color .4s ease;
+    }
+    #darkModeToggle { transition: box-shadow .3s ease; }
+    #darkModeToggle.clicked { box-shadow: 0 0 15px rgba(255,255,255,.8); }
+
+    /* ── Animated counter numbers ── */
+    .info-box-number[data-target] { opacity: 0; }
+
+    /* ── Ticker ribbon at top of page ── */
+    @keyframes tickerScroll {
+      from { transform: translateX(100%); }
+      to   { transform: translateX(-100%); }
+    }
+    #live-ticker {
+      overflow: hidden;
+      background: linear-gradient(90deg, #e91e8c 0%, #9c27b0 100%);
+      color: #fff;
+      height: 28px;
+      line-height: 28px;
+      font-size: .75rem;
+      letter-spacing: .06em;
+      font-weight: 600;
+      position: relative;
+    }
+    #live-ticker span {
+      display: inline-block;
+      white-space: nowrap;
+      padding-left: 100%;
+      animation: tickerScroll 28s linear infinite;
+    }
+
+    /* ── Pulse dot for "live" indicator ── */
+    @keyframes pulse-ring {
+      0%   { transform: scale(.85); box-shadow: 0 0 0 0 rgba(233,30,140,.6); }
+      70%  { transform: scale(1);   box-shadow: 0 0 0 8px rgba(233,30,140,0); }
+      100% { transform: scale(.85); box-shadow: 0 0 0 0 rgba(233,30,140,0); }
+    }
+    .live-dot {
+      width: 8px; height: 8px;
+      background: #e91e8c;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 6px;
+      animation: pulse-ring 1.8s ease infinite;
+      vertical-align: middle;
+    }
+
+    /* ── Revenue chart gradient area ── */
+    .chart { position: relative; }
+
+    /* ── Category progress bar label ── */
+    .progress-group {
+      font-family: 'DM Sans', sans-serif;
+      font-size: .82rem;
+      font-weight: 500;
+      margin-bottom: 12px;
+    }
+
+    /* ── Card stat footer numbers ── */
+    .description-header {
+      font-size: 1.1rem;
+    }
+
+    /* ── Recent orders row enter ── */
+    @keyframes rowSlideIn {
+      from { opacity: 0; transform: translateX(-12px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    tbody tr { opacity: 0; animation: rowSlideIn .4s ease forwards; }
+    tbody tr:nth-child(1) { animation-delay: .05s; }
+    tbody tr:nth-child(2) { animation-delay: .12s; }
+    tbody tr:nth-child(3) { animation-delay: .19s; }
+    tbody tr:nth-child(4) { animation-delay: .26s; }
+    tbody tr:nth-child(5) { animation-delay: .33s; }
+
+    /* ── Spinning refresh icon ── */
+    @keyframes spinOnce {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    .btn-refresh:active i { animation: spinOnce .5s ease; }
   </style>
 </head>
-<body class="hold-transition dark-mode sidebar-mini layout-fixed layout-navbar-fixed layout-footer-fixed">
+<body class="hold-transition sidebar-mini layout-fixed layout-navbar-fixed layout-footer-fixed">
+<script>
+  /* Apply dark/light mode instantly before first paint — prevents flash */
+  if (localStorage.getItem('darkMode') === 'true') {
+    document.body.classList.add('dark-mode');
+  }
+</script>
 <div class="wrapper">
 
+  <!-- ── Live Stats Ticker ──────────────────────────────────────── -->
+  <div id="live-ticker" class="w-100">
+    <span>
+      <span class="live-dot"></span>LIVE &nbsp;·&nbsp;
+      Tables Served Today: <strong><?= number_format($dailyCustomers) ?></strong> &nbsp;·&nbsp;
+      Today's Revenue: <strong>&#8369;<?= number_format($dailyRevenue, 2) ?></strong> &nbsp;·&nbsp;
+      Orders Today: <strong><?= number_format($ordersToday) ?></strong> &nbsp;·&nbsp;
+      Low Stock Alerts: <strong><?= number_format($lowStockCount) ?></strong> &nbsp;·&nbsp;
+      All-Time Revenue: <strong>&#8369;<?= number_format($totalRevenue, 2) ?></strong> &nbsp;·&nbsp;
+      Staff Count: <strong><?= number_format($staffCount) ?></strong>
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+      <span class="live-dot"></span>LIVE &nbsp;·&nbsp;
+      Tables Served Today: <strong><?= number_format($dailyCustomers) ?></strong> &nbsp;·&nbsp;
+      Today's Revenue: <strong>&#8369;<?= number_format($dailyRevenue, 2) ?></strong> &nbsp;·&nbsp;
+      Orders Today: <strong><?= number_format($ordersToday) ?></strong> &nbsp;·&nbsp;
+      Low Stock Alerts: <strong><?= number_format($lowStockCount) ?></strong>
+    </span>
+  </div>
+
   <!-- ── Navbar ─────────────────────────────────────────────── -->
-  <nav class="main-header navbar navbar-expand navbar-dark">
+  <nav class="main-header navbar navbar-expand navbar-white navbar-light bg-white">
     <ul class="navbar-nav">
       <li class="nav-item">
         <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
@@ -609,58 +713,165 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
 <!-- Monthly Revenue Chart -->
 <script>
 $(function () {
-  new Chart($('#salesChart').get(0).getContext('2d'), {
+  var ctx = $('#salesChart').get(0).getContext('2d');
+
+  // Gradient fill for the bar chart
+  var grad = ctx.createLinearGradient(0, 0, 0, 260);
+  grad.addColorStop(0,   'rgba(233,30,140,0.85)');
+  grad.addColorStop(0.5, 'rgba(233,30,140,0.45)');
+  grad.addColorStop(1,   'rgba(233,30,140,0.08)');
+
+  new Chart(ctx, {
     type: 'bar',
     data: {
       labels: <?= $chartLabelsJson ?>,
       datasets: [{
         label: 'Revenue (₱)',
         data: <?= $chartDataJson ?>,
-        backgroundColor: 'rgba(233,30,140,0.55)',
-        borderColor:     'rgba(233,30,140,1)',
+        backgroundColor: grad,
+        borderColor: 'rgba(233,30,140,1)',
         borderWidth: 2,
-        hoverBackgroundColor: 'rgba(233,30,140,0.8)'
+        borderRadius: 8,
+        borderSkipped: false,
+        hoverBackgroundColor: 'rgba(233,30,140,0.95)'
       }]
     },
     options: {
       responsive: true,
+      animation: {
+        duration: 900,
+        easing: 'easeOutQuart'
+      },
       legend: { display: false },
       tooltips: {
+        backgroundColor: 'rgba(22,33,62,0.95)',
+        titleFontFamily: "'DM Sans', sans-serif",
+        bodyFontFamily:  "'DM Sans', sans-serif",
+        borderColor: 'rgba(233,30,140,0.4)',
+        borderWidth: 1,
         callbacks: {
-          label: i => '₱' + parseFloat(i.yLabel).toLocaleString('en', {minimumFractionDigits: 2})
+          label: i => ' ₱' + parseFloat(i.yLabel).toLocaleString('en', {minimumFractionDigits: 2})
         }
       },
       scales: {
-        yAxes: [{ ticks: { beginAtZero: true, callback: v => '₱' + v.toLocaleString() } }]
+        xAxes: [{
+          gridLines: { color: 'rgba(255,255,255,0.04)' },
+          ticks: { fontFamily: "'DM Sans', sans-serif", fontSize: 11 }
+        }],
+        yAxes: [{
+          gridLines: { color: 'rgba(255,255,255,0.06)' },
+          ticks: {
+            beginAtZero: true,
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: 11,
+            callback: v => '₱' + v.toLocaleString()
+          }
+        }]
       }
     }
   });
 });
 </script>
 
-<!-- Dark Mode -->
+<!-- Dark / Light Mode Toggle -->
 <script>
 $(function () {
-  var dm = localStorage.getItem('darkMode');
-  if (dm === 'true') {
-    $('body').addClass('dark-mode');
-    $('.main-header.navbar').addClass('navbar-dark').removeClass('navbar-white navbar-light bg-white');
-    $('#darkModeToggle i').removeClass('fa-moon').addClass('fa-sun');
-  } else {
-    $('body').removeClass('dark-mode');
-    $('.main-header.navbar').removeClass('navbar-dark').addClass('navbar-white navbar-light bg-white');
-    $('#darkModeToggle i').removeClass('fa-sun').addClass('fa-moon');
+  var isDark = localStorage.getItem('darkMode') === 'true';
+
+  function applyMode(dark) {
+    if (dark) {
+      $('body').addClass('dark-mode');
+      $('.main-header.navbar')
+        .addClass('navbar-dark')
+        .removeClass('navbar-white navbar-light bg-white');
+      $('#darkModeToggle i').removeClass('fa-moon').addClass('fa-sun');
+    } else {
+      $('body').removeClass('dark-mode');
+      $('.main-header.navbar')
+        .removeClass('navbar-dark')
+        .addClass('navbar-white navbar-light bg-white');
+      $('#darkModeToggle i').removeClass('fa-sun').addClass('fa-moon');
+    }
   }
+
+  /* Set correct icon on load (body class already applied by inline script) */
+  applyMode(isDark);
+
   $('#darkModeToggle').on('click', function (e) {
     e.preventDefault();
-    $('body').toggleClass('dark-mode');
-    $('.main-header.navbar').toggleClass('navbar-dark navbar-white navbar-light bg-white');
-    $(this).find('i').toggleClass('fa-moon fa-sun');
-    localStorage.setItem('darkMode', $('body').hasClass('dark-mode'));
+    isDark = !isDark;
+    localStorage.setItem('darkMode', isDark);
+    applyMode(isDark);
     $(this).addClass('clicked');
     setTimeout(() => $(this).removeClass('clicked'), 300);
   });
 });
+</script>
+
+<!-- ── Animated Counters ──────────────────────────────────────── -->
+<script>
+(function () {
+  function easeOutQuart(t) { return 1 - Math.pow(1 - t, 4); }
+
+  function animateCounter(el, target, duration, prefix, decimals) {
+    var start = null;
+    prefix  = prefix  || '';
+    decimals = decimals || 0;
+    function step(ts) {
+      if (!start) start = ts;
+      var progress = Math.min((ts - start) / duration, 1);
+      var ease = easeOutQuart(progress);
+      var value = ease * target;
+      el.textContent = prefix + value.toLocaleString('en', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+      });
+      if (progress < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    // Parse each info-box-number and animate if it looks numeric
+    document.querySelectorAll('.info-box-number').forEach(function (el) {
+      var raw = el.textContent.trim();
+      var prefix = raw.includes('₱') ? '₱' : '';
+      var cleaned = raw.replace(/[₱,\s]/g, '');
+      var num = parseFloat(cleaned);
+      if (isNaN(num)) return;
+      var decimals = raw.includes('.') ? 2 : 0;
+      el.style.opacity = '1'; // reveal
+      animateCounter(el, num, 1200, prefix, decimals);
+    });
+  });
+})();
+</script>
+
+<!-- ── Scroll-reveal for stat cards ─────────────────────────── -->
+<script>
+(function () {
+  if (!('IntersectionObserver' in window)) return;
+  var obs = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.isIntersecting) {
+        e.target.style.opacity = '1';
+        e.target.style.transform = 'translateY(0)';
+        obs.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.15 });
+
+  document.querySelectorAll('.card, .info-box').forEach(function (el) {
+    // Only animate elements not already in view
+    var rect = el.getBoundingClientRect();
+    if (rect.top > window.innerHeight) {
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(24px)';
+      el.style.transition = 'opacity .5s ease, transform .5s cubic-bezier(.34,1.56,.64,1)';
+      obs.observe(el);
+    }
+  });
+})();
 </script>
 </body>
 </html>

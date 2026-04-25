@@ -211,6 +211,7 @@ $cats_json = json_encode($cats_raw);
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet"/>
+<link href="dist/css/empress-animations.css" rel="stylesheet"/>
 <style>
 /* ── DARK MODE (black + pink) ── */
 :root {
