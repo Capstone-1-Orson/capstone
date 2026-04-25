@@ -617,6 +617,312 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 [data-theme="light"] .menu-panel-card{background:#fff;}
 [data-theme="light"] .history-item{background:#fff;}
 [data-theme="light"] .report-bar-wrap{background:#fff;}
+
+/* ════════════════════════════════════
+   EMPRESS POS — Enhanced Animations
+   ════════════════════════════════════ */
+
+/* ── Extra keyframes ── */
+@keyframes ripple {
+  0%   { transform: scale(0); opacity: 0.6; }
+  100% { transform: scale(4); opacity: 0; }
+}
+@keyframes cartBounce {
+  0%,100% { transform: scale(1); }
+  30%      { transform: scale(1.35); }
+  60%      { transform: scale(0.9); }
+  80%      { transform: scale(1.1); }
+}
+@keyframes shimmerLoad {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+@keyframes popIn {
+  0%   { opacity:0; transform: scale(0.8) translateY(8px); }
+  70%  { transform: scale(1.04) translateY(-2px); }
+  100% { opacity:1; transform: scale(1) translateY(0); }
+}
+@keyframes slideRight {
+  from { opacity:0; transform: translateX(-18px); }
+  to   { opacity:1; transform: translateX(0); }
+}
+@keyframes glowPulse {
+  0%,100% { box-shadow: 0 0 0 0 var(--accent-glow); }
+  50%      { box-shadow: 0 0 0 10px transparent; }
+}
+@keyframes toastSlide {
+  0%   { transform: translateX(-50%) translateY(80px) scale(0.9); opacity:0; }
+  60%  { transform: translateX(-50%) translateY(-4px) scale(1.02); }
+  100% { transform: translateX(-50%) translateY(0) scale(1); opacity:1; }
+}
+@keyframes badgePop {
+  0%   { transform: scale(0); }
+  60%  { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes floatUp {
+  0%   { opacity:1; transform: translateY(0) scale(1); }
+  100% { opacity:0; transform: translateY(-40px) scale(0.7); }
+}
+@keyframes borderFlow {
+  0%,100% { border-color: rgba(233,30,140,0.3); }
+  50%      { border-color: rgba(233,30,140,0.8); }
+}
+
+/* ── Product card enhancements ── */
+.product-card {
+  position: relative;
+  overflow: hidden;
+  will-change: transform;
+}
+.product-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(233,30,140,0.06) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+.product-card:hover::before { opacity: 1; }
+.product-card:hover {
+  transform: translateY(-4px) scale(1.012);
+  box-shadow: 0 12px 32px rgba(233,30,140,0.2), 0 2px 8px rgba(0,0,0,0.3) !important;
+  border-color: rgba(233,30,140,0.35) !important;
+}
+.product-card:active { transform: scale(0.97); }
+
+/* Ripple on product card click */
+.ripple-effect {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(233,30,140,0.3);
+  animation: ripple 0.6s ease-out forwards;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* ── Cart item enter animation ── */
+.cart-item {
+  animation: popIn 0.28s cubic-bezier(0.34,1.56,0.64,1) both;
+  transition: transform 0.2s ease, opacity 0.2s ease, max-height 0.3s ease, margin 0.3s ease;
+}
+.cart-item.removing {
+  animation: none;
+  opacity: 0;
+  transform: translateX(20px) scale(0.95);
+  max-height: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* ── Qty button spring ── */
+.qty-btn {
+  transition: transform 0.15s cubic-bezier(0.34,1.56,0.64,1), background 0.18s ease !important;
+}
+.qty-btn:active { transform: scale(0.85) !important; }
+
+/* ── Cart badge bounce ── */
+.cart-badge-bounce {
+  animation: cartBounce 0.45s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+/* ── Stat cards enhanced ── */
+.stat-card {
+  transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.25s ease, border-color 0.25s ease !important;
+}
+.stat-card:hover {
+  animation: glowPulse 2s ease infinite;
+}
+.stat-card .stat-v {
+  transition: all 0.3s ease;
+}
+
+/* ── Category pills ── */
+.cat-pill {
+  transition: all 0.22s cubic-bezier(0.34,1.56,0.64,1) !important;
+  position: relative;
+  overflow: hidden;
+}
+.cat-pill:active { transform: scale(0.93); }
+.cat-pill.active {
+  animation: borderFlow 2.5s ease infinite;
+}
+
+/* ── Sidebar nav enhanced ── */
+.nav-btn {
+  transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1) !important;
+  position: relative;
+  overflow: hidden;
+}
+.nav-btn:hover { transform: scale(1.08); }
+.nav-btn:active { transform: scale(0.92); }
+.nav-btn.active { animation: none; }
+
+/* ── Place order button ── */
+.btn-place {
+  position: relative;
+  overflow: hidden;
+}
+.btn-place:not(:disabled):hover {
+  animation: glowPulse 1.5s ease infinite;
+}
+.btn-place::after {
+  content: '';
+  position: absolute;
+  inset: 50%;
+  width: 0; height: 0;
+  background: rgba(255,255,255,0.2);
+  border-radius: 50%;
+  transition: all 0.5s ease;
+  opacity: 0;
+}
+.btn-place:active::after {
+  inset: -10%;
+  width: 120%; height: 120%;
+  opacity: 1;
+  transition: 0s;
+}
+
+/* ── Toast enhanced ── */
+.pos-toast.show {
+  animation: toastSlide 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards !important;
+}
+
+/* ── Search input focus ring ── */
+.pos-search input:focus {
+  transform: scale(1.01);
+}
+
+/* ── Panel slide-in ── */
+.side-panel.open {
+  animation: slideRight 0.3s cubic-bezier(0.34,1.2,0.64,1) both !important;
+}
+
+/* ── Panel cards stagger ── */
+.panel-card {
+  transition: transform 0.2s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s ease, border-color 0.2s ease !important;
+}
+.panel-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(233,30,140,0.15) !important;
+  border-color: rgba(233,30,140,0.3) !important;
+}
+
+/* ── Receipt modal entrance ── */
+.receipt-modal {
+  animation: popIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both !important;
+}
+.custom-modal {
+  animation: popIn 0.35s cubic-bezier(0.34,1.56,0.64,1) both !important;
+}
+
+/* ── History item hover ── */
+.history-item {
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+.history-item:hover {
+  transform: translateX(4px);
+  border-color: rgba(233,30,140,0.3) !important;
+  box-shadow: 0 4px 16px rgba(233,30,140,0.1) !important;
+}
+
+/* ── Logo pulse ── */
+.s-logo {
+  animation: glowPulse 3s ease infinite;
+}
+
+/* ── Theme toggle rotate ── */
+.s-theme.spinning i {
+  animation: spin 0.4s ease;
+}
+
+/* ── Stats strip entrance ── */
+.stat-card:nth-child(1) { animation-delay: 0.05s; }
+.stat-card:nth-child(2) { animation-delay: 0.1s; }
+.stat-card:nth-child(3) { animation-delay: 0.15s; }
+.stat-card:nth-child(4) { animation-delay: 0.2s; }
+
+/* ── Product grid stagger via JS class ── */
+.product-card.revealed {
+  animation: popIn 0.32s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+
+/* ── Cart empty state ── */
+.empty-cart {
+  transition: opacity 0.3s ease;
+}
+.empty-cart i {
+  animation: fadeUp 1.5s ease infinite alternate;
+}
+@keyframes fadeUp {
+  from { transform: translateY(0); opacity: 0.4; }
+  to   { transform: translateY(-6px); opacity: 0.8; }
+}
+
+/* ── Coupon success flash ── */
+.coupon-inp.success {
+  border-color: var(--green) !important;
+  box-shadow: 0 0 0 3px rgba(34,197,94,0.2) !important;
+  animation: borderFlow 0s; /* reset */
+}
+
+/* ── Summary total highlight on change ── */
+.sum-total .sum-val {
+  transition: color 0.3s ease, transform 0.2s ease;
+  display: inline-block;
+}
+.sum-total .sum-val.updated {
+  animation: cartBounce 0.35s ease;
+}
+
+/* ── Scrollbar themed ── */
+.cart-scroll::-webkit-scrollbar { width: 3px; }
+.cart-scroll::-webkit-scrollbar-track { background: transparent; }
+.cart-scroll::-webkit-scrollbar-thumb { background: rgba(233,30,140,0.3); border-radius: 3px; }
+.cart-scroll::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ── Pay modal ── */
+.pay-btn {
+  transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1) !important;
+}
+.pay-btn:hover { transform: translateY(-2px); }
+
+/* ── Bar fills animate on open ── */
+.bar-fill {
+  transition: width 0.8s cubic-bezier(0.4,0,0.2,1) !important;
+}
+
+/* ── Float-up score particle ── */
+.score-particle {
+  position: fixed;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--green);
+  pointer-events: none;
+  z-index: 9999;
+  animation: floatUp 1s ease forwards;
+}
+
+/* ── Top bar clock ── */
+#liveClock {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted2);
+  letter-spacing: 0.05em;
+  padding: 5px 10px;
+  background: var(--surface2);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+  transition: color 0.3s ease;
+}
+
 </style>
 </head>
 <body>
@@ -657,6 +963,7 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 <main class="pos-main">
   <div class="pos-topbar">
     <div class="pos-title">New <span>Order</span></div>
+    <span id="liveClock"></span>
     <div class="pos-search">
       <i class="fa-solid fa-magnifying-glass si"></i>
       <input type="text" id="searchInput" placeholder="Search menu items…" autocomplete="off">
@@ -1032,6 +1339,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderCats();
   initTableInput();
   renderProducts();
+  requestAnimationFrame(staggerCards);
   initSearch();
   initTabs();
   initTheme();
@@ -1273,7 +1581,10 @@ function renderCats() {
   const allBtn = document.createElement('button');
   allBtn.className = 'cat-pill'+(activeCat==='all'?' active':'');
   allBtn.innerHTML = `<i class="fa-solid fa-border-all" style="font-size:12px"></i> All Items <span class="cat-cnt">${products.length}</span>`;
-  allBtn.addEventListener('click',()=>{ activeCat='all'; renderCats(); renderProducts(); });
+  allBtn.addEventListener('click',()=>{
+    activeCat='all'; renderCats(); renderProducts();
+    requestAnimationFrame(staggerCards);
+  });
   row.appendChild(allBtn);
   DB_CATS.forEach(cat=>{
     const cnt=products.filter(p=>p.cat===cat).length;
@@ -1281,7 +1592,10 @@ function renderCats() {
     const btn=document.createElement('button');
     btn.className='cat-pill'+(activeCat===cat?' active':'');
     btn.innerHTML=`<span>${CAT_ICON[cat]||'🍽️'}</span> ${cat} <span class="cat-cnt">${cnt}</span>`;
-    btn.addEventListener('click',()=>{ activeCat=cat; renderCats(); renderProducts(); });
+    btn.addEventListener('click',()=>{
+      activeCat=cat; renderCats(); renderProducts();
+      requestAnimationFrame(staggerCards);
+    });
     row.appendChild(btn);
   });
 }
@@ -1351,6 +1665,9 @@ function renderProducts() {
       </button>`;
     card.addEventListener('click',e=>{ if(!e.target.closest('.card-add-btn')) addToCart(p.id,e); });
     grid.appendChild(card);
+    // stagger entrance
+    card.style.opacity = '0';
+    card.style.transform = 'scale(0.9) translateY(12px)';
   });
 }
 
@@ -2327,10 +2644,23 @@ async function submitVoidRefund() {
 }
 
 // ── Theme ─────────────────────────────────────────────────────
+// ── Live Clock ────────────────────────────────────────────────
+(function startClock(){
+  const el=document.getElementById('liveClock');
+  if(!el) return;
+  function tick(){
+    el.textContent=new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
+  }
+  tick(); setInterval(tick,1000);
+})();
+
 function initTheme(){
   const saved=localStorage.getItem('pos-theme')||'dark';
   applyTheme(saved);
   document.getElementById('themeBtn').addEventListener('click',()=>{
+    const btn=document.getElementById('themeBtn');
+    btn.classList.add('spinning');
+    setTimeout(()=>btn.classList.remove('spinning'),450);
     applyTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark');
   });
 }
@@ -2340,11 +2670,36 @@ function applyTheme(t){
   document.getElementById('themeIco').className=t==='dark'?'fa-solid fa-sun':'fa-solid fa-moon';
 }
 
+// ── Stagger product cards ────────────────────────────────────
+function staggerCards(){
+  const cards=document.querySelectorAll('.product-card');
+  cards.forEach((card,i)=>{
+    card.style.opacity='0';
+    card.style.transform='scale(0.9) translateY(10px)';
+    setTimeout(()=>{
+      card.style.transition='opacity 0.28s ease, transform 0.32s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.25s ease, border-color 0.25s ease';
+      card.style.opacity='1';
+      card.style.transform='';
+    }, i*40);
+  });
+}
+
 // ── Toast ─────────────────────────────────────────────────────
+function spawnParticle(text,x,y){
+  const p=document.createElement('div');
+  p.className='score-particle';
+  p.textContent=text;
+  p.style.left=x+'px'; p.style.top=y+'px';
+  document.body.appendChild(p);
+  setTimeout(()=>p.remove(),1100);
+}
+
 let toastTimer;
 function showToast(msg,color='var(--accent)',dur=2400){
   const el=document.getElementById('toast');
   el.innerHTML=msg; el.style.background=color;
+  el.classList.remove('show');
+  void el.offsetWidth;
   el.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer=setTimeout(()=>el.classList.remove('show'),dur);
