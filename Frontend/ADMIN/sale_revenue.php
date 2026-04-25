@@ -330,7 +330,7 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
         <div class="row">
           <div class="col-md-3 col-sm-6 col-12">
             <div class="info-box bg-info">
-              <span class="info-box-icon"><i class="fas fa-peso-sign"></i></span>
+              <span class="info-box-icon"><i class="fas fa-money-bill-wave"></i></span>
               <div class="info-box-content">
                 <span class="info-box-text">Net Revenue</span>
                 <span class="info-box-number">&#8369;<?= number_format($totalRevenue, 2) ?></span>
@@ -413,7 +413,7 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
           <div class="col-md-4 col-sm-6 col-12">
             <?php $growthColor = $projGrowthPct >= 0 ? '#28a745' : '#e74c3c';
                   $growthBg    = $projGrowthPct >= 0 ? '#d4edda'  : '#fde8e8';
-                  $growthIcon  = $projGrowthPct >= 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'; ?>
+                  $growthIcon  = $projGrowthPct >= 0 ? 'fa-arrow-up' : 'fa-arrow-down'; ?>
             <div class="info-box" style="background:<?= $growthBg ?>;border-left:4px solid <?= $growthColor ?>;">
               <span class="info-box-icon" style="background:<?= $growthColor ?>;color:#fff;"><i class="fas <?= $growthIcon ?>"></i></span>
               <div class="info-box-content">
@@ -748,4 +748,4 @@ $(function () {
 });
 </script>
 </body>
-</html>
+</html>s

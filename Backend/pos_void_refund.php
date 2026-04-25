@@ -56,7 +56,7 @@ if (in_array($order['status'], ['voided', 'refunded'])) {
 
 // ── Fetch order items ─────────────────────────────────────────
 $stmtItems = $conn->prepare(
-    "SELECT oi.menu_id, oi.qty, oi.unit_price, m.name AS menu_name
+    "SELECT oi.menu_id, oi.qty, oi.unit_price, oi.removed_ingredient_ids, m.name AS menu_name
      FROM order_items oi
      JOIN menu m ON m.id = oi.menu_id
      WHERE oi.order_id = ?"
@@ -66,7 +66,14 @@ $stmtItems->execute();
 $itemsRes   = $stmtItems->get_result();
 $orderItems = [];
 while ($row = $itemsRes->fetch_assoc()) {
-    $orderItems[] = $row;
+    $orderItems[] = [
+        'menu_id'                => intval($row['menu_id']),
+        'qty'                    => intval($row['qty']),
+        'unit_price'             => floatval($row['unit_price']),
+        'menu_name'              => $row['menu_name'],
+        // IDs of ingredients that were removed at order time — do NOT restore these
+        'removed_ingredient_ids' => json_decode($row['removed_ingredient_ids'] ?? '[]', true) ?: [],
+    ];
 }
 $stmtItems->close();
 
@@ -82,9 +89,10 @@ if ($action === 'refund') {
         $orderedMap = [];
         foreach ($orderItems as $oi) {
             $orderedMap[$oi['menu_id']] = [
-                'qty'        => intval($oi['qty']),
-                'unit_price' => floatval($oi['unit_price']),
-                'menu_name'  => $oi['menu_name'],
+                'qty'                    => intval($oi['qty']),
+                'unit_price'             => floatval($oi['unit_price']),
+                'menu_name'              => $oi['menu_name'],
+                'removed_ingredient_ids' => $oi['removed_ingredient_ids'],
             ];
         }
         foreach ($data['refund_items'] as $ri) {
@@ -101,20 +109,32 @@ if ($action === 'refund') {
                 ]);
                 $conn->close(); exit();
             }
-            $refundItems[] = ['menu_id' => $mid, 'qty' => $rqty];
-            $refundAmt    += $orderedMap[$mid]['unit_price'] * $rqty;
+            $refundItems[] = [
+                'menu_id'                => $mid,
+                'qty'                    => $rqty,
+                'removed_ingredient_ids' => $orderedMap[$mid]['removed_ingredient_ids'],
+            ];
+            $refundAmt += $orderedMap[$mid]['unit_price'] * $rqty;
         }
     } else {
         // Full refund
         foreach ($orderItems as $oi) {
-            $refundItems[] = ['menu_id' => intval($oi['menu_id']), 'qty' => intval($oi['qty'])];
+            $refundItems[] = [
+                'menu_id'                => intval($oi['menu_id']),
+                'qty'                    => intval($oi['qty']),
+                'removed_ingredient_ids' => $oi['removed_ingredient_ids'],
+            ];
         }
         $refundAmt = floatval($order['total_amt']);
     }
 } else {
     // Void = return all items
     foreach ($orderItems as $oi) {
-        $refundItems[] = ['menu_id' => intval($oi['menu_id']), 'qty' => intval($oi['qty'])];
+        $refundItems[] = [
+            'menu_id'                => intval($oi['menu_id']),
+            'qty'                    => intval($oi['qty']),
+            'removed_ingredient_ids' => $oi['removed_ingredient_ids'],
+        ];
     }
     $refundAmt = floatval($order['total_amt']);
 }
@@ -136,16 +156,21 @@ try {
     );
 
     foreach ($refundItems as $ri) {
-        $mid  = $ri['menu_id'];
-        $rqty = $ri['qty'];
+        $mid         = $ri['menu_id'];
+        $rqty        = $ri['qty'];
+        $removed_ids = array_map('intval', $ri['removed_ingredient_ids'] ?? []);
 
         $stmtIng->bind_param('i', $mid);
         $stmtIng->execute();
         $ingRes = $stmtIng->get_result();
 
         while ($ing = $ingRes->fetch_assoc()) {
+            $ing_id = intval($ing['ingredient_id']);
+
+            // Only restore ingredients that were actually deducted
+            if (in_array($ing_id, $removed_ids)) continue;
+
             $restore = floatval($ing['qty_needed']) * $rqty;
-            $ing_id  = intval($ing['ingredient_id']);
             $stmtRestore->bind_param('di', $restore, $ing_id);
             $stmtRestore->execute();
         }

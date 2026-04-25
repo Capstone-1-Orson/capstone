@@ -781,10 +781,11 @@ $conn->close();
           var label = ing.name + ' ' + ing.qty_needed + ing.unit;
           var tag = $('<span>').css(tagStyle())
             .attr('title', 'Click to remove')
+            .data('idx', i)
             .html('<i class="fas fa-dot-circle" style="font-size:8px;opacity:0.6"></i> ' +
                   $('<span>').text(label).html() +
                   ' <i class="fas fa-times" style="font-size:9px;opacity:0.7;margin-left:2px"></i>')
-            .on('click', function () { selected.splice(i, 1); renderTags(); updateHidden(); })
+            .on('click', function () { selected.splice($(this).data('idx'), 1); renderTags(); updateHidden(); })
             .hover(
               function () { $(this).css('background', 'rgba(233,30,140,0.25)'); },
               function () { $(this).css('background', 'rgba(233,30,140,0.12)'); }
@@ -876,10 +877,11 @@ $conn->close();
               color:'#e91e8c',fontSize:'12.5px',fontWeight:'500',cursor:'pointer'
             })
             .attr('title', 'Click to remove')
+            .data('idx', i)
             .html('<i class="fas fa-dot-circle" style="font-size:8px;opacity:0.6"></i> ' +
                   $('<span>').text(label).html() +
                   ' <i class="fas fa-times" style="font-size:9px;opacity:0.7;margin-left:2px"></i>')
-            .on('click', function () { editSelected.splice(i, 1); editRenderTags(); editUpdateHidden(); })
+            .on('click', function () { editSelected.splice($(this).data('idx'), 1); editRenderTags(); editUpdateHidden(); })
             .hover(
               function () { $(this).css('background', 'rgba(233,30,140,0.25)'); },
               function () { $(this).css('background', 'rgba(233,30,140,0.12)'); }

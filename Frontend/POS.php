@@ -132,6 +132,26 @@ if ($hasOrderItems) {
     if ($r) while ($row = $r->fetch_assoc()) $db_transactions[] = $row;
 }
 
+// ── Fetch real ingredients per menu item ───────────────────────
+$menu_ingredients_map = [];
+$hasMenuIngredients = tableExists($conn, 'menu_ingredients');
+if ($hasMenuIngredients) {
+    $r = $conn->query(
+        "SELECT mi.menu_id, i.id AS ingredient_id, i.name
+         FROM menu_ingredients mi
+         JOIN ingredients i ON i.id = mi.ingredient_id
+         ORDER BY mi.menu_id, i.name"
+    );
+    if ($r) {
+        while ($row = $r->fetch_assoc()) {
+            $menu_ingredients_map[(int)$row['menu_id']][] = [
+                'id'   => (int)$row['ingredient_id'],
+                'name' => $row['name'],
+            ];
+        }
+    }
+}
+
 $conn->close();
 
 // JSON for JS
@@ -166,16 +186,17 @@ $cat_emoji = [
     'Waffles'       => '🧇',
 ];
 
-$products_json = json_encode(array_map(function($item) use ($cat_emoji) {
+$products_json = json_encode(array_map(function($item) use ($cat_emoji, $menu_ingredients_map) {
     return [
-        'id'    => (int)$item['id'],
-        'cat'   => $item['category'],
-        'emoji' => $cat_emoji[$item['category']] ?? '🍽️',
-        'name'  => $item['name'],
-        'price' => (float)$item['price'],
-        'desc'  => $item['description'] ?? '',
-        'image' => $item['image'] ?? '',
-        'badge' => '',
+        'id'          => (int)$item['id'],
+        'cat'         => $item['category'],
+        'emoji'       => $cat_emoji[$item['category']] ?? '🍽️',
+        'name'        => $item['name'],
+        'price'       => (float)$item['price'],
+        'desc'        => $item['description'] ?? '',
+        'image'       => $item['image'] ?? '',
+        'badge'       => '',
+        'ingredients' => $menu_ingredients_map[(int)$item['id']] ?? [],
     ];
 }, $menu_items));
 
@@ -452,6 +473,55 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 .form-control::placeholder{color:var(--muted)!important;}
 .form-label{color:var(--muted2);font-size:13px;font-weight:600;}
 
+/* ── CUSTOMIZATION MODAL ── */
+.custom-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:2500;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn .22s ease;}
+.custom-modal{background:var(--surface);border:1px solid var(--border2);border-radius:20px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;animation:slideUp .3s ease;box-shadow:0 24px 60px rgba(0,0,0,.55);}
+.custom-header{padding:18px 20px 14px;border-bottom:1px solid var(--border);position:relative;display:flex;align-items:center;gap:13px;}
+.custom-header-img{width:56px;height:56px;border-radius:12px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;overflow:hidden;}
+.custom-header-img img{width:100%;height:100%;object-fit:cover;border-radius:12px;}
+.custom-header-info{flex:1;min-width:0;}
+.custom-item-name{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.custom-item-price{font-size:14px;color:var(--accent);font-weight:700;margin-top:2px;}
+.custom-close-x{position:absolute;top:14px;right:14px;width:30px;height:30px;border-radius:8px;background:var(--surface3);color:var(--muted2);display:flex;align-items:center;justify-content:center;font-size:13px;transition:all var(--tr);}
+.custom-close-x:hover{background:var(--red);color:#fff;}
+.custom-section{padding:14px 20px;}
+.custom-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.custom-section-title i{font-size:11px;}
+/* Remove ingredients */
+.ing-grid{display:flex;flex-wrap:wrap;gap:7px;}
+.ing-chip{display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:50px;border:1px solid var(--border2);background:var(--surface2);font-size:12px;font-weight:500;color:var(--muted2);cursor:pointer;transition:all var(--tr);user-select:none;}
+.ing-chip:hover{border-color:var(--red);color:var(--red);background:rgba(239,68,68,.08);}
+.ing-chip.removed{background:rgba(239,68,68,.10);border-color:rgba(239,68,68,.4);color:var(--red);text-decoration:line-through;opacity:.7;}
+.ing-chip i{font-size:10px;}
+/* Add-ons */
+.addon-list{display:flex;flex-direction:column;gap:7px;}
+.addon-row{display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;transition:all var(--tr);}
+.addon-row:hover{border-color:var(--border2);}
+.addon-row.selected{border-color:rgba(233,30,140,.4);background:var(--accent-soft);}
+.addon-info{flex:1;min-width:0;}
+.addon-name{font-size:13px;font-weight:600;}
+.addon-price{font-size:11.5px;color:var(--accent);margin-top:1px;font-weight:600;}
+.addon-qty-ctrl{display:flex;align-items:center;gap:7px;flex-shrink:0;}
+.addon-qty-btn{width:26px;height:26px;border-radius:7px;background:var(--surface3);color:var(--muted2);font-size:11px;display:flex;align-items:center;justify-content:center;transition:all var(--tr);}
+.addon-qty-btn:hover{background:var(--accent);color:#fff;}
+.addon-qty-v{font-size:13px;font-weight:700;min-width:18px;text-align:center;}
+/* Special instructions */
+.custom-notes{width:100%;padding:10px 12px;background:var(--surface2);border:1.5px solid var(--border2);border-radius:10px;color:var(--text);font-size:13px;font-family:inherit;resize:none;transition:all var(--tr);min-height:68px;}
+.custom-notes:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow);}
+.custom-notes::placeholder{color:var(--muted);}
+/* Footer */
+.custom-footer{padding:14px 20px 20px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--border);}
+.custom-total-row{display:flex;justify-content:space-between;align-items:center;font-size:14px;}
+.custom-total-lbl{color:var(--muted2);font-weight:500;}
+.custom-total-val{font-size:18px;font-weight:800;color:var(--accent);}
+.btn-add-custom{background:var(--accent);color:#fff;font-weight:700;font-size:14px;padding:13px;border-radius:12px;width:100%;display:flex;align-items:center;justify-content:center;gap:8px;transition:all var(--tr);box-shadow:0 4px 20px var(--accent-glow);}
+.btn-add-custom:hover{background:var(--accent-hover);transform:translateY(-1px);}
+/* Cart customization notes */
+.ci-custom-notes{font-size:10.5px;color:var(--muted);margin-top:2px;line-height:1.4;}
+.ci-custom-notes span{display:inline-block;background:var(--surface3);border-radius:4px;padding:1px 5px;margin:1px 2px 1px 0;}
+.ci-custom-notes .removed-note{color:var(--red);background:rgba(239,68,68,.1);}
+.ci-custom-notes .addon-note{color:var(--accent);background:var(--accent-soft);}
+
 /* Light mode overrides */
 [data-theme="light"] .pos-sidebar{background:#fff;border-right-color:rgba(233,30,140,.12);}
 [data-theme="light"] .pos-order{background:#fff;border-left-color:rgba(233,30,140,.12);}
@@ -660,6 +730,9 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
     <i class="fa-solid fa-credit-card"></i> Pay & Place Order
   </button>
 </aside>
+
+<!-- ── Customization Modal ─────────────────────────────── -->
+<div id="customModal" style="display:none;"></div>
 
 <!-- ── Receipt Modal container ───────────────────────────── -->
 <div id="receiptContainer"></div>
@@ -1283,39 +1356,256 @@ function renderProducts() {
   });
 }
 
+// ── Add-ons per category ──────────────────────────────────────
+// Real ingredients come from the DB (product.ingredients[]).
+// Only add-ons are configured here since they are POS-level upsells.
+const ADDONS_BY_CAT = {
+  'default':    [{name:'Extra Sauce',price:15},{name:'Extra Serving',price:55}],
+  'Coffee':     [{name:'Extra Espresso Shot',price:30},{name:'Oat Milk Upgrade',price:25},{name:'Whipped Cream',price:15},{name:'Extra Syrup',price:15},{name:'Almond Milk Upgrade',price:25}],
+  'Frappe':     [{name:'Extra Blended Shot',price:30},{name:'Whipped Cream',price:15},{name:'Extra Drizzle',price:15},{name:'Oat Milk Upgrade',price:25}],
+  'Non-Coffee': [{name:'Extra Honey',price:15},{name:'Milk Upgrade',price:20},{name:'Extra Syrup',price:15}],
+  'Shake':      [{name:'Protein Powder',price:40},{name:'Extra Fruit',price:25},{name:'Chia Seeds',price:20}],
+  'Croffle':    [{name:'Ice Cream Scoop',price:45},{name:'Extra Drizzle',price:15},{name:'Whipped Cream',price:15},{name:'Fresh Berries',price:35}],
+  'Croffle Box':[{name:'Ice Cream Scoop',price:45},{name:'Extra Drizzle',price:15},{name:'Whipped Cream',price:15}],
+  'Pasta':      [{name:'Extra Pasta',price:40},{name:'Extra Sauce',price:20},{name:'Garlic Bread',price:35},{name:'Extra Parmesan',price:15}],
+  'Rice Meal':  [{name:'Extra Rice',price:20},{name:'Extra Sauce/Gravy',price:15},{name:'Fried Egg',price:25},{name:'Side of Fries',price:45}],
+  'Bites & Treats':[{name:'Extra Dip',price:15},{name:'Extra Serving',price:45}],
+  'Beer & Wine':[{name:'Extra Glass',price:50},{name:'Ice Bucket',price:30}],
+};
+
+function getAddons(cat) {
+  return ADDONS_BY_CAT[cat] || ADDONS_BY_CAT['default'];
+}
+
+// ── Customization State ───────────────────────────────────────
+let customProduct   = null;
+let customRemoved   = new Set();   // Set of ingredient indices that are removed
+let customAddonQty  = [];          // parallel array of qty per addon def
+let customAddonDefs = [];          // [{name,price}] for current product
+
+// ── Open customization modal ──────────────────────────────────
+function openCustomModal(id) {
+  const product = products.find(p => p.id === id);
+  if (!product) return;
+  customProduct   = product;
+  customRemoved   = new Set();
+  customAddonDefs = getAddons(product.cat);
+  customAddonQty  = new Array(customAddonDefs.length).fill(0);
+
+  renderCustomModal();
+
+  const m = document.getElementById('customModal');
+  m.style.cssText = 'display:flex;position:fixed;inset:0;z-index:2500;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.72);animation:fadeIn .22s ease;';
+  m.onclick = e => { if (e.target === m) closeCustomModal(); };
+}
+
+function closeCustomModal() {
+  const m = document.getElementById('customModal');
+  m.style.transition = 'opacity .18s ease';
+  m.style.opacity = '0';
+  setTimeout(() => { m.style.cssText = 'display:none;'; }, 180);
+}
+
+function renderCustomModal() {
+  const p   = customProduct;
+  const ings = p.ingredients || [];   // real {id, name} objects from DB
+
+  const imgHTML = p.image
+    ? `<img src="${p.image.replace('Frontend/','')}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span style="display:none;font-size:28px;">${p.emoji}</span>`
+    : `<span style="font-size:28px;">${p.emoji}</span>`;
+
+  // ── Ingredient chips — index-keyed, no name in DOM id ────────
+  let ingsSection = '';
+  if (ings.length > 0) {
+    const chips = ings.map((ing, i) => `
+      <button type="button" class="ing-chip" data-idx="${i}" onclick="toggleIngredient(${i})">
+        <i class="fa-solid fa-check ing-icon" style="font-size:9px;pointer-events:none;"></i>
+        <span style="pointer-events:none;">${escHtml(ing.name)}</span>
+      </button>`).join('');
+    ingsSection = `
+      <div class="custom-section" style="border-bottom:1px solid var(--border);">
+        <div class="custom-section-title">
+          <i class="fa-solid fa-ban" style="color:var(--red)"></i> Remove Ingredients
+          <span style="font-weight:400;text-transform:none;font-size:11px;letter-spacing:0;color:var(--muted2)">(tap to remove)</span>
+        </div>
+        <div class="ing-grid" id="ingGrid">${chips}</div>
+      </div>`;
+  } else {
+    // No DB ingredients — show a plain note instead of broken chips
+    ingsSection = `
+      <div class="custom-section" style="border-bottom:1px solid var(--border);">
+        <div class="custom-section-title">
+          <i class="fa-solid fa-ban" style="color:var(--red)"></i> Remove Ingredients
+        </div>
+        <div style="font-size:12px;color:var(--muted);padding:4px 2px;">
+          No linked ingredients — use Special Instructions below.
+        </div>
+      </div>`;
+  }
+
+  // ── Add-ons ───────────────────────────────────────────────────
+  const addonsHTML = customAddonDefs.map((a, i) => `
+    <div class="addon-row" id="arow-${i}">
+      <div class="addon-info">
+        <div class="addon-name">${escHtml(a.name)}</div>
+        <div class="addon-price">+₱${a.price.toLocaleString('en',{minimumFractionDigits:2})}</div>
+      </div>
+      <div class="addon-qty-ctrl">
+        <button type="button" class="addon-qty-btn" onclick="changeAddonQty(${i},-1)"><i class="fa-solid fa-minus" style="font-size:9px"></i></button>
+        <span class="addon-qty-v" id="aqty-${i}">0</span>
+        <button type="button" class="addon-qty-btn" onclick="changeAddonQty(${i},1)"><i class="fa-solid fa-plus" style="font-size:9px"></i></button>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('customModal').innerHTML = `
+  <div class="custom-modal" onclick="event.stopPropagation()">
+    <div class="custom-header">
+      <div class="custom-header-img">${imgHTML}</div>
+      <div class="custom-header-info">
+        <div class="custom-item-name">${escHtml(p.name)}</div>
+        <div class="custom-item-price">₱${p.price.toLocaleString('en',{minimumFractionDigits:2})}</div>
+      </div>
+      <button type="button" class="custom-close-x" onclick="closeCustomModal()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    ${ingsSection}
+    <div class="custom-section" style="border-bottom:1px solid var(--border);">
+      <div class="custom-section-title">
+        <i class="fa-solid fa-circle-plus" style="color:var(--accent)"></i> Add-Ons
+      </div>
+      <div class="addon-list">${addonsHTML}</div>
+    </div>
+    <div class="custom-section" style="border-bottom:1px solid var(--border);">
+      <div class="custom-section-title">
+        <i class="fa-solid fa-pen-to-square" style="color:var(--blue)"></i> Special Instructions
+      </div>
+      <textarea class="custom-notes" id="customNotes" placeholder="e.g. No spice, well done, allergy note…" rows="2"></textarea>
+    </div>
+    <div class="custom-footer">
+      <div class="custom-total-row">
+        <span class="custom-total-lbl">Item Total</span>
+        <span class="custom-total-val" id="customTotalDisplay">₱${p.price.toLocaleString('en',{minimumFractionDigits:2})}</span>
+      </div>
+      <button type="button" class="btn-add-custom" onclick="confirmAddToCart()">
+        <i class="fa-solid fa-cart-plus"></i> Add to Order
+      </button>
+    </div>
+  </div>`;
+}
+
+// Safe HTML escape — avoids XSS in ingredient/item names
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Toggle ingredient removal by index — no DOM-id fragility
+function toggleIngredient(idx) {
+  const grid = document.getElementById('ingGrid');
+  if (!grid) return;
+  const chip = grid.querySelector(`.ing-chip[data-idx="${idx}"]`);
+  if (!chip) return;
+
+  if (customRemoved.has(idx)) {
+    customRemoved.delete(idx);
+    chip.classList.remove('removed');
+    chip.querySelector('.ing-icon').className = 'fa-solid fa-check ing-icon';
+  } else {
+    customRemoved.add(idx);
+    chip.classList.add('removed');
+    chip.querySelector('.ing-icon').className = 'fa-solid fa-xmark ing-icon';
+  }
+}
+
+function changeAddonQty(idx, delta) {
+  customAddonQty[idx] = Math.max(0, (customAddonQty[idx] || 0) + delta);
+  const qEl  = document.getElementById(`aqty-${idx}`);
+  const rEl  = document.getElementById(`arow-${idx}`);
+  if (qEl) qEl.textContent = customAddonQty[idx];
+  if (rEl) rEl.classList.toggle('selected', customAddonQty[idx] > 0);
+  updateCustomTotal();
+}
+
+function updateCustomTotal() {
+  const addonTotal = customAddonDefs.reduce((s, a, i) => s + a.price * (customAddonQty[i] || 0), 0);
+  const el = document.getElementById('customTotalDisplay');
+  if (el) el.textContent = '₱' + (customProduct.price + addonTotal).toLocaleString('en', {minimumFractionDigits:2});
+}
+
+function confirmAddToCart() {
+  const p    = customProduct;
+  const ings = p.ingredients || [];
+  const notes = (document.getElementById('customNotes')?.value || '').trim();
+
+  // Collect removed ingredients {id, name} from the Set of indices
+  const removedIngs = [...customRemoved].map(i => ings[i]).filter(Boolean);
+
+  // Collect selected add-ons
+  const selectedAddons = customAddonDefs
+    .map((a, i) => ({...a, qty: customAddonQty[i] || 0}))
+    .filter(a => a.qty > 0);
+  const addonExtra = selectedAddons.reduce((s, a) => s + a.price * a.qty, 0);
+
+  const cartKey = `${p.id}_${Date.now()}`;
+  cart.push({
+    ...p,
+    qty:        1,
+    cartKey,
+    removedIngs,
+    addons:     selectedAddons,
+    notes,
+    price:      p.price + addonExtra,
+    basePrice:  p.price,
+  });
+
+  closeCustomModal();
+  updateCartUI();
+  refreshCardState(p.id);
+
+  const addonCount   = selectedAddons.reduce((s, a) => s + a.qty, 0);
+  const removedCount = removedIngs.length;
+  let toastMsg = `<i class="fa-solid fa-circle-plus me-1"></i> ${escHtml(p.name)} added!`;
+  if (addonCount > 0 || removedCount > 0) {
+    const parts = [];
+    if (addonCount)   parts.push(`${addonCount} add-on${addonCount > 1 ? 's' : ''}`);
+    if (removedCount) parts.push(`${removedCount} removed`);
+    toastMsg += ` <small style="opacity:.8">(${parts.join(', ')})</small>`;
+  }
+  showToast(toastMsg, 'var(--accent)');
+}
+
 // ── Cart Operations ───────────────────────────────────────────
-function addToCart(id,e) {
-  const product=products.find(p=>p.id===id);
-  if(!product) return;
-  const ex=cart.find(c=>c.id===id);
-  if(ex) ex.qty++;
-  else cart.push({...product,qty:1});
-  refreshCardState(id);
-  updateCartUI();
-  showToast(`<i class="fa-solid fa-circle-plus me-1"></i> ${product.name} added!`,'var(--accent)');
+function addToCart(id, e) {
+  if (e) e.stopPropagation();
+  openCustomModal(id);
 }
 
-function changeQty(id,d) {
-  const item=cart.find(c=>c.id===id);
-  if(!item) return;
-  item.qty+=d;
-  if(item.qty<=0){ cart=cart.filter(c=>c.id!==id); refreshCardState(id); }
+
+function changeQty(cartKey, d) {
+  const item = cart.find(c => c.cartKey === cartKey);
+  if (!item) return;
+  item.qty += d;
+  if (item.qty <= 0) {
+    const pid = item.id;
+    cart = cart.filter(c => c.cartKey !== cartKey);
+    refreshCardState(pid);
+  }
   updateCartUI();
 }
 
-function removeItem(id) {
-  cart=cart.filter(c=>c.id!==id);
-  refreshCardState(id);
+function removeItem(cartKey) {
+  const item = cart.find(c => c.cartKey === cartKey);
+  const pid = item ? item.id : null;
+  cart = cart.filter(c => c.cartKey !== cartKey);
+  if (pid) refreshCardState(pid);
   updateCartUI();
 }
 
 function refreshCardState(id) {
-  const card=document.querySelector(`.product-card[data-id="${id}"]`);
-  if(!card) return;
-  const inCart=cart.some(c=>c.id===id);
-  card.classList.toggle('in-cart',inCart);
-  const btn=card.querySelector('.card-add-btn');
-  if(btn) btn.innerHTML=`<i class="fa-solid fa-${inCart?'check':'plus'}"></i> ${inCart?'Added':'Add to Order'}`;
+  const card = document.querySelector(`.product-card[data-id="${id}"]`);
+  if (!card) return;
+  const inCart = cart.some(c => c.id === id);
+  card.classList.toggle('in-cart', inCart);
+  const btn = card.querySelector('.card-add-btn');
+  if (btn) btn.innerHTML = `<i class="fa-solid fa-${inCart ? 'check' : 'plus'}"></i> ${inCart ? 'Added' : 'Add to Order'}`;
 }
 
 function updateCartUI() {
@@ -1344,6 +1634,20 @@ function updateCartUI() {
     cart.forEach(item=>{
       const el=document.createElement('div');
       el.className='cart-item';
+
+      // Build customization notes HTML
+      const removedParts = (item.removedIngs||[]).map(r=>`<span class="removed-note">No ${r.name||r}</span>`).join('');
+      const addonParts   = (item.addons||[]).map(a=>`<span class="addon-note">+${a.qty>1?a.qty+'× ':''}${a.name}</span>`).join('');
+      const notesPart    = item.notes ? `<span style="color:var(--muted2);font-style:italic;">"${item.notes}"</span>` : '';
+      const customNotesHTML = (removedParts||addonParts||notesPart)
+        ? `<div class="ci-custom-notes">${removedParts}${addonParts}${notesPart}</div>` : '';
+
+      const addonExtra = (item.addons||[]).reduce((s,a)=>s+a.price*a.qty,0);
+      const priceLabel = addonExtra>0
+        ? `₱${(item.basePrice||item.price).toLocaleString('en',{minimumFractionDigits:2})} +₱${addonExtra.toFixed(2)} add-ons`
+        : `₱${item.price.toLocaleString('en',{minimumFractionDigits:2})} each`;
+
+      const ck = item.cartKey;
       el.innerHTML=`
         <div class="ci-emoji">
           ${item.image
@@ -1353,16 +1657,17 @@ function updateCartUI() {
         </div>
         <div class="ci-info">
           <div class="ci-name">${item.name}</div>
-          <div class="ci-price">₱${item.price.toLocaleString('en',{minimumFractionDigits:2})} each</div>
+          <div class="ci-price">${priceLabel}</div>
+          ${customNotesHTML}
         </div>
         <div class="qty-ctrl">
-          <button class="qty-btn" onclick="changeQty(${item.id},-1)"><i class="fa-solid fa-minus" style="font-size:9px"></i></button>
+          <button class="qty-btn" onclick="changeQty('${ck}',-1)"><i class="fa-solid fa-minus" style="font-size:9px"></i></button>
           <span class="qty-v">${item.qty}</span>
-          <button class="qty-btn" onclick="changeQty(${item.id},1)"><i class="fa-solid fa-plus" style="font-size:9px"></i></button>
+          <button class="qty-btn" onclick="changeQty('${ck}',1)"><i class="fa-solid fa-plus" style="font-size:9px"></i></button>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
           <span class="ci-total">₱${(item.price*item.qty).toLocaleString('en',{minimumFractionDigits:2})}</span>
-          <button class="btn-rm" onclick="removeItem(${item.id})"><i class="fa-solid fa-trash-can"></i></button>
+          <button class="btn-rm" onclick="removeItem('${ck}')"><i class="fa-solid fa-trash-can"></i></button>
         </div>`;
       scroll.appendChild(el);
     });
@@ -1541,7 +1846,15 @@ function placeOrder() {
     table_no:  selTable,
     status:    'pending',
     total_amt: total,
-    items: cart.map(c=>({ menu_id:c.id, qty:c.qty, unit_price:c.price }))
+    items: cart.map(c=>({
+      menu_id:    c.id,
+      qty:        c.qty,
+      unit_price: c.price,
+      removed_ingredients:    (c.removedIngs||[]).map(r=>r.name||r).join(', '),
+      removed_ingredient_ids: (c.removedIngs||[]).map(r=>r.id).filter(Boolean),
+      addons:     (c.addons||[]).map(a=>`${a.qty>1?a.qty+'× ':''}${a.name} (+₱${a.price})`).join(', '),
+      notes:      c.notes||'',
+    }))
   };
 
   const btn=document.getElementById('btnConfirmPay');
@@ -1552,7 +1865,12 @@ function placeOrder() {
   const cartSnapshot=cart.map(c=>({...c}));
   const orderData_base={
     table:selTable,
-    items:cartSnapshot,
+    items:cartSnapshot.map(c=>({
+      ...c,
+      removedIngs: c.removedIngs||[],
+      addons:      c.addons||[],
+      notes:       c.notes||'',
+    })),
     subtotal:sub,
     discount,
     total,
@@ -1683,12 +2001,23 @@ function showReceipt(data) {
   const activeTab=document.querySelector('.o-tab.active');
   const orderType=activeTab?activeTab.textContent.trim():'Dine In';
 
-  const itemsHTML=data.items.map(item=>`
-    <div class="receipt-item-row">
-      <span class="ri-name">${item.name}</span>
-      <span class="ri-qty">×${item.qty}</span>
-      <span class="ri-subtotal">₱${(item.price*item.qty).toLocaleString('en',{minimumFractionDigits:2})}</span>
-    </div>`).join('');
+  const itemsHTML=data.items.map(item=>{
+    const removedLine = (item.removedIngs||[]).length
+      ? `<div style="font-size:10px;color:#ef4444;margin-top:2px;">No: ${item.removedIngs.join(', ')}</div>` : '';
+    const addonLine = (item.addons||[]).length
+      ? `<div style="font-size:10px;color:#e91e8c;margin-top:1px;">+ ${item.addons.map(a=>`${a.qty>1?a.qty+'× ':''}${a.name}`).join(', ')}</div>` : '';
+    const noteLine = item.notes
+      ? `<div style="font-size:10px;color:#999;font-style:italic;margin-top:1px;">"${item.notes}"</div>` : '';
+    return `
+    <div class="receipt-item-row" style="flex-direction:column;align-items:flex-start;gap:3px;">
+      <div style="display:flex;align-items:center;gap:8px;width:100%;">
+        <span class="ri-name">${item.name}</span>
+        <span class="ri-qty">×${item.qty}</span>
+        <span class="ri-subtotal">₱${(item.price*item.qty).toLocaleString('en',{minimumFractionDigits:2})}</span>
+      </div>
+      ${removedLine}${addonLine}${noteLine}
+    </div>`;
+  }).join('');
 
   const discHTML=data.discount>0?`
     <div class="rt-row"><span class="rt-lbl">Discount</span><span class="rt-val rt-disc">-₱${data.discount.toFixed(2)}</span></div>`:'';

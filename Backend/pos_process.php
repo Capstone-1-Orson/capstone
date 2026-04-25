@@ -43,16 +43,22 @@ $stmtCheck = $conn->prepare(
 $needs = [];
 
 foreach ($items as $item) {
-    $menu_id = intval($item['menu_id']);
-    $qty     = intval($item['qty']);
+    $menu_id      = intval($item['menu_id']);
+    $qty          = intval($item['qty']);
+    // IDs of ingredients the customer removed — do NOT check/deduct these
+    $removed_ids  = array_map('intval', $item['removed_ingredient_ids'] ?? []);
 
     $stmtCheck->bind_param('i', $menu_id);
     $stmtCheck->execute();
     $res = $stmtCheck->get_result();
 
     while ($row = $res->fetch_assoc()) {
-        $id        = intval($row['id']);
-        $required  = floatval($row['qty_needed']) * $qty;
+        $id = intval($row['id']);
+
+        // Skip ingredients the customer asked to remove
+        if (in_array($id, $removed_ids)) continue;
+
+        $required = floatval($row['qty_needed']) * $qty;
 
         if (!isset($needs[$id])) {
             $needs[$id] = [
@@ -107,8 +113,8 @@ try {
     $stmt->close();
 
     $stmtItem = $conn->prepare(
-        "INSERT INTO order_items (order_id, menu_id, qty, unit_price)
-         VALUES (?, ?, ?, ?)"
+        "INSERT INTO order_items (order_id, menu_id, qty, unit_price, removed_ingredient_ids)
+         VALUES (?, ?, ?, ?, ?)"
     );
 
     $stmtIngReq = $conn->prepare(
@@ -125,11 +131,14 @@ try {
     );
 
     foreach ($items as $item) {
-        $menu_id    = intval($item['menu_id']);
-        $qty        = intval($item['qty']);
-        $unit_price = floatval($item['unit_price']);
+        $menu_id      = intval($item['menu_id']);
+        $qty          = intval($item['qty']);
+        $unit_price   = floatval($item['unit_price']);
+        // IDs of ingredients the customer removed — do NOT deduct these
+        $removed_ids  = array_map('intval', $item['removed_ingredient_ids'] ?? []);
 
-        $stmtItem->bind_param('iiid', $order_id, $menu_id, $qty, $unit_price);
+        $removed_ids_json = json_encode($removed_ids);  // e.g. [3,7] or []
+        $stmtItem->bind_param('iiiis', $order_id, $menu_id, $qty, $unit_price, $removed_ids_json);
         $stmtItem->execute();
 
         $stmtIngReq->bind_param('i', $menu_id);
@@ -138,8 +147,11 @@ try {
 
         while ($ing = $ingResult->fetch_assoc()) {
             $ingredient_id = intval($ing['ingredient_id']);
-            $total_deduct  = floatval($ing['qty_needed']) * $qty;
 
+            // Skip ingredients the customer asked to remove
+            if (in_array($ingredient_id, $removed_ids)) continue;
+
+            $total_deduct = floatval($ing['qty_needed']) * $qty;
             $stmtDeduct->bind_param('di', $total_deduct, $ingredient_id);
             $stmtDeduct->execute();
         }

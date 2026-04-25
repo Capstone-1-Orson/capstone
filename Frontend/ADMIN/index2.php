@@ -119,7 +119,7 @@ if ($r) while ($row = $r->fetch_assoc()) $staffList[] = $row;
 $recentOrders = [];
 if ($hasOrderItems) {
     $r = $conn->query(
-        "SELECT o.id, o.table_no, o.total_amt,
+        "SELECT o.id, o.table_no, o.total_amt, o.created_at,
                 GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items
          FROM orders o
          JOIN order_items oi ON oi.order_id = o.id
@@ -129,9 +129,38 @@ if ($hasOrderItems) {
     );
     if ($r) while ($row = $r->fetch_assoc()) $recentOrders[] = $row;
 } else {
-    $r = $conn->query("SELECT id, table_no, total_amt, '—' AS items FROM orders WHERE $VALID ORDER BY created_at DESC LIMIT 5");
+    $r = $conn->query("SELECT id, table_no, total_amt, created_at, '—' AS items FROM orders WHERE $VALID ORDER BY created_at DESC LIMIT 5");
     if ($r) while ($row = $r->fetch_assoc()) $recentOrders[] = $row;
 }
+
+// ── Revenue Forecasting — Linear Regression on 6-month data ───
+function linearRegression(array $y): array {
+    $n = count($y);
+    if ($n < 2) return ['slope' => 0, 'intercept' => 0];
+    $sumX = 0; $sumY = 0; $sumXY = 0; $sumX2 = 0;
+    for ($i = 0; $i < $n; $i++) {
+        $sumX  += $i; $sumY  += $y[$i];
+        $sumXY += $i * $y[$i]; $sumX2 += $i * $i;
+    }
+    $denom = $n * $sumX2 - $sumX * $sumX;
+    if ($denom == 0) return ['slope' => 0, 'intercept' => $sumY / $n];
+    $slope     = ($n * $sumXY - $sumX * $sumY) / $denom;
+    $intercept = ($sumY - $slope * $sumX) / $n;
+    return ['slope' => $slope, 'intercept' => $intercept];
+}
+$reg = linearRegression($chartData);
+$n   = count($chartData);
+$forecastData   = [];
+$forecastLabels = [];
+for ($f = 1; $f <= 3; $f++) {
+    $forecastData[]   = round(max(0, $reg['intercept'] + $reg['slope'] * ($n - 1 + $f)), 2);
+    $forecastLabels[] = date('M Y', strtotime("+$f months"));
+}
+$projNextMonth   = $forecastData[0];
+$lastMonthActual = end($chartData);
+$projGrowthPct   = $lastMonthActual > 0
+    ? (($projNextMonth - $lastMonthActual) / $lastMonthActual) * 100 : 0;
+$avgMonthRev     = array_sum($chartData) / max(1, count(array_filter($chartData, fn($v) => $v > 0)));
 
 $conn->close();
 
@@ -355,7 +384,7 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
                   </div>
                   <div class="col-sm-3 col-6">
                     <div class="description-block">
-                      <span class="description-percentage text-success"><i class="fas fa-peso-sign"></i></span>
+                      <span class="description-percentage text-success"><i class="fas fa-money-bill-wave"></i></span>
                       <h5 class="description-header">&#8369;<?= number_format($totalRevenue, 2) ?></h5>
                       <span class="description-text">ALL-TIME REVENUE</span>
                     </div>
@@ -459,7 +488,7 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
               </div>
             </div>
             <div class="info-box mb-3 bg-success">
-              <span class="info-box-icon"><i class="fas fa-peso-sign"></i></span>
+              <span class="info-box-icon"><i class="fas fa-money-bill-wave"></i></span>
               <div class="info-box-content">
                 <span class="info-box-text">Today's Revenue</span>
                 <span class="info-box-number">&#8369;<?= number_format($dailyRevenue, 2) ?></span>
@@ -482,6 +511,45 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
           </div>
         </div>
 
+        <!-- ── Revenue Forecast Cards ──────────────────────── -->
+        <?php
+          $growthColor = $projGrowthPct >= 0 ? '#28a745' : '#e74c3c';
+          $growthBg    = $projGrowthPct >= 0 ? '#d4edda'  : '#fde8e8';
+          $growthIcon  = $projGrowthPct >= 0 ? 'fa-arrow-up' : 'fa-arrow-down';
+        ?>
+        <div class="row mb-3">
+          <div class="col-md-4 col-sm-6 col-12">
+            <div class="info-box" style="background:#f0e6ff;border-left:4px solid #8e44ad;">
+              <span class="info-box-icon" style="background:#8e44ad;color:#fff;"><i class="fas fa-chart-line"></i></span>
+              <div class="info-box-content">
+                <span class="info-box-text" style="color:#555;">Next Month Forecast</span>
+                <span class="info-box-number" style="color:#8e44ad;">&#8369;<?= number_format($projNextMonth, 2) ?></span>
+                <span class="progress-description" style="font-size:11px;color:#888;">Linear regression estimate</span>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 col-sm-6 col-12">
+            <div class="info-box" style="background:<?= $growthBg ?>;border-left:4px solid <?= $growthColor ?>;">
+              <span class="info-box-icon" style="background:<?= $growthColor ?>;color:#fff;"><i class="fas <?= $growthIcon ?>"></i></span>
+              <div class="info-box-content">
+                <span class="info-box-text" style="color:#555;">Projected Growth</span>
+                <span class="info-box-number" style="color:<?= $growthColor ?>;"><?= ($projGrowthPct >= 0 ? '+' : '') . number_format($projGrowthPct, 1) ?>%</span>
+                <span class="progress-description" style="font-size:11px;color:#888;">vs. current month</span>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4 col-sm-6 col-12">
+            <div class="info-box" style="background:#e8f4fd;border-left:4px solid #3c8dbc;">
+              <span class="info-box-icon" style="background:#3c8dbc;color:#fff;"><i class="fas fa-calculator"></i></span>
+              <div class="info-box-content">
+                <span class="info-box-text" style="color:#555;">Avg Monthly Revenue</span>
+                <span class="info-box-number" style="color:#3c8dbc;">&#8369;<?= number_format($avgMonthRev, 2) ?></span>
+                <span class="progress-description" style="font-size:11px;color:#888;">Based on last 6 months</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- ── Recent Orders ──────────────────────────────── -->
         <div class="row">
           <div class="col-12">
@@ -495,7 +563,8 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
                     <thead>
                       <tr>
                         <th>Order ID</th>
-                        <th>Table No</th>
+                        <th>Date &amp; Time</th>
+                        <th>Number No</th>
                         <th>Items</th>
                         <th>Total</th>
                       </tr>
@@ -505,13 +574,14 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
                         foreach ($recentOrders as $ro): ?>
                       <tr>
                         <td><strong>#<?= (int)$ro['id'] ?></strong></td>
-                        <td><span class="badge badge-secondary">Table <?= htmlspecialchars($ro['table_no']) ?></span></td>
+                        <td><small class="text-muted"><?= htmlspecialchars(date('M d, Y g:i A', strtotime($ro['created_at']))) ?></small></td>
+                        <td><span class="badge badge-secondary"># <?= htmlspecialchars($ro['table_no']) ?></span></td>
                         <td><?= htmlspecialchars(mb_strimwidth($ro['items'], 0, 50, '…')) ?></td>
                         <td><span class="text-success font-weight-bold">&#8369;<?= number_format((float)$ro['total_amt'], 2) ?></span></td>
                       </tr>
                       <?php endforeach; ?>
                       <?php else: ?>
-                      <tr><td colspan="4" class="text-center text-muted p-3">No recent orders.</td></tr>
+                      <tr><td colspan="5" class="text-center text-muted p-3">No recent orders.</td></tr>
                       <?php endif; ?>
                     </tbody>
                   </table>
