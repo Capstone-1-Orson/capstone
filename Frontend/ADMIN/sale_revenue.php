@@ -140,7 +140,13 @@ $latestOrders = [];
 if ($hasOrderItems) {
     $r5 = $conn->query(
         "SELECT o.id, o.created_at, o.table_no, o.total_amt,
-                GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items
+                COALESCE(o.discount_amt, 0) AS discount_amt,
+                COALESCE(o.discount_type, '') AS discount_type,
+                GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
+                GROUP_CONCAT(
+                    CONCAT(m.name,'|',oi.qty,'||',COALESCE(oi.removed_ingredient_names,''))
+                    ORDER BY m.name SEPARATOR ';;'
+                ) AS item_details
          FROM orders o
          JOIN order_items oi ON oi.order_id = o.id
          JOIN menu m ON m.id = oi.menu_id
@@ -150,7 +156,7 @@ if ($hasOrderItems) {
     );
     if ($r5) while ($row = $r5->fetch_assoc()) $latestOrders[] = $row;
 } else {
-    $r5 = $conn->query("SELECT id, created_at, table_no, total_amt, '—' AS items FROM orders WHERE $VALID ORDER BY created_at DESC LIMIT 10");
+    $r5 = $conn->query("SELECT id, created_at, table_no, total_amt, COALESCE(discount_amt,0) AS discount_amt, COALESCE(discount_type,'') AS discount_type, '—' AS items, '' AS item_details FROM orders WHERE $VALID ORDER BY created_at DESC LIMIT 10");
     if ($r5) while ($row = $r5->fetch_assoc()) $latestOrders[] = $row;
 }
 
@@ -513,27 +519,58 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
                 <h3 class="card-title"><i class="fas fa-receipt mr-2"></i>Latest Orders</h3>
               </div>
               <div class="card-body table-responsive p-0">
-                <table class="table table-hover text-nowrap">
+                <table class="table table-hover">
                   <thead>
                     <tr>
                       <th>Order ID</th>
                       <th>Date &amp; Time</th>
                       <th>Items</th>
+                      <th>Add-ons</th>
+                      <th>Removed</th>
+                      <th>Discount</th>
                       <th>Revenue</th>
                     </tr>
                   </thead>
                   <tbody>
                     <?php if (!empty($latestOrders)): ?>
-                      <?php foreach ($latestOrders as $lo): ?>
+                      <?php foreach ($latestOrders as $lo):
+                        // Parse item_details: "name|qty|addons|removed;;..."
+                        $allAddons  = [];
+                        $allRemoved = [];
+                        if (!empty($lo['item_details'])) {
+                            foreach (explode(';;', $lo['item_details']) as $seg) {
+                                $parts   = explode('|', $seg);
+                                $iName   = $parts[0] ?? '';
+                                $addons  = trim($parts[2] ?? '');
+                                $removed = trim($parts[3] ?? '');
+                                if ($addons)  $allAddons[]  = '<strong>' . htmlspecialchars($iName) . ':</strong> ' . htmlspecialchars($addons);
+                                if ($removed) $allRemoved[] = '<strong>' . htmlspecialchars($iName) . ':</strong> No ' . htmlspecialchars($removed);
+                            }
+                        }
+                        $addonsCell  = !empty($allAddons)  ? implode('<br>', $allAddons)  : '<span class="text-muted">—</span>';
+                        $removedCell = !empty($allRemoved) ? implode('<br>', $allRemoved) : '<span class="text-muted">—</span>';
+                      ?>
                       <tr>
                         <td><strong>#<?= (int)$lo['id'] ?></strong></td>
-                        <td><?= htmlspecialchars($lo['created_at']) ?></td>
+                        <td style="white-space:nowrap;"><?= htmlspecialchars($lo['created_at']) ?></td>
                         <td><?= htmlspecialchars($lo['items']) ?></td>
+                        <td style="font-size:12px;"><?= $addonsCell ?></td>
+                        <td style="font-size:12px;"><?= $removedCell ?></td>
+                        <td>
+                          <?php if ((float)$lo['discount_amt'] > 0): ?>
+                            <span class="badge badge-success" style="font-size:11px;">
+                              <?= $lo['discount_type'] === 'senior' ? 'Senior 20%' : ($lo['discount_type'] === 'pwd' ? 'PWD 20%' : 'Discount') ?>
+                            </span><br>
+                            <span class="text-danger font-weight-bold">-&#8369;<?= number_format((float)$lo['discount_amt'], 2) ?></span>
+                          <?php else: ?>
+                            <span class="text-muted">—</span>
+                          <?php endif; ?>
+                        </td>
                         <td><span class="text-success font-weight-bold">&#8369;<?= number_format((float)$lo['total_amt'], 2) ?></span></td>
                       </tr>
                       <?php endforeach; ?>
                     <?php else: ?>
-                      <tr><td colspan="5" class="text-center text-muted">No orders found.</td></tr>
+                      <tr><td colspan="7" class="text-center text-muted">No orders found.</td></tr>
                     <?php endif; ?>
                   </tbody>
                 </table>
@@ -749,4 +786,4 @@ $(function () {
 });
 </script>
 </body>
-</html>s
+</html>

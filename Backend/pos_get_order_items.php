@@ -19,7 +19,10 @@ if (!$order_id) {
 }
 
 $stmt = $conn->prepare(
-    "SELECT oi.menu_id, oi.qty, oi.unit_price, oi.removed_ingredient_ids, m.name AS menu_name
+    "SELECT oi.menu_id, oi.qty, oi.unit_price,
+            oi.removed_ingredient_ids, oi.removed_ingredient_names,
+            oi.addons, oi.notes,
+            m.name AS menu_name
      FROM order_items oi
      JOIN menu m ON m.id = oi.menu_id
      WHERE oi.order_id = ?
@@ -31,11 +34,14 @@ $res   = $stmt->get_result();
 $items = [];
 while ($row = $res->fetch_assoc()) {
     $items[] = [
-        'menu_id'                => (int)$row['menu_id'],
-        'menu_name'              => $row['menu_name'],
-        'qty'                    => (int)$row['qty'],
-        'unit_price'             => (float)$row['unit_price'],
-        'removed_ingredient_ids' => json_decode($row['removed_ingredient_ids'] ?? '[]', true) ?: [],
+        'menu_id'                  => (int)$row['menu_id'],
+        'menu_name'                => $row['menu_name'],
+        'qty'                      => (int)$row['qty'],
+        'unit_price'               => (float)$row['unit_price'],
+        'removed_ingredient_ids'   => json_decode($row['removed_ingredient_ids']   ?? '[]', true) ?: [],
+        'removed_ingredient_names' => json_decode($row['removed_ingredient_names'] ?? '[]', true) ?: [],
+        'addons'                   => $row['addons'] ?? '',
+        'notes'                    => $row['notes']  ?? '',
     ];
 }
 $stmt->close();

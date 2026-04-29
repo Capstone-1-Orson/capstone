@@ -81,8 +81,14 @@ $db_history = [];
 if ($hasOrderItems) {
     $r = $conn->query(
         "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
+                COALESCE(o.discount_amt, 0) AS discount_amt,
+                COALESCE(o.discount_type, '') AS discount_type,
                 SUM(oi.qty) AS total_qty,
-                GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS item_names
+                GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS item_names,
+                GROUP_CONCAT(
+                    CONCAT(m.name,'|',oi.qty,'||',COALESCE(oi.removed_ingredient_names,''))
+                    ORDER BY m.name SEPARATOR ';;'
+                ) AS item_details
          FROM orders o
          JOIN order_items oi ON oi.order_id = o.id
          JOIN menu m ON m.id = oi.menu_id
@@ -92,7 +98,8 @@ if ($hasOrderItems) {
     if ($r) while ($row = $r->fetch_assoc()) $db_history[] = $row;
 } else {
     $r = $conn->query(
-        "SELECT id, table_no, total_amt, status, created_at, 0 AS total_qty, '—' AS item_names
+        "SELECT id, table_no, total_amt, status, created_at, 0 AS total_qty, '—' AS item_names, '' AS item_details,
+                COALESCE(discount_amt,0) AS discount_amt, COALESCE(discount_type,'') AS discount_type
          FROM orders WHERE DATE(created_at)=CURDATE() ORDER BY created_at DESC LIMIT 50"
     );
     if ($r) while ($row = $r->fetch_assoc()) $db_history[] = $row;
@@ -364,13 +371,14 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 .btn-rm{color:var(--muted);font-size:12px;transition:color var(--tr);padding:2px 4px;}
 .btn-rm:hover{color:var(--red);}
 
-/* COUPON */
-.coupon-row{display:flex;gap:7px;}
-.coupon-inp{flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;padding:8px 12px;color:var(--text);font-size:13px;transition:all var(--tr);}
-.coupon-inp::placeholder{color:var(--muted);}
-.coupon-inp:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow);}
-.btn-coupon{background:var(--surface3);color:var(--muted2);font-size:13px;font-weight:600;padding:8px 13px;border-radius:9px;border:1px solid var(--border2);transition:all var(--tr);}
-.btn-coupon:hover{background:var(--accent-soft);color:var(--accent);border-color:rgba(233,30,140,.3);}
+/* DISCOUNT */
+.discount-row{display:flex;flex-direction:column;gap:6px;}
+.discount-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:flex;align-items:center;gap:5px;}
+.discount-btns{display:flex;gap:7px;}
+.btn-discount{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 10px;border-radius:9px;border:1.5px solid var(--border2);background:var(--surface2);color:var(--muted2);font-size:12.5px;font-weight:700;transition:all var(--tr);cursor:pointer;}
+.btn-discount:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft);}
+.btn-discount.active{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 4px 14px var(--accent-glow);}
+.btn-discount .disc-pct{font-size:10px;font-weight:800;background:rgba(255,255,255,.22);padding:1px 5px;border-radius:5px;margin-left:2px;}
 
 /* SUMMARY */
 .o-summary{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:13px;display:flex;flex-direction:column;gap:8px;}
@@ -865,11 +873,13 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
   to   { transform: translateY(-6px); opacity: 0.8; }
 }
 
-/* ── Coupon success flash ── */
-.coupon-inp.success {
-  border-color: var(--green) !important;
-  box-shadow: 0 0 0 3px rgba(34,197,94,0.2) !important;
-  animation: borderFlow 0s; /* reset */
+/* ── Discount button active flash ── */
+.btn-discount.active {
+  animation: discountPop 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes discountPop {
+  0%   { transform: scale(0.92); }
+  100% { transform: scale(1); }
 }
 
 /* ── Summary total highlight on change ── */
@@ -1019,9 +1029,16 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
       <small style="color:var(--muted);font-size:11.5px">Tap any item to add it here</small>
     </div>
   </div>
-  <div class="coupon-row">
-    <input type="text" class="coupon-inp" id="couponInput" placeholder="Promo / coupon code…">
-    <button class="btn-coupon" id="btnCoupon"><i class="fa-solid fa-ticket me-1"></i>Apply</button>
+  <div class="discount-row">
+    <div class="discount-label"><i class="fa-solid fa-percent" style="font-size:10px"></i> Discount</div>
+    <div class="discount-btns">
+      <button class="btn-discount" id="btnSenior" title="Senior Citizen 20% Discount">
+        <i class="fa-solid fa-user-clock"></i> Senior <span class="disc-pct">20%</span>
+      </button>
+      <button class="btn-discount" id="btnPWD" title="PWD 20% Discount">
+        <i class="fa-solid fa-wheelchair"></i> PWD <span class="disc-pct">20%</span>
+      </button>
+    </div>
   </div>
   <div class="o-summary">
     <div class="sum-row" id="orderTypeRow" style="padding-bottom:6px;border-bottom:1px dashed var(--border2);margin-bottom:2px;">
@@ -1343,7 +1360,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initSearch();
   initTabs();
   initTheme();
-  initCoupon();
+  initDiscount();
   initCashInput();
   document.getElementById('btnPlace').addEventListener('click', openPayModal);
   document.getElementById('btnConfirmPay').addEventListener('click', placeOrder);
@@ -1419,26 +1436,35 @@ function refreshHistoryPanel() {
   // Build combined list: session orders first (newest), then DB rows not in session
   const combined = [
     ...[...orderHistory].reverse().map(o => ({
-      id:       o.id,
-      table_no: o.table,
-      total_amt:o.total,
-      created_at: o.time,
-      total_qty: o.items,
-      item_names: o.itemNames ? o.itemNames.join(', ') : '—',
-      payMethod: o.payMethod,
-      status:    o.status || 'pending',
-      fromSession: true,
+      id:           o.id,
+      table_no:     o.table,
+      total_amt:    o.total,
+      created_at:   o.time,
+      total_qty:    o.items,
+      item_names:   o.itemNames ? o.itemNames.join(', ') : '—',
+      payMethod:    o.payMethod,
+      status:       o.status || 'pending',
+      fromSession:  true,
+      cartSnapshot: o.cartSnapshot || [],
+      subtotal:     o.subtotal || o.total,
+      discount:     o.discount || 0,
+      discountType: o.discountType || null,
     })),
     ...dbRows.map(r => ({
-      id:       r.id,
-      table_no: r.table_no,
-      total_amt: parseFloat(r.total_amt),
-      created_at: r.created_at,
-      total_qty: r.total_qty,
-      item_names: r.item_names,
-      payMethod: '—',
-      status:    r.status || 'pending',
-      fromSession: false,
+      id:           r.id,
+      table_no:     r.table_no,
+      total_amt:    parseFloat(r.total_amt),
+      created_at:   r.created_at,
+      total_qty:    r.total_qty,
+      item_names:   r.item_names,
+      payMethod:    '—',
+      status:       r.status || 'pending',
+      fromSession:  false,
+      cartSnapshot: [],
+      subtotal:     null,
+      discount:     parseFloat(r.discount_amt) || 0,
+      discountType: r.discount_type || null,
+      item_details: r.item_details || '',
     }))
   ];
 
@@ -1470,19 +1496,61 @@ function refreshHistoryPanel() {
           <i class="fa-solid fa-rotate-left"></i> Refund
         </button>
       </div>`;
+
+    // ── Build item detail lines ─────────────────────────────────
+    let itemDetailHTML = '';
+    if (o.fromSession && o.cartSnapshot && o.cartSnapshot.length) {
+      itemDetailHTML = o.cartSnapshot.map(item => {
+        const addons   = (item.addons||[]).filter(a=>a.qty>0)
+                          .map(a=>`+${a.qty>1?a.qty+'× ':''}${a.name}`).join(', ');
+        const removed  = (item.removedIngs||[]).map(r=>r.name||r).join(', ');
+        const hasExtra = addons || removed || item.notes;
+        return `<div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px;margin-top:3px;">
+          <span style="font-size:11.5px;font-weight:600;">${item.name}</span>
+          <span style="font-size:10.5px;color:var(--muted)">×${item.qty}</span>
+          ${addons  ? `<span style="font-size:10px;color:var(--accent);background:var(--accent-soft);padding:1px 5px;border-radius:4px;">+${addons}</span>` : ''}
+          ${removed ? `<span style="font-size:10px;color:var(--red);background:rgba(239,68,68,.08);padding:1px 5px;border-radius:4px;">No: ${removed}</span>` : ''}
+          ${item.notes ? `<span style="font-size:10px;color:var(--muted2);font-style:italic;">"${item.notes}"</span>` : ''}
+        </div>`;
+      }).join('');
+    } else if (!o.fromSession && o.item_details) {
+      // Parse "name|qty|addons|removed;;name|qty|addons|removed"
+      itemDetailHTML = o.item_details.split(';;').map(seg => {
+        const [name, qty, addons, removed] = seg.split('|');
+        return `<div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px;margin-top:3px;">
+          <span style="font-size:11.5px;font-weight:600;">${name||''}</span>
+          <span style="font-size:10.5px;color:var(--muted)">×${qty||1}</span>
+          ${addons  ? `<span style="font-size:10px;color:var(--accent);background:var(--accent-soft);padding:1px 5px;border-radius:4px;">+${addons}</span>` : ''}
+          ${removed ? `<span style="font-size:10px;color:var(--red);background:rgba(239,68,68,.08);padding:1px 5px;border-radius:4px;">No: ${removed}</span>` : ''}
+        </div>`;
+      }).join('');
+    }
+
+    // ── Discount line ───────────────────────────────────────────
+    let discountBadge = '';
+    if (o.discount > 0) {
+      const dtLabel = o.discountType === 'senior' ? 'Senior 20%' : o.discountType === 'pwd' ? 'PWD 20%' : 'Discount';
+      discountBadge = `<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;
+        background:rgba(34,197,94,.10);color:var(--green);border:1px solid rgba(34,197,94,.25);
+        padding:2px 8px;border-radius:20px;margin-top:4px;">
+        <i class="fa-solid fa-percent" style="font-size:8px"></i> ${dtLabel} &minus;&#8369;${o.discount.toFixed(2)}
+      </span>`;
+    }
+
     return `
     <div class="history-item" id="hist-order-${o.id}">
       <div class="history-ic" style="background:${isDone?'var(--surface3)':'var(--accent-soft)'}">
         <i class="fa-solid fa-receipt" style="color:${isDone?'var(--muted)':'var(--accent)'}"></i>
       </div>
-      <div class="history-info" style="flex:1;">
+      <div class="history-info" style="flex:1;min-width:0;">
         <div class="history-id">Order #${o.id} &nbsp;
           ${statusBadge}
           ${!isDone && o.payMethod !== '—' ? `<span class="badge-pill pink">${o.payMethod}</span>` : ''}
           ${o.fromSession && !isDone ? '<span class="badge-pill green" style="font-size:9px">New</span>' : ''}
         </div>
         <div class="history-meta">#${o.table_no} · ${o.total_qty} item${o.total_qty!=1?'s':''} · ${o.created_at}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:240px">${o.item_names}</div>
+        <div style="margin-top:4px;">${itemDetailHTML}</div>
+        ${discountBadge}
         ${actionBtns}
       </div>
       <div class="history-amt" style="color:${isDone?'var(--muted)':'var(--accent)'}">
@@ -1989,13 +2057,20 @@ function updateCartUI() {
   }
 
   const sub=cart.reduce((s,c)=>s+c.price*c.qty,0);
+  // Keep 20% discount in sync as cart changes
+  if(activeDiscountType) discount=parseFloat((sub*0.20).toFixed(2));
   const tot=parseFloat(Math.max(sub-discount,0).toFixed(2));
   currentTotal=tot;
 
   document.getElementById('sumSub').textContent =`₱ ${sub.toLocaleString('en',{minimumFractionDigits:2})}`;
   document.getElementById('sumTotal').textContent=`₱ ${tot.toFixed(2)}`;
   const dr=document.getElementById('discRow');
-  if(discount>0){ dr.style.display='flex'; document.getElementById('sumDisc').textContent=`-₱ ${discount.toFixed(2)}`; }
+  if(discount>0){
+    dr.style.display='flex';
+    const discLabel = activeDiscountType === 'senior' ? 'Senior 20%' : activeDiscountType === 'pwd' ? 'PWD 20%' : 'Discount';
+    dr.querySelector('.sum-lbl').textContent = discLabel;
+    document.getElementById('sumDisc').textContent=`-₱ ${discount.toFixed(2)}`;
+  }
   else dr.style.display='none';
 
   renderQuickAmounts(tot);
@@ -2156,15 +2231,17 @@ function placeOrder() {
   const changeDue=payMethod==='Cash'?(cashTendered-total):0;
 
   const payload={
-    table_no:  selTable,
-    status:    'pending',
-    total_amt: total,
+    table_no:      selTable,
+    status:        'pending',
+    total_amt:     total,
+    discount_amt:  discount,
+    discount_type: activeDiscountType || '',
     items: cart.map(c=>({
       menu_id:    c.id,
       qty:        c.qty,
       unit_price: c.price,
-      removed_ingredients:    (c.removedIngs||[]).map(r=>r.name||r).join(', '),
-      removed_ingredient_ids: (c.removedIngs||[]).map(r=>r.id).filter(Boolean),
+      // Send full {id, name} objects so backend stores both
+      removed_ingredient_names: (c.removedIngs||[]).map(r=>({id: r.id, name: r.name||r})),
       addons:     (c.addons||[]).map(a=>`${a.qty>1?a.qty+'× ':''}${a.name} (+₱${a.price})`).join(', '),
       notes:      c.notes||'',
     }))
@@ -2214,15 +2291,18 @@ function placeOrder() {
 
       // Record to history
       orderHistory.push({
-        id:         res.order_id,
-        table:      selTable,
-        type:       orderData_base.orderType,
-        items:      cartSnapshot.reduce((s,c)=>s+c.qty,0),
-        itemNames:  cartSnapshot.map(c=>c.name),
+        id:           res.order_id,
+        table:        selTable,
+        type:         orderData_base.orderType,
+        items:        cartSnapshot.reduce((s,c)=>s+c.qty,0),
+        itemNames:    cartSnapshot.map(c=>c.name),
         cartSnapshot,
+        subtotal:     sub,
+        discount,
+        discountType: activeDiscountType,
         total,
         payMethod,
-        time:       new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),
+        time:         new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}),
       });
       // Update history badge dot
       const histBtn=[...document.querySelectorAll('.nav-btn')].find(b=>b.title==='History');
@@ -2241,8 +2321,9 @@ function placeOrder() {
         showReceipt(orderData);
 
         // Reset cart state after receipt is shown
-        cart=[]; discount=0;
-        document.getElementById('couponInput').value='';
+        cart=[]; discount=0; activeDiscountType=null;
+        document.getElementById('btnSenior').classList.remove('active');
+        document.getElementById('btnPWD').classList.remove('active');
         document.getElementById('cashInput').value='';
         currentTotal=0;
         updateCartUI();
@@ -2269,32 +2350,38 @@ function placeOrder() {
 }
 
 // ── Coupon ────────────────────────────────────────────────────
-// Coupon codes are validated server-side via pos_coupon.php — codes are
-// never exposed in this JS file. The server returns the discount amount.
-function initCoupon() {
-  document.getElementById('btnCoupon').addEventListener('click', async () => {
-    const code = document.getElementById('couponInput').value.trim().toUpperCase();
-    if (!cart.length) { showToast('<i class="fa-solid fa-cart-shopping me-1"></i> Add items first!', 'var(--red)'); return; }
-    const sub = cart.reduce((s, c) => s + c.price * c.qty, 0);
+// ── Senior / PWD 20% Discount ─────────────────────────────────
+let activeDiscountType = null; // 'senior' | 'pwd' | null
 
-    try {
-      const res = await fetch('../Backend/pos_coupon.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, subtotal: sub })
-      });
-      const data = await res.json();
-      if (data.success) {
-        discount = parseFloat(data.discount);
-        showToast('<i class="fa-solid fa-tag me-1"></i> ' + data.message, 'var(--accent)');
-        updateCartUI();
-      } else {
-        showToast('<i class="fa-solid fa-circle-xmark me-1"></i> ' + (data.message || 'Invalid coupon code'), 'var(--red)');
+function initDiscount() {
+  const btnSenior = document.getElementById('btnSenior');
+  const btnPWD    = document.getElementById('btnPWD');
+
+  function applyDiscount(type, btn, otherBtn) {
+    if (activeDiscountType === type) {
+      // Toggle off
+      activeDiscountType = null;
+      discount = 0;
+      btn.classList.remove('active');
+      showToast('<i class="fa-solid fa-times-circle me-1"></i> Discount removed.', 'var(--muted2)', 2000);
+    } else {
+      if (!cart.length) {
+        showToast('<i class="fa-solid fa-cart-shopping me-1"></i> Add items first!', 'var(--red)');
+        return;
       }
-    } catch (err) {
-      showToast('<i class="fa-solid fa-triangle-exclamation me-1"></i> Could not validate coupon. Try again.', 'var(--red)');
+      activeDiscountType = type;
+      const sub = cart.reduce((s, c) => s + c.price * c.qty, 0);
+      discount = parseFloat((sub * 0.20).toFixed(2));
+      btn.classList.add('active');
+      otherBtn.classList.remove('active');
+      const label = type === 'senior' ? 'Senior Citizen' : 'PWD';
+      showToast(`<i class="fa-solid fa-percent me-1"></i> ${label} 20% discount applied!`, 'var(--green)', 3000);
     }
-  });
+    updateCartUI();
+  }
+
+  btnSenior.addEventListener('click', () => applyDiscount('senior', btnSenior, btnPWD));
+  btnPWD.addEventListener('click',    () => applyDiscount('pwd',    btnPWD,    btnSenior));
 }
 
 function initTabs() {

@@ -21,10 +21,12 @@ if (!$data || empty($data['items'])) {
     exit();
 }
 
-$table_no  = $conn->real_escape_string($data['table_no']  ?? '01');
-$status    = 'Done';
-$total_amt = floatval($data['total_amt'] ?? 0);
-$items     = $data['items'];  // [ { menu_id, qty, unit_price }, … ]
+$table_no      = $conn->real_escape_string($data['table_no']    ?? '01');
+$status        = 'Done';
+$total_amt     = floatval($data['total_amt']    ?? 0);
+$discount_amt  = floatval($data['discount_amt'] ?? 0);
+$discount_type = $conn->real_escape_string($data['discount_type'] ?? '');
+$items         = $data['items'];
 
 // ══════════════════════════════════════════════════════════════
 //  PRE-CHECK: verify all ingredients have enough stock BEFORE
@@ -43,10 +45,14 @@ $stmtCheck = $conn->prepare(
 $needs = [];
 
 foreach ($items as $item) {
-    $menu_id      = intval($item['menu_id']);
-    $qty          = intval($item['qty']);
-    // IDs of ingredients the customer removed — do NOT check/deduct these
-    $removed_ids  = array_map('intval', $item['removed_ingredient_ids'] ?? []);
+    $menu_id     = intval($item['menu_id']);
+    $qty         = intval($item['qty']);
+    // Support removed as [{id,name}] objects OR plain id array
+    $raw_removed = $item['removed_ingredient_ids'] ?? [];
+    $removed_ids = array_map('intval', array_map(
+        fn($r) => is_array($r) ? ($r['id'] ?? 0) : $r,
+        $raw_removed
+    ));
 
     $stmtCheck->bind_param('i', $menu_id);
     $stmtCheck->execute();
@@ -104,17 +110,20 @@ $conn->begin_transaction();
 try {
 
     $stmt = $conn->prepare(
-        "INSERT INTO orders (table_no, status, total_amt, created_at)
-         VALUES (?, ?, ?, NOW())"
+        "INSERT INTO orders (table_no, status, total_amt, discount_amt, discount_type, created_at)
+         VALUES (?, ?, ?, ?, ?, NOW())"
     );
-    $stmt->bind_param('ssd', $table_no, $status, $total_amt);
+    $stmt->bind_param('ssdds', $table_no, $status, $total_amt, $discount_amt, $discount_type);
     $stmt->execute();
     $order_id = $conn->insert_id;
     $stmt->close();
 
     $stmtItem = $conn->prepare(
-        "INSERT INTO order_items (order_id, menu_id, qty, unit_price, removed_ingredient_ids)
-         VALUES (?, ?, ?, ?, ?)"
+        "INSERT INTO order_items
+             (order_id, menu_id, qty, unit_price,
+              removed_ingredient_ids, removed_ingredient_names,
+              addons, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     );
 
     $stmtIngReq = $conn->prepare(
@@ -131,14 +140,35 @@ try {
     );
 
     foreach ($items as $item) {
-        $menu_id      = intval($item['menu_id']);
-        $qty          = intval($item['qty']);
-        $unit_price   = floatval($item['unit_price']);
-        // IDs of ingredients the customer removed — do NOT deduct these
-        $removed_ids  = array_map('intval', $item['removed_ingredient_ids'] ?? []);
+        $menu_id    = intval($item['menu_id']);
+        $qty        = intval($item['qty']);
+        $unit_price = floatval($item['unit_price']);
 
-        $removed_ids_json = json_encode($removed_ids);  // e.g. [3,7] or []
-        $stmtItem->bind_param('iiiis', $order_id, $menu_id, $qty, $unit_price, $removed_ids_json);
+        // Support removed as [{id,name}] objects OR plain id array
+        $raw_removed   = $item['removed_ingredient_ids'] ?? [];
+        $removed_ids   = [];
+        $removed_names = [];
+        foreach ($raw_removed as $r) {
+            if (is_array($r)) {
+                $removed_ids[]   = intval($r['id']   ?? 0);
+                $removed_names[] = strval($r['name'] ?? '');
+            } else {
+                $removed_ids[] = intval($r);
+            }
+        }
+
+        $removed_ids_json   = json_encode($removed_ids);
+        $removed_names_json = json_encode($removed_names);
+        // addons already a formatted string from POS.php e.g. "2× Extra Shot (+₱30), Whipped Cream (+₱15)"
+        $addons_str = strval($item['addons'] ?? '');
+        $notes_str  = strval($item['notes']  ?? '');
+
+        $stmtItem->bind_param(
+            'iiidssss',
+            $order_id, $menu_id, $qty, $unit_price,
+            $removed_ids_json, $removed_names_json,
+            $addons_str, $notes_str
+        );
         $stmtItem->execute();
 
         $stmtIngReq->bind_param('i', $menu_id);

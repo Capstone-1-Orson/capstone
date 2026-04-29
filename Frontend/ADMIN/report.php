@@ -80,8 +80,14 @@ $orderRows = [];
 if ($hasOrderItems) {
     $res5 = $conn->query(
         "SELECT o.id AS order_id, o.created_at, o.table_no, o.status, o.total_amt,
+                COALESCE(o.discount_amt, 0) AS discount_amt,
+                COALESCE(o.discount_type, '') AS discount_type,
                 GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
-                SUM(oi.qty) AS total_qty
+                SUM(oi.qty) AS total_qty,
+                GROUP_CONCAT(
+                    CONCAT(m.name,'|',oi.qty,'||',COALESCE(oi.removed_ingredient_names,''))
+                    ORDER BY m.name SEPARATOR ';;'
+                ) AS item_details
          FROM orders o
          JOIN order_items oi ON oi.order_id = o.id
          JOIN menu m ON m.id = oi.menu_id
@@ -91,7 +97,8 @@ if ($hasOrderItems) {
 } else {
     $res5 = $conn->query(
         "SELECT id AS order_id, created_at, table_no, status, total_amt,
-                '—' AS items, 0 AS total_qty
+                COALESCE(discount_amt,0) AS discount_amt, COALESCE(discount_type,'') AS discount_type,
+                '—' AS items, 0 AS total_qty, '' AS item_details
          FROM orders ORDER BY created_at DESC LIMIT 100"
     );
     if ($res5) while ($row = $res5->fetch_assoc()) $orderRows[] = $row;
@@ -361,7 +368,10 @@ $chartDataJson   = json_encode($chartData);
                   <th>Number</th>
                   <th>Status</th>
                   <th>Items Ordered</th>
+                  <th>Add-ons</th>
+                  <th>Removed Ingredients</th>
                   <th>Total Qty</th>
+                  <th>Discount</th>
                   <th>Total (&#8369;)</th>
                 </tr>
               </thead>
@@ -372,6 +382,22 @@ $chartDataJson   = json_encode($chartData);
                   elseif ($st === 'refunded')     { $badge = '<span class="badge badge-info">Refunded</span>';          $rowClass = 'table-info'; }
                   elseif ($st === 'partial_refund'){ $badge = '<span class="badge badge-warning">Partial Refund</span>';$rowClass = 'table-warning'; }
                   else                            { $badge = '<span class="badge badge-success">'.htmlspecialchars($st).'</span>'; $rowClass = ''; }
+
+                  // Parse item_details: "name|qty|addons|removed;;..."
+                  $allAddons   = [];
+                  $allRemoved  = [];
+                  if (!empty($ord['item_details'])) {
+                      foreach (explode(';;', $ord['item_details']) as $seg) {
+                          $parts = explode('|', $seg);
+                          $itemName = $parts[0] ?? '';
+                          $addons   = trim($parts[2] ?? '');
+                          $removed  = trim($parts[3] ?? '');
+                          if ($addons)  $allAddons[]  = htmlspecialchars($itemName) . ': ' . htmlspecialchars($addons);
+                          if ($removed) $allRemoved[] = htmlspecialchars($itemName) . ': No ' . htmlspecialchars($removed);
+                      }
+                  }
+                  $addonsCell  = !empty($allAddons)  ? implode('<br>', $allAddons)  : '<span class="text-muted">—</span>';
+                  $removedCell = !empty($allRemoved) ? implode('<br>', $allRemoved) : '<span class="text-muted">—</span>';
                 ?>
                 <tr class="<?= $rowClass ?>">
                   <td><strong>#<?= (int)$ord['order_id'] ?></strong></td>
@@ -379,7 +405,19 @@ $chartDataJson   = json_encode($chartData);
                   <td><?= htmlspecialchars($ord['table_no']) ?></td>
                   <td><?= $badge ?></td>
                   <td><?= htmlspecialchars($ord['items']) ?></td>
+                  <td style="font-size:12px;"><?= $addonsCell ?></td>
+                  <td style="font-size:12px;"><?= $removedCell ?></td>
                   <td><?= (int)$ord['total_qty'] ?></td>
+                  <td>
+                    <?php if ((float)$ord['discount_amt'] > 0): ?>
+                      <span class="badge badge-success" style="font-size:11px;">
+                        <?= $ord['discount_type'] === 'senior' ? 'Senior 20%' : ($ord['discount_type'] === 'pwd' ? 'PWD 20%' : 'Discount') ?>
+                      </span><br>
+                      <span class="text-danger font-weight-bold">-&#8369;<?= number_format((float)$ord['discount_amt'], 2) ?></span>
+                    <?php else: ?>
+                      <span class="text-muted">—</span>
+                    <?php endif; ?>
+                  </td>
                   <td><?php if (in_array($st, ['voided','refunded','partial_refund'])): ?>
                     <s class="text-muted">&#8369;<?= number_format((float)$ord['total_amt'], 2) ?></s>
                   <?php else: ?>
