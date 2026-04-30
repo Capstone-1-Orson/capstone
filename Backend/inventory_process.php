@@ -17,6 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ingredient'])) {
     $unit               = trim($_POST['unit']               ?? '');
     $stock_qty          = floatval($_POST['stock_qty']       ?? 0);
     $low_stock_threshold = floatval($_POST['low_stock_threshold'] ?? 0);
+    $expiry_date        = !empty($_POST['expiry_date']) ? $_POST['expiry_date'] : null;
     $now                = date('Y-m-d H:i:s');
 
     if (empty($name) || empty($unit)) {
@@ -25,10 +26,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ingredient'])) {
     }
 
     $stmt = $conn->prepare(
-        "INSERT INTO ingredients (name, unit, stock_qty, low_stock_threshold, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)"
+        "INSERT INTO ingredients (name, unit, stock_qty, low_stock_threshold, expiry_date, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)"
     );
-    $stmt->bind_param('ssddss', $name, $unit, $stock_qty, $low_stock_threshold, $now, $now);
+    $stmt->bind_param('ssddsss', $name, $unit, $stock_qty, $low_stock_threshold, $expiry_date, $now, $now);
 
     if ($stmt->execute()) {
         $_SESSION['success'] = "Ingredient \"" . htmlspecialchars($name) . "\" added successfully!";
@@ -51,6 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_ingredient']))
     $unit                = trim($_POST['unit']                  ?? '');
     $stock_qty           = floatval($_POST['stock_qty']          ?? 0);
     $low_stock_threshold = floatval($_POST['low_stock_threshold'] ?? 0);
+    $expiry_date         = !empty($_POST['expiry_date']) ? $_POST['expiry_date'] : null;
     $now                 = date('Y-m-d H:i:s');
 
     if ($id <= 0 || empty($name) || empty($unit)) {
@@ -60,10 +62,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_ingredient']))
 
     $stmt = $conn->prepare(
         "UPDATE ingredients
-         SET name=?, unit=?, stock_qty=?, low_stock_threshold=?, updated_at=?
+         SET name=?, unit=?, stock_qty=?, low_stock_threshold=?, expiry_date=?, updated_at=?
          WHERE id=?"
     );
-    $stmt->bind_param('ssddsi', $name, $unit, $stock_qty, $low_stock_threshold, $now, $id);
+    $stmt->bind_param('ssddssi', $name, $unit, $stock_qty, $low_stock_threshold, $expiry_date, $now, $id);
 
     if ($stmt->execute()) {
         $_SESSION['success'] = "Ingredient \"" . htmlspecialchars($name) . "\" updated successfully!";

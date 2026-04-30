@@ -144,7 +144,25 @@ if ($hasOrderItems) {
                 COALESCE(o.discount_type, '') AS discount_type,
                 GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
                 GROUP_CONCAT(
-                    CONCAT(m.name,'|',oi.qty,'||',COALESCE(oi.removed_ingredient_names,''))
+                    CONCAT(
+                        m.name,'|',oi.qty,'|',
+                        COALESCE(oi.addons,''),'|',
+                        CASE
+                            WHEN oi.removed_ingredient_names IS NOT NULL
+                                 AND oi.removed_ingredient_names != '[]'
+                                 AND oi.removed_ingredient_names != ''
+                            THEN oi.removed_ingredient_names
+                            WHEN oi.removed_ingredient_ids IS NOT NULL
+                                 AND oi.removed_ingredient_ids != '[]'
+                                 AND oi.removed_ingredient_ids != ''
+                            THEN (
+                                SELECT CONCAT('[',GROUP_CONCAT(JSON_QUOTE(i2.name) ORDER BY i2.name),']')
+                                FROM ingredients i2
+                                WHERE JSON_SEARCH(oi.removed_ingredient_ids, 'one', CAST(i2.id AS CHAR)) IS NOT NULL
+                            )
+                            ELSE ''
+                        END
+                    )
                     ORDER BY m.name SEPARATOR ';;'
                 ) AS item_details
          FROM orders o
@@ -534,15 +552,25 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
                   <tbody>
                     <?php if (!empty($latestOrders)): ?>
                       <?php foreach ($latestOrders as $lo):
-                        // Parse item_details: "name|qty|addons|removed;;..."
+                        // Parse item_details: "name|qty|addons|removed_json;;..."
                         $allAddons  = [];
                         $allRemoved = [];
                         if (!empty($lo['item_details'])) {
                             foreach (explode(';;', $lo['item_details']) as $seg) {
-                                $parts   = explode('|', $seg);
+                                $parts   = explode('|', $seg, 4);
                                 $iName   = $parts[0] ?? '';
                                 $addons  = trim($parts[2] ?? '');
-                                $removed = trim($parts[3] ?? '');
+                                $rawRem  = trim($parts[3] ?? '');
+                                // Decode JSON array of names e.g. ["Cheese Powder","Onion"]
+                                $removed = '';
+                                if ($rawRem !== '' && $rawRem !== '[]') {
+                                    $arr = json_decode($rawRem, true);
+                                    if (is_array($arr) && count($arr) > 0) {
+                                        $removed = implode(', ', array_filter($arr));
+                                    } elseif (!is_array($arr) && $rawRem !== '') {
+                                        $removed = $rawRem;
+                                    }
+                                }
                                 if ($addons)  $allAddons[]  = '<strong>' . htmlspecialchars($iName) . ':</strong> ' . htmlspecialchars($addons);
                                 if ($removed) $allRemoved[] = '<strong>' . htmlspecialchars($iName) . ':</strong> No ' . htmlspecialchars($removed);
                             }

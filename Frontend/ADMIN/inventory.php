@@ -7,8 +7,14 @@ if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
 
 
 // DB: operlytics | table: ingredients
-// columns: id, name, unit, stock_qty, low_stock_threshold, created_at, updated_at
+// columns: id, name, unit, stock_qty, low_stock_threshold, expiry_date, created_at, updated_at
+// Migration: ALTER TABLE ingredients ADD COLUMN expiry_date DATE NULL AFTER low_stock_threshold;
 require_once '../../Backend/conn.php';
+
+// Format quantity: trim trailing zeros, max 2 decimal places
+function fmtQty($val) {
+    return rtrim(rtrim(number_format((float)$val, 2, '.', ''), '0'), '.');
+}
 
 // ── Stats — single query instead of four separate ones ────────
 $stats_row = $conn->query(
@@ -16,14 +22,18 @@ $stats_row = $conn->query(
         COUNT(*) AS total,
         SUM(stock_qty > low_stock_threshold) AS in_stock,
         SUM(stock_qty > 0 AND stock_qty <= low_stock_threshold) AS low_stock,
-        SUM(stock_qty = 0) AS out_stock
+        SUM(stock_qty = 0) AS out_stock,
+        SUM(expiry_date IS NOT NULL AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) AND expiry_date >= CURDATE()) AS expiring_soon,
+        SUM(expiry_date IS NOT NULL AND expiry_date < CURDATE()) AS expired
      FROM ingredients"
 )->fetch_assoc();
 
-$total     = (int)($stats_row['total']     ?? 0);
-$in_stock  = (int)($stats_row['in_stock']  ?? 0);
-$low_stock = (int)($stats_row['low_stock'] ?? 0);
-$out_stock = (int)($stats_row['out_stock'] ?? 0);
+$total         = (int)($stats_row['total']         ?? 0);
+$in_stock      = (int)($stats_row['in_stock']      ?? 0);
+$low_stock     = (int)($stats_row['low_stock']     ?? 0);
+$out_stock     = (int)($stats_row['out_stock']     ?? 0);
+$expiring_soon = (int)($stats_row['expiring_soon'] ?? 0);
+$expired       = (int)($stats_row['expired']       ?? 0);
 
 // ── Fetch all ingredients ─────────────────────────────────────
 $items = [];
@@ -37,6 +47,20 @@ $low_alerts = [];
 $res2 = $conn->query("SELECT name, stock_qty, unit FROM ingredients WHERE stock_qty <= low_stock_threshold ORDER BY stock_qty ASC LIMIT 8");
 while ($row = $res2->fetch_assoc()) {
     $low_alerts[] = $row;
+}
+
+// ── Expiring soon list (within 30 days, not yet expired) ──────
+$expiry_alerts = [];
+$res3 = $conn->query("SELECT name, stock_qty, unit, expiry_date, DATEDIFF(expiry_date, CURDATE()) AS days_left FROM ingredients WHERE expiry_date IS NOT NULL AND expiry_date >= CURDATE() AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) ORDER BY expiry_date ASC LIMIT 10");
+while ($row = $res3->fetch_assoc()) {
+    $expiry_alerts[] = $row;
+}
+
+// ── Already expired list ──────────────────────────────────────
+$expired_items = [];
+$res4 = $conn->query("SELECT name, stock_qty, unit, expiry_date FROM ingredients WHERE expiry_date IS NOT NULL AND expiry_date < CURDATE() ORDER BY expiry_date ASC");
+while ($row = $res4->fetch_assoc()) {
+    $expired_items[] = $row;
 }
 
 $conn->close();
@@ -234,7 +258,27 @@ $conn->close();
                     </div>
                 </div>
 
-                <!-- ── Alerts + Quick Actions ─────────────────── -->
+                <!-- ── Expiry Info Boxes ──────────────────────── -->
+                <div class="row mb-4">
+                    <div class="col-lg-6 col-12">
+                        <div class="info-box">
+                            <span class="info-box-icon bg-orange"><i class="fas fa-hourglass-half"></i></span>
+                            <div class="info-box-content">
+                                <span class="info-box-text">Expiring Soon <small class="text-muted">(≤ 30 days)</small></span>
+                                <span class="info-box-number"><?= $expiring_soon ?></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-6 col-12">
+                        <div class="info-box">
+                            <span class="info-box-icon bg-dark"><i class="fas fa-skull-crossbones"></i></span>
+                            <div class="info-box-content">
+                                <span class="info-box-text">Expired</span>
+                                <span class="info-box-number"><?= $expired ?></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div class="row mb-4">
                     <div class="col-md-6">
                         <div class="card card-warning">
@@ -254,7 +298,7 @@ $conn->close();
                                         <li class="list-group-item d-flex justify-content-between align-items-center">
                                             <?= htmlspecialchars($alert['name']) ?>
                                             <span class="badge <?= $badgeClass ?> badge-pill">
-                                                <?= $alert['stock_qty'] ?> <?= htmlspecialchars($alert['unit']) ?>
+                                                <?= fmtQty($alert['stock_qty']) ?> <?= htmlspecialchars($alert['unit']) ?>
                                             </span>
                                         </li>
                                         <?php endforeach; ?>
@@ -277,8 +321,20 @@ $conn->close();
                                     <button class="btn btn-success mb-2" data-toggle="modal" data-target="#trendsModal">
                                         <i class="fas fa-chart-line mr-1"></i> View Trends
                                     </button>
-                                    <button class="btn btn-warning" data-toggle="modal" data-target="#setAlertsModal">
+                                    <button class="btn btn-warning mb-2" data-toggle="modal" data-target="#setAlertsModal">
                                         <i class="fas fa-bell mr-1"></i> Set Alerts
+                                    </button>
+                                    <button class="btn btn-orange mb-2" data-toggle="modal" data-target="#expiringModal" style="background:#fd7e14;border-color:#fd7e14;color:#fff;">
+                                        <i class="fas fa-hourglass-half mr-1"></i> View Expiring Soon
+                                        <?php if ($expiring_soon > 0): ?>
+                                            <span class="badge badge-light ml-1"><?= $expiring_soon ?></span>
+                                        <?php endif; ?>
+                                    </button>
+                                    <button class="btn btn-dark" data-toggle="modal" data-target="#expiredModal">
+                                        <i class="fas fa-skull-crossbones mr-1"></i> View Expired
+                                        <?php if ($expired > 0): ?>
+                                            <span class="badge badge-danger ml-1"><?= $expired ?></span>
+                                        <?php endif; ?>
                                     </button>
                                 </div>
                             </div>
@@ -310,6 +366,7 @@ $conn->close();
                                     <th>Stock Qty</th>
                                     <th>Low Stock Threshold</th>
                                     <th>Status</th>
+                                    <th>Expiry Date</th>
                                     <th>Last Updated</th>
                                     <th>Actions</th>
                                 </tr>
@@ -326,6 +383,27 @@ $conn->close();
                                         $statusBadge = 'badge-success';
                                         $statusLabel = 'Available';
                                     }
+                                    // Expiry logic
+                                    $expiryBadge = '';
+                                    $expiryLabel = '';
+                                    if (!empty($item['expiry_date'])) {
+                                        $today     = new DateTime('today');
+                                        $expiryDt  = new DateTime($item['expiry_date']);
+                                        $daysLeft  = (int)$today->diff($expiryDt)->format('%r%a');
+                                        if ($daysLeft < 0) {
+                                            $expiryBadge = 'badge-dark';
+                                            $expiryLabel = 'Expired';
+                                        } elseif ($daysLeft <= 7) {
+                                            $expiryBadge = 'badge-danger';
+                                            $expiryLabel = $daysLeft === 0 ? 'Expires Today' : "Expires in {$daysLeft}d";
+                                        } elseif ($daysLeft <= 30) {
+                                            $expiryBadge = 'badge-warning';
+                                            $expiryLabel = "Expires in {$daysLeft}d";
+                                        } else {
+                                            $expiryBadge = 'badge-success';
+                                            $expiryLabel = date('M d, Y', strtotime($item['expiry_date']));
+                                        }
+                                    }
                                 ?>
                                 <tr>
                                     <td><?= $item['id'] ?></td>
@@ -333,11 +411,18 @@ $conn->close();
                                     <td><?= htmlspecialchars($item['unit']) ?></td>
                                     <td>
                                         <span class="badge <?= $statusBadge ?>">
-                                            <?= $item['stock_qty'] ?>
+                                            <?= fmtQty($item['stock_qty']) ?>
                                         </span>
                                     </td>
-                                    <td><?= $item['low_stock_threshold'] ?></td>
+                                    <td><?= fmtQty($item['low_stock_threshold']) ?></td>
                                     <td><span class="badge <?= $statusBadge ?>"><?= $statusLabel ?></span></td>
+                                    <td>
+                                        <?php if ($expiryLabel): ?>
+                                            <span class="badge <?= $expiryBadge ?>"><?= htmlspecialchars($expiryLabel) ?></span>
+                                        <?php else: ?>
+                                            <span class="text-muted">—</span>
+                                        <?php endif; ?>
+                                    </td>
                                     <td><small><?= $item['updated_at'] ?? $item['created_at'] ?></small></td>
                                     <td>
                                         <!-- Edit button -->
@@ -347,8 +432,9 @@ $conn->close();
                                                 data-id="<?= $item['id'] ?>"
                                                 data-name="<?= htmlspecialchars($item['name'], ENT_QUOTES) ?>"
                                                 data-unit="<?= htmlspecialchars($item['unit'], ENT_QUOTES) ?>"
-                                                data-stock="<?= $item['stock_qty'] ?>"
-                                                data-threshold="<?= $item['low_stock_threshold'] ?>">
+                                                data-stock="<?= fmtQty($item['stock_qty']) ?>"
+                                                data-threshold="<?= fmtQty($item['low_stock_threshold']) ?>"
+                                                data-expiry="<?= htmlspecialchars($item['expiry_date'] ?? '', ENT_QUOTES) ?>">
                                             <i class="fas fa-edit"></i>
                                         </button>
                                         <!-- Delete link -->
@@ -421,6 +507,16 @@ $conn->close();
                                     <label>Low Stock Threshold</label>
                                     <input type="number" name="low_stock_threshold" class="form-control" step="0.01" min="0" placeholder="e.g. 20">
                                     <small class="text-muted">Alert will trigger when stock falls at or below this value.</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label><i class="fas fa-calendar-times mr-1 text-warning"></i> Expiry Date <small class="text-muted">(optional)</small></label>
+                                    <input type="date" name="expiry_date" class="form-control" min="<?= date('Y-m-d') ?>">
+                                    <small class="text-muted">Leave blank if this ingredient has no expiry.</small>
                                 </div>
                             </div>
                         </div>
@@ -499,6 +595,16 @@ $conn->close();
                             </div>
                         </div>
 
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label><i class="fas fa-calendar-times mr-1 text-warning"></i> Expiry Date <small class="text-muted">(optional)</small></label>
+                                    <input type="date" name="expiry_date" id="editIngExpiry" class="form-control">
+                                    <small class="text-muted">Leave blank if this ingredient has no expiry.</small>
+                                </div>
+                            </div>
+                        </div>
+
                     </div><!-- /.modal-body -->
 
                     <div class="modal-footer">
@@ -547,7 +653,7 @@ $conn->close();
                                 <tr>
                                     <td><input type="checkbox" name="restock_ids[]" value="<?= $ri['id'] ?>" class="restock-check"></td>
                                     <td><?= htmlspecialchars($ri['name']) ?></td>
-                                    <td><?= $ri['stock_qty'] ?></td>
+                                    <td><?= fmtQty($ri['stock_qty']) ?></td>
                                     <td><?= htmlspecialchars($ri['unit']) ?></td>
                                     <td>
                                         <input type="number" name="restock_qty[<?= $ri['id'] ?>]"
@@ -574,7 +680,115 @@ $conn->close();
 
 
     <!-- ══════════════════════════════════════════════════════════
-         VIEW TRENDS MODAL
+         EXPIRING SOON MODAL
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="modal fade" id="expiringModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header" style="background:#fd7e14;color:#fff;">
+                    <h5 class="modal-title"><i class="fas fa-hourglass-half mr-2"></i>Ingredients Expiring Within 30 Days</h5>
+                    <button type="button" class="close" data-dismiss="modal" style="color:#fff;">&times;</button>
+                </div>
+                <div class="modal-body p-0">
+                    <?php if (empty($expiry_alerts)): ?>
+                        <div class="text-center py-4 text-muted">
+                            <i class="fas fa-check-circle fa-2x text-success mb-2 d-block"></i>
+                            No ingredients are expiring within the next 30 days.
+                        </div>
+                    <?php else: ?>
+                    <table class="table table-striped mb-0">
+                        <thead>
+                            <tr>
+                                <th>Ingredient</th>
+                                <th>Stock</th>
+                                <th>Unit</th>
+                                <th>Expiry Date</th>
+                                <th>Days Left</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($expiry_alerts as $ea):
+                                $dl = (int)$ea['days_left'];
+                                $rowClass = $dl <= 7 ? 'table-danger' : 'table-warning';
+                            ?>
+                            <tr class="<?= $rowClass ?>">
+                                <td><?= htmlspecialchars($ea['name']) ?></td>
+                                <td><?= fmtQty($ea['stock_qty']) ?></td>
+                                <td><?= htmlspecialchars($ea['unit']) ?></td>
+                                <td><?= date('M d, Y', strtotime($ea['expiry_date'])) ?></td>
+                                <td>
+                                    <span class="badge <?= $dl <= 7 ? 'badge-danger' : 'badge-warning' ?>">
+                                        <?= $dl === 0 ? 'Today' : "{$dl} day(s)" ?>
+                                    </span>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <?php endif; ?>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════
+         EXPIRED ITEMS MODAL
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="modal fade" id="expiredModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title"><i class="fas fa-skull-crossbones mr-2"></i>Expired Ingredients</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+                </div>
+                <div class="modal-body p-0">
+                    <?php if (empty($expired_items)): ?>
+                        <div class="text-center py-4 text-muted">
+                            <i class="fas fa-check-circle fa-2x text-success mb-2 d-block"></i>
+                            No expired ingredients on record.
+                        </div>
+                    <?php else: ?>
+                    <div class="alert alert-danger mx-3 mt-3 mb-0">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>
+                        <strong><?= count($expired_items) ?> ingredient(s)</strong> have passed their expiry date. Please remove or replace them immediately.
+                    </div>
+                    <table class="table table-striped mb-0 mt-2">
+                        <thead>
+                            <tr>
+                                <th>Ingredient</th>
+                                <th>Stock</th>
+                                <th>Unit</th>
+                                <th>Expired On</th>
+                                <th>Days Overdue</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($expired_items as $ei):
+                                $overdue = (int)(new DateTime('today'))->diff(new DateTime($ei['expiry_date']))->format('%r%a') * -1;
+                            ?>
+                            <tr class="table-dark">
+                                <td><?= htmlspecialchars($ei['name']) ?></td>
+                                <td><?= fmtQty($ei['stock_qty']) ?></td>
+                                <td><?= htmlspecialchars($ei['unit']) ?></td>
+                                <td><?= date('M d, Y', strtotime($ei['expiry_date'])) ?></td>
+                                <td><span class="badge badge-danger"><?= $overdue ?> day(s) ago</span></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <?php endif; ?>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════
     ═══════════════════════════════════════════════════════════ -->
     <div class="modal fade" id="trendsModal" tabindex="-1" role="dialog">
         <div class="modal-dialog modal-xl" role="document">
@@ -622,11 +836,11 @@ $conn->close();
                                 <tr>
                                     <td><?= htmlspecialchars($ai['name']) ?></td>
                                     <td><?= htmlspecialchars($ai['unit']) ?></td>
-                                    <td><?= $ai['stock_qty'] ?></td>
+                                    <td><?= fmtQty($ai['stock_qty']) ?></td>
                                     <td>
                                         <input type="number"
                                                name="threshold[<?= $ai['id'] ?>]"
-                                               value="<?= $ai['low_stock_threshold'] ?>"
+                                               value="<?= fmtQty($ai['low_stock_threshold']) ?>"
                                                class="form-control form-control-sm"
                                                min="0" step="0.01"
                                                style="width:100px;">
@@ -665,7 +879,7 @@ $conn->close();
             "responsive": true,
             "autoWidth": false,
             "columnDefs": [
-                { "orderable": false, "targets": [7] }
+                { "orderable": false, "targets": [8] }
             ],
             "order": [[1, "asc"]]
         });
@@ -821,6 +1035,7 @@ $conn->close();
             $('#editIngUnit').val(btn.data('unit'));
             $('#editIngStock').val(btn.data('stock'));
             $('#editIngThreshold').val(btn.data('threshold'));
+            $('#editIngExpiry').val(btn.data('expiry') || '');
         });
     });
 </script>

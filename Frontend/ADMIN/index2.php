@@ -105,6 +105,21 @@ $lowStockCount = 0;
 $r = $conn->query("SELECT COUNT(*) AS c FROM ingredients WHERE stock_qty <= low_stock_threshold");
 if ($r && $row = $r->fetch_assoc()) $lowStockCount = (int)$row['c'];
 
+// Expired ingredients count
+$expiredCount = 0;
+$r = $conn->query("SELECT COUNT(*) AS c FROM ingredients WHERE expiry_date IS NOT NULL AND expiry_date < CURDATE()");
+if ($r && $row = $r->fetch_assoc()) $expiredCount = (int)$row['c'];
+
+// Expiring soon count (within 30 days)
+$expiringSoonCount = 0;
+$r = $conn->query("SELECT COUNT(*) AS c FROM ingredients WHERE expiry_date IS NOT NULL AND expiry_date >= CURDATE() AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)");
+if ($r && $row = $r->fetch_assoc()) $expiringSoonCount = (int)$row['c'];
+
+// Expired ingredient names (for ticker)
+$expiredNames = [];
+$r = $conn->query("SELECT name, expiry_date FROM ingredients WHERE expiry_date IS NOT NULL AND expiry_date < CURDATE() ORDER BY expiry_date ASC LIMIT 5");
+if ($r) while ($row = $r->fetch_assoc()) $expiredNames[] = $row['name'];
+
 // ── New menu items (last 5 added) ──────────────────────────────
 $newMenuItems = [];
 $r = $conn->query("SELECT name, price, description FROM menu ORDER BY id DESC LIMIT 4");
@@ -286,6 +301,12 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
       Today's Revenue: <strong>&#8369;<?= number_format($dailyRevenue, 2) ?></strong> &nbsp;·&nbsp;
       Orders Today: <strong><?= number_format($ordersToday) ?></strong> &nbsp;·&nbsp;
       Low Stock Alerts: <strong><?= number_format($lowStockCount) ?></strong> &nbsp;·&nbsp;
+      <?php if ($expiredCount > 0): ?>
+      ⚠️ Expired Ingredients: <strong style="color:#ffcdd2;"><?= number_format($expiredCount) ?></strong> &nbsp;·&nbsp;
+      <?php endif; ?>
+      <?php if ($expiringSoonCount > 0): ?>
+      🕐 Expiring Soon: <strong style="color:#ffe0b2;"><?= number_format($expiringSoonCount) ?></strong> &nbsp;·&nbsp;
+      <?php endif; ?>
       All-Time Revenue: <strong>&#8369;<?= number_format($totalRevenue, 2) ?></strong> &nbsp;·&nbsp;
       Staff Count: <strong><?= number_format($staffCount) ?></strong>
       &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -605,6 +626,30 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
                 <span class="info-box-number"><?= number_format($lowStockCount) ?></span>
               </div>
             </div>
+            <div class="info-box mb-3" style="background:#212121;color:#fff;">
+              <span class="info-box-icon" style="background:#111;"><i class="fas fa-skull-crossbones" style="color:#ff5252;"></i></span>
+              <div class="info-box-content">
+                <span class="info-box-text" style="color:#ccc;">Expired Ingredients</span>
+                <span class="info-box-number" style="color:#ff5252;"><?= number_format($expiredCount) ?></span>
+                <?php if ($expiredCount > 0): ?>
+                <span class="progress-description" style="font-size:10px;color:#aaa;">
+                  <a href="inventory.php" style="color:#ff8a80;">View in Inventory →</a>
+                </span>
+                <?php endif; ?>
+              </div>
+            </div>
+            <div class="info-box mb-3" style="background:#fff3e0;">
+              <span class="info-box-icon" style="background:#fd7e14;"><i class="fas fa-hourglass-half" style="color:#fff;"></i></span>
+              <div class="info-box-content">
+                <span class="info-box-text" style="color:#555;">Expiring Soon <small>(≤30 days)</small></span>
+                <span class="info-box-number" style="color:#fd7e14;"><?= number_format($expiringSoonCount) ?></span>
+                <?php if ($expiringSoonCount > 0): ?>
+                <span class="progress-description" style="font-size:10px;color:#888;">
+                  <a href="inventory.php" style="color:#e65100;">Check inventory →</a>
+                </span>
+                <?php endif; ?>
+              </div>
+            </div>
             <div class="info-box mb-3 bg-info">
               <span class="info-box-icon"><i class="fas fa-shopping-cart"></i></span>
               <div class="info-box-content">
@@ -653,6 +698,31 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
             </div>
           </div>
         </div>
+
+        <!-- ── Expired Ingredients Alert ──────────────────── -->
+        <?php if ($expiredCount > 0): ?>
+        <div class="row mb-3">
+          <div class="col-12">
+            <div class="alert alert-danger alert-dismissible fade show shadow-sm" role="alert" style="border-left:5px solid #c0392b;">
+              <div class="d-flex align-items-center">
+                <i class="fas fa-skull-crossbones fa-2x mr-3"></i>
+                <div>
+                  <strong><?= $expiredCount ?> ingredient(s) have expired</strong> and should be removed immediately.
+                  <?php if (!empty($expiredNames)): ?>
+                    &nbsp;<span class="text-muted">—</span>&nbsp;
+                    <?= implode(', ', array_map('htmlspecialchars', $expiredNames)) ?>
+                    <?php if ($expiredCount > count($expiredNames)): ?>
+                      <em>and <?= $expiredCount - count($expiredNames) ?> more</em>
+                    <?php endif; ?>
+                  <?php endif; ?>
+                  &nbsp;<a href="inventory.php" class="btn btn-sm btn-danger ml-2"><i class="fas fa-arrow-right mr-1"></i>Go to Inventory</a>
+                </div>
+              </div>
+              <button type="button" class="close" data-dismiss="alert">&times;</button>
+            </div>
+          </div>
+        </div>
+        <?php endif; ?>
 
         <!-- ── Recent Orders ──────────────────────────────── -->
         <div class="row">

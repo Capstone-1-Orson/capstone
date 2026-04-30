@@ -86,7 +86,25 @@ if ($hasOrderItems) {
                 SUM(oi.qty) AS total_qty,
                 GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS item_names,
                 GROUP_CONCAT(
-                    CONCAT(m.name,'|',oi.qty,'||',COALESCE(oi.removed_ingredient_names,''))
+                    CONCAT(
+                        m.name,'|',oi.qty,'|',
+                        COALESCE(oi.addons,''),'|',
+                        CASE
+                            WHEN oi.removed_ingredient_names IS NOT NULL
+                                 AND oi.removed_ingredient_names != '[]'
+                                 AND oi.removed_ingredient_names != ''
+                            THEN oi.removed_ingredient_names
+                            WHEN oi.removed_ingredient_ids IS NOT NULL
+                                 AND oi.removed_ingredient_ids != '[]'
+                                 AND oi.removed_ingredient_ids != ''
+                            THEN (
+                                SELECT CONCAT('[',GROUP_CONCAT(JSON_QUOTE(i2.name) ORDER BY i2.name),']')
+                                FROM ingredients i2
+                                WHERE JSON_SEARCH(oi.removed_ingredient_ids, 'one', CAST(i2.id AS CHAR)) IS NOT NULL
+                            )
+                            ELSE ''
+                        END
+                    )
                     ORDER BY m.name SEPARATOR ';;'
                 ) AS item_details
          FROM orders o
@@ -1514,12 +1532,27 @@ function refreshHistoryPanel() {
         </div>`;
       }).join('');
     } else if (!o.fromSession && o.item_details) {
-      // Parse "name|qty|addons|removed;;name|qty|addons|removed"
+      // Parse "name|qty|addons|removed_json;;..."
       itemDetailHTML = o.item_details.split(';;').map(seg => {
-        const [name, qty, addons, removed] = seg.split('|');
+        // Limit split to 4 parts so JSON in removed field isn't broken by | inside it
+        const idx1 = seg.indexOf('|'), idx2 = seg.indexOf('|', idx1+1), idx3 = seg.indexOf('|', idx2+1);
+        const name    = seg.substring(0, idx1) || '';
+        const qty     = seg.substring(idx1+1, idx2) || '1';
+        const addons  = seg.substring(idx2+1, idx3) || '';
+        const rawRem  = idx3 >= 0 ? seg.substring(idx3+1) : '';
+        // Parse JSON array of removed names e.g. ["Cheese Powder","Onion"]
+        let removed = '';
+        if (rawRem && rawRem !== '[]') {
+          try {
+            const arr = JSON.parse(rawRem);
+            if (Array.isArray(arr) && arr.length) removed = arr.join(', ');
+          } catch(e) {
+            if (rawRem !== '[]') removed = rawRem;
+          }
+        }
         return `<div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:4px;margin-top:3px;">
-          <span style="font-size:11.5px;font-weight:600;">${name||''}</span>
-          <span style="font-size:10.5px;color:var(--muted)">×${qty||1}</span>
+          <span style="font-size:11.5px;font-weight:600;">${name}</span>
+          <span style="font-size:10.5px;color:var(--muted)">×${qty}</span>
           ${addons  ? `<span style="font-size:10px;color:var(--accent);background:var(--accent-soft);padding:1px 5px;border-radius:4px;">+${addons}</span>` : ''}
           ${removed ? `<span style="font-size:10px;color:var(--red);background:rgba(239,68,68,.08);padding:1px 5px;border-radius:4px;">No: ${removed}</span>` : ''}
         </div>`;
@@ -2240,8 +2273,7 @@ function placeOrder() {
       menu_id:    c.id,
       qty:        c.qty,
       unit_price: c.price,
-      // Send full {id, name} objects so backend stores both
-      removed_ingredient_names: (c.removedIngs||[]).map(r=>({id: r.id, name: r.name||r})),
+      removed_ingredient_ids: (c.removedIngs||[]).map(r=>({id: r.id, name: r.name||r})),
       addons:     (c.addons||[]).map(a=>`${a.qty>1?a.qty+'× ':''}${a.name} (+₱${a.price})`).join(', '),
       notes:      c.notes||'',
     }))
