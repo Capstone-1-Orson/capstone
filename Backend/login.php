@@ -8,7 +8,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pass'])) {
     $pass = trim($_POST['pass'] ?? '');
 
     if (empty($pass)) {
-        header("Location: ../Frontend/lockscreen.html?error=invalid");
+        header("Location: ../lockscreen.html?error=invalid");
         exit();
     }
 
@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['pass'])) {
         exit();
     }
 
-    header("Location: ../Frontend/lockscreen.html?error=invalid");
+    header("Location: ../lockscreen.html?error=invalid");
     exit();
 }
 
@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['email'])) {
     $pass  = trim($_POST['password'] ?? '');
 
     if (empty($email) || empty($pass)) {
-        header("Location: ../Frontend/login-v2.html?error=invalid");
+        header("Location: ../login-v2.html?error=invalid");
         exit();
     }
 
@@ -57,16 +57,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['email'])) {
     $stmt->close();
 
     if ($db_pass) {
-        // bcrypt verification only — plain-text fallback removed
-        // Run: UPDATE user SET password = PASSWORD_HASH(password, PASSWORD_DEFAULT)
-        // in phpMyAdmin for any legacy un-hashed accounts before deploying.
         if (password_verify($pass, $db_pass)) {
             session_regenerate_id(true);
             $_SESSION['user']     = $email;
             $_SESSION['position'] = $db_position;
 
             if ($db_position === 'admin') {
-                header("Location: ../Frontend/lockscreen.html");
+                header("Location: ../lockscreen.html");
                 exit();
             }
 
@@ -75,12 +72,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['email'])) {
                 exit();
             }
 
-            header("Location: ../Frontend/login-v2.html?error=unauthorized");
+            header("Location: ../login-v2.html?error=unauthorized");
             exit();
         }
     }
 
-    header("Location: ../Frontend/login-v2.html?error=invalid");
+    header("Location: ../login-v2.html?error=invalid");
     exit();
 }
 ?>
