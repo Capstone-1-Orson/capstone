@@ -246,16 +246,122 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
   <link rel="stylesheet" href="../plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
   <link rel="stylesheet" href="../plugins/datatables-buttons/css/buttons.bootstrap4.min.css">
   <link rel="stylesheet" href="../dist/css/empress-cafe-theme.css">
-  <link rel="stylesheet" href="../dist/css/empress-animations.css">
   <style>
     body, .main-header.navbar { transition: background-color .5s ease, color .5s ease; }
     #darkModeToggle            { transition: box-shadow .3s ease; }
-    #darkModeToggle i          { transition: transform .3s ease; }
+    
     #darkModeToggle.clicked    { box-shadow: 0 0 15px rgba(255,255,255,.8); }
-    #darkModeToggle.clicked i  { transform: rotate(180deg) scale(1.2); }
+    
     .stat-label { font-size: .82rem; color: #aaa; }
     .stat-val   { font-size: 1.5rem; font-weight: 700; margin-bottom: 2px; }
-  </style>
+  
+    
+    /* FIX: Table hover visible in light mode */
+    body:not(.dark-mode) .table tbody tr:hover { background-color: rgba(233,30,140,0.08) !important; }
+    body:not(.dark-mode) .table tbody tr:hover td { color: #212529 !important; }
+
+    /* FIX: table-dark class invisible in light mode — keep text readable */
+    body:not(.dark-mode) .table-dark,
+    body:not(.dark-mode) .table-dark th,
+    body:not(.dark-mode) .table-dark td,
+    body:not(.dark-mode) .table-dark thead th {
+      background-color: transparent !important;
+      color: #212529 !important;
+      border-color: #dee2e6 !important;
+    }
+
+    /* ══════════════════════════════════════════════════════
+       GLOBAL FIXES — icon animations removed + mobile scrollbar
+       ══════════════════════════════════════════════════════ */
+
+    /* 1. Kill ALL icon animations — every selector possible */
+    i.fas, i.far, i.fab, i.fal, i.fad,
+    .nav-icon,
+    .info-box-icon i,
+    .btn i,
+    .card-title i,
+    .sidebar i,
+    [class*="fa-"] {
+      animation: none !important;
+      -webkit-animation: none !important;
+      transform: none !important;
+      /* allow color/opacity transitions on non-icon elements still */
+    }
+    .fa-spin, .fa-pulse {
+      animation: none !important;
+      -webkit-animation: none !important;
+    }
+    .info-box-icon, .info-box-icon *,
+    .small-box .icon i, .small-box .icon [class*="fa-"] {
+      animation: none !important;
+      -webkit-animation: none !important;
+      transform: none !important;
+    }
+
+    /* 2. TABLE MOBILE SCROLL FIX
+          - Tables MUST NOT wrap text vertically.
+          - The wrapper scrolls horizontally; cells stay single-line.   */
+    .table-responsive {
+      overflow-x: auto !important;
+      -webkit-overflow-scrolling: touch;
+    }
+    /* DataTables also need their own wrapper to scroll */
+    .dataTables_wrapper {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    /* CRITICAL: keep all table text on one line — table scrolls, text never wraps */
+    .table td,
+    .table th {
+      white-space: nowrap !important;
+      word-break: normal !important;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 220px;        /* prevents insanely wide single cells */
+    }
+    /* Allow description/notes columns to be slightly wider but still nowrap */
+    .table td:nth-child(4),
+    .table td.desc-col {
+      max-width: 280px;
+    }
+
+    /* 3. Pagination scrolls on small screens */
+    .dataTables_wrapper .dataTables_paginate {
+      overflow-x: auto;
+      white-space: nowrap;
+      display: block;
+      padding-bottom: 6px;
+    }
+
+    /* 4. Custom thin scrollbar (WebKit) — pink accent */
+    ::-webkit-scrollbar        { height: 6px; width: 6px; }
+    ::-webkit-scrollbar-track  { background: rgba(0,0,0,0.06); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb  { background: rgba(233,30,140,0.45); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(233,30,140,0.75); }
+
+    /* 5. Content wrapper horizontal scroll guard */
+    .content-wrapper {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    html { overflow-y: scroll; }
+
+    /* 6. Mobile tweaks */
+    @media (max-width: 576px) {
+      .dataTables_wrapper .dataTables_paginate .paginate_button {
+        padding: 3px 6px !important;
+        font-size: 11px !important;
+        min-width: 26px;
+      }
+      .dataTables_wrapper .dataTables_length,
+      .dataTables_wrapper .dataTables_filter,
+      .dataTables_wrapper .dataTables_info {
+        font-size: 11px;
+      }
+      .content-header h1 { font-size: 1.2rem; }
+    }
+
+</style>
 </head>
 <body class="hold-transition dark-mode sidebar-mini layout-fixed layout-navbar-fixed layout-footer-fixed">
 <div class="wrapper">

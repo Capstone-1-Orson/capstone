@@ -197,7 +197,6 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
   <link rel="stylesheet" href="../plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
   <link rel="stylesheet" href="../dist/css/empress-cafe-theme.css">
-  <link rel="stylesheet" href="../dist/css/empress-animations.css">
   <style>
     /* Dark-mode toggle */
     body, .main-header.navbar, .main-sidebar, .content-wrapper, .main-footer {
@@ -206,8 +205,20 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
     #darkModeToggle { transition: box-shadow .3s ease; }
     #darkModeToggle.clicked { box-shadow: 0 0 15px rgba(255,255,255,.8); }
 
-    /* ── Animated counter numbers ── */
-    .info-box-number[data-target] { opacity: 0; }
+    
+
+    /* ── FIX: Table hover visibility in light mode ── */
+    /* Keep text color visible on hover in both light and dark mode */
+    .table tbody tr:hover td,
+    .table-hover tbody tr:hover td {
+      color: inherit !important;
+    }
+    body:not(.dark-mode) .table tbody tr:hover {
+      background-color: rgba(233, 30, 140, 0.08) !important;
+    }
+    body:not(.dark-mode) .table tbody tr:hover td {
+      color: #212529 !important;
+    }
 
     /* ── Ticker ribbon at top of page ── */
     @keyframes tickerScroll {
@@ -264,25 +275,98 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
       font-size: 1.1rem;
     }
 
-    /* ── Recent orders row enter ── */
-    @keyframes rowSlideIn {
-      from { opacity: 0; transform: translateX(-12px); }
-      to   { opacity: 1; transform: translateX(0); }
-    }
-    tbody tr { opacity: 0; animation: rowSlideIn .4s ease forwards; }
-    tbody tr:nth-child(1) { animation-delay: .05s; }
-    tbody tr:nth-child(2) { animation-delay: .12s; }
-    tbody tr:nth-child(3) { animation-delay: .19s; }
-    tbody tr:nth-child(4) { animation-delay: .26s; }
-    tbody tr:nth-child(5) { animation-delay: .33s; }
+    /* ══════════════════════════════════════════════════════
+       GLOBAL FIXES — icon animations removed + mobile scrollbar
+       ══════════════════════════════════════════════════════ */
 
-    /* ── Spinning refresh icon ── */
-    @keyframes spinOnce {
-      from { transform: rotate(0deg); }
-      to   { transform: rotate(360deg); }
+    /* 1. Kill ALL icon animations — every selector possible */
+    i.fas, i.far, i.fab, i.fal, i.fad,
+    .nav-icon,
+    .info-box-icon i,
+    .btn i,
+    .card-title i,
+    .sidebar i,
+    [class*="fa-"] {
+      animation: none !important;
+      -webkit-animation: none !important;
+      transform: none !important;
+      /* allow color/opacity transitions on non-icon elements still */
     }
-    .btn-refresh:active i { animation: spinOnce .5s ease; }
-  </style>
+    .fa-spin, .fa-pulse {
+      animation: none !important;
+      -webkit-animation: none !important;
+    }
+    .info-box-icon, .info-box-icon *,
+    .small-box .icon i, .small-box .icon [class*="fa-"] {
+      animation: none !important;
+      -webkit-animation: none !important;
+      transform: none !important;
+    }
+
+    /* 2. TABLE MOBILE SCROLL FIX
+          - Tables MUST NOT wrap text vertically.
+          - The wrapper scrolls horizontally; cells stay single-line.   */
+    .table-responsive {
+      overflow-x: auto !important;
+      -webkit-overflow-scrolling: touch;
+    }
+    /* DataTables also need their own wrapper to scroll */
+    .dataTables_wrapper {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    /* CRITICAL: keep all table text on one line — table scrolls, text never wraps */
+    .table td,
+    .table th {
+      white-space: nowrap !important;
+      word-break: normal !important;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 220px;        /* prevents insanely wide single cells */
+    }
+    /* Allow description/notes columns to be slightly wider but still nowrap */
+    .table td:nth-child(4),
+    .table td.desc-col {
+      max-width: 280px;
+    }
+
+    /* 3. Pagination scrolls on small screens */
+    .dataTables_wrapper .dataTables_paginate {
+      overflow-x: auto;
+      white-space: nowrap;
+      display: block;
+      padding-bottom: 6px;
+    }
+
+    /* 4. Custom thin scrollbar (WebKit) — pink accent */
+    ::-webkit-scrollbar        { height: 6px; width: 6px; }
+    ::-webkit-scrollbar-track  { background: rgba(0,0,0,0.06); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb  { background: rgba(233,30,140,0.45); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(233,30,140,0.75); }
+
+    /* 5. Content wrapper horizontal scroll guard */
+    .content-wrapper {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    html { overflow-y: scroll; }
+
+    /* 6. Mobile tweaks */
+    @media (max-width: 576px) {
+      .dataTables_wrapper .dataTables_paginate .paginate_button {
+        padding: 3px 6px !important;
+        font-size: 11px !important;
+        min-width: 26px;
+      }
+      .dataTables_wrapper .dataTables_length,
+      .dataTables_wrapper .dataTables_filter,
+      .dataTables_wrapper .dataTables_info {
+        font-size: 11px;
+      }
+      .content-header h1 { font-size: 1.2rem; }
+    }
+
+</style>
 </head>
 <body class="hold-transition sidebar-mini layout-fixed layout-navbar-fixed layout-footer-fixed">
 <script>
@@ -603,8 +687,13 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
             </div>
           </div>
 
-          <!-- Right col -->
+          <!-- Right col — Today's Snapshot -->
           <div class="col-md-4">
+            <!-- Section label so users understand what this panel contains -->
+            <div class="d-flex align-items-center mb-2">
+              <i class="fas fa-chart-bar mr-2" style="color:#e91e8c;font-size:.95rem;"></i>
+              <span style="font-weight:700;font-size:.8rem;text-transform:uppercase;letter-spacing:.07em;color:#888;">Today's Snapshot</span>
+            </div>
             <div class="info-box mb-3 bg-warning">
               <span class="info-box-icon"><i class="fas fa-boxes"></i></span>
               <div class="info-box-content">
@@ -615,14 +704,14 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
             <div class="info-box mb-3 bg-success">
               <span class="info-box-icon"><i class="fas fa-money-bill-wave"></i></span>
               <div class="info-box-content">
-                <span class="info-box-text">Today's Revenue</span>
+                <span class="info-box-text">Today's Sales &amp; Revenue</span>
                 <span class="info-box-number">&#8369;<?= number_format($dailyRevenue, 2) ?></span>
               </div>
             </div>
             <div class="info-box mb-3 bg-danger">
               <span class="info-box-icon"><i class="fas fa-exclamation-triangle"></i></span>
               <div class="info-box-content">
-                <span class="info-box-text">Low Stock Alerts</span>
+                <span class="info-box-text">Low Stock Ingredients Alerts </span>
                 <span class="info-box-number"><?= number_format($lowStockCount) ?></span>
               </div>
             </div>
@@ -917,31 +1006,6 @@ $(function () {
 })();
 </script>
 
-<!-- ── Scroll-reveal for stat cards ─────────────────────────── -->
-<script>
-(function () {
-  if (!('IntersectionObserver' in window)) return;
-  var obs = new IntersectionObserver(function (entries) {
-    entries.forEach(function (e) {
-      if (e.isIntersecting) {
-        e.target.style.opacity = '1';
-        e.target.style.transform = 'translateY(0)';
-        obs.unobserve(e.target);
-      }
-    });
-  }, { threshold: 0.15 });
 
-  document.querySelectorAll('.card, .info-box').forEach(function (el) {
-    // Only animate elements not already in view
-    var rect = el.getBoundingClientRect();
-    if (rect.top > window.innerHeight) {
-      el.style.opacity = '0';
-      el.style.transform = 'translateY(24px)';
-      el.style.transition = 'opacity .5s ease, transform .5s cubic-bezier(.34,1.56,.64,1)';
-      obs.observe(el);
-    }
-  });
-})();
-</script>
 </body>
 </html>
