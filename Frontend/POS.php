@@ -567,7 +567,125 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 
 @media(max-width:1200px){:root{--order-w:295px;}}
 @media(max-width:1024px){.stats-strip{display:none;}}
-@media(max-width:860px){.pos-order{display:none;}}
+/* ── MOBILE RESPONSIVE ── */
+@media(max-width:860px){
+  /* Body stacks vertically */
+  body{flex-direction:column;}
+
+  /* Sidebar becomes a bottom nav bar */
+  .pos-sidebar{
+    width:100%;height:56px;flex-direction:row;
+    border-right:none;border-top:1px solid var(--border);
+    padding:0 4px;gap:0;
+    order:2;flex-shrink:0;
+    position:fixed;bottom:0;left:0;right:0;z-index:200;
+  }
+  .s-logo{display:none;}
+  .s-spacer{display:none;}
+  .s-theme{width:36px;height:36px;margin:0;flex-shrink:0;}
+  .s-avatar{width:30px;height:30px;font-size:11px;margin:0;flex-shrink:0;}
+  .nav-btn{
+    flex:1;height:100%;border-radius:0;
+    font-size:8px;gap:2px;flex-direction:column;padding:4px 2px;
+  }
+  .nav-btn i{font-size:15px;}
+  .nav-btn.active::before{
+    left:50%;top:-1px;transform:translateX(-50%);
+    width:26px;height:3px;border-radius:0 0 3px 3px;
+  }
+  .nav-logout{font-size:8px;}
+
+  /* Main fills full screen */
+  html,body{height:100%;overflow:hidden;}
+  .pos-main{
+    order:1;flex:1;
+    padding:14px 12px 70px;
+    overflow-y:auto;
+    min-height:0;
+  }
+
+  /* Product grid: 2 columns */
+  .product-grid{grid-template-columns:repeat(2,1fr);gap:9px;}
+  .card-img-w{height:86px;min-height:86px;}
+  .card-body-i{padding:8px;}
+  .card-name{font-size:12px;}
+  .card-price{font-size:13px;}
+  .card-add-btn{opacity:1;transform:translateY(0);font-size:11.5px;padding:7px;}
+
+  /* Search full width */
+  .pos-search{max-width:100%;margin-left:0;flex:1;}
+  .pos-topbar{flex-wrap:wrap;gap:7px;}
+  .pos-title{font-size:19px;}
+  #liveClock{font-size:10.5px;padding:4px 7px;}
+
+  /* Side panels: full screen above bottom nav */
+  .side-panel{left:0;top:0;bottom:56px;z-index:600;}
+  .panel-header{padding:16px 16px 12px;}
+  .panel-body{padding:14px 16px;}
+
+  /* Order panel becomes a bottom sheet */
+  .pos-order{
+    display:flex!important;
+    position:fixed;
+    bottom:56px;left:0;right:0;
+    height:0;max-height:88vh;
+    border-left:none;border-top:1px solid var(--border2);
+    border-radius:20px 20px 0 0;
+    width:100%;
+    z-index:700;
+    overflow:hidden;
+    transition:height .32s cubic-bezier(.4,0,.2,1);
+    padding:0;
+  }
+  .pos-order.mobile-open{
+    height:82vh;
+    padding:0 16px 16px;
+    overflow-y:auto;
+  }
+  /* Handle bar at top of sheet */
+  .pos-order::before{
+    content:'';
+    display:block;
+    width:40px;height:4px;
+    background:var(--border2);
+    border-radius:2px;
+    margin:12px auto 8px;
+    flex-shrink:0;
+    position:sticky;top:0;
+    z-index:1;
+  }
+
+  /* Mobile Cart FAB */
+  #mobileCartBtn{
+    display:flex;
+    position:fixed;
+    bottom:66px;right:14px;
+    width:54px;height:54px;
+    background:var(--accent);
+    border-radius:50%;
+    align-items:center;justify-content:center;
+    font-size:21px;color:#fff;
+    box-shadow:0 6px 20px var(--accent-glow);
+    z-index:300;
+    border:none;cursor:pointer;
+    transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow var(--tr);
+  }
+  #mobileCartBtn:active{transform:scale(0.90);}
+  #mobileCartCount{
+    position:absolute;top:-2px;right:-2px;
+    min-width:19px;height:19px;
+    background:var(--red);color:#fff;
+    border-radius:10px;font-size:10px;font-weight:800;
+    display:flex;align-items:center;justify-content:center;
+    border:2px solid var(--surface);
+    padding:0 3px;
+  }
+}
+
+@media(min-width:861px){
+  #mobileCartBtn{display:none!important;}
+  #mobileCartOverlay{display:none!important;}
+}
 
 /* ── SIDE PANELS ── */
 .side-panel{position:fixed;top:0;left:var(--sidebar-w);right:0;bottom:0;background:var(--bg);z-index:500;display:none;flex-direction:column;overflow:hidden;animation:fadeIn .2s ease;}
@@ -610,7 +728,7 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 /* Menu panel grid */
 .menu-panel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;}
 .menu-panel-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;align-items:center;gap:14px;transition:all var(--tr);}
-.menu-panel-card:hover{border-color:var(--border2);transform:translateY(-2px);}
+.menu-panel-card:hover{border-color:rgba(233,30,140,.35);transform:translateY(-2px);box-shadow:0 8px 20px var(--accent-glow);}
 .menu-panel-emoji{width:48px;height:48px;background:var(--surface2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0;}
 .menu-panel-info{flex:1;min-width:0;}
 .menu-panel-name{font-weight:600;font-size:13.5px;}
@@ -987,7 +1105,14 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
   </div>
 </aside>
 
-<!-- ── Main ───────────────────────────────────────────────── -->
+<!-- ── Mobile Cart FAB ─────────────────────────────────────── -->
+<button id="mobileCartBtn" onclick="openMobileCart()" aria-label="View Cart">
+  <i class="fa-solid fa-cart-shopping"></i>
+  <span id="mobileCartCount" style="display:none">0</span>
+</button>
+
+<!-- ── Mobile Cart Overlay ─────────────────────────────────── -->
+<div id="mobileCartOverlay" onclick="closeMobileCart()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:699;"></div>
 <main class="pos-main">
   <div class="pos-topbar">
     <div class="pos-title">New <span>Order</span></div>
@@ -1156,15 +1281,23 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
     <div class="panel-section-title"><?= $cat_emoji[$cat] ?? '🍽️' ?> <?= htmlspecialchars($cat) ?> <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted2)">(<?= count($items) ?> items)</span></div>
     <div class="menu-panel-grid" style="margin-bottom:24px;">
       <?php foreach($items as $item): ?>
-      <div class="menu-panel-card">
-        <div class="menu-panel-emoji"><?= $cat_emoji[$item['category']] ?? '🍽️' ?></div>
+      <div class="menu-panel-card" onclick="closePanel();setTimeout(()=>{activeCat='<?= addslashes($item['category']) ?>';renderCats();renderProducts();requestAnimationFrame(staggerCards);},200);" style="cursor:pointer;">
+        <div class="menu-panel-emoji" style="overflow:hidden;border-radius:12px;flex-shrink:0;">
+          <?php if (!empty($item['image'])): ?>
+            <img src="<?= htmlspecialchars($item['image']) ?>" alt="<?= htmlspecialchars($item['name']) ?>"
+                 style="width:100%;height:100%;object-fit:cover;border-radius:12px;"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+            <span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:24px;"><?= $cat_emoji[$item['category']] ?? '🍽️' ?></span>
+          <?php else: ?>
+            <span style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:24px;"><?= $cat_emoji[$item['category']] ?? '🍽️' ?></span>
+          <?php endif; ?>
+        </div>
         <div class="menu-panel-info">
           <div class="menu-panel-name"><?= htmlspecialchars($item['name']) ?></div>
           <div class="menu-panel-cat"><?= htmlspecialchars($item['category']) ?></div>
           <?php if($item['description']): ?><div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars($item['description']) ?></div><?php endif; ?>
           <div class="menu-panel-price">₱<?= number_format($item['price'], 2) ?></div>
         </div>
-        <span class="badge-pill green"><i class="fa-solid fa-circle" style="font-size:6px"></i> Active</span>
       </div>
       <?php endforeach; ?>
     </div>
@@ -1795,7 +1928,7 @@ function renderProducts() {
     card.innerHTML=`
       <div class="card-img-w">
         ${p.image
-          ? `<img class="card-img-real" src="${p.image.replace('Frontend/','')}" alt="${p.name}" loading="lazy"
+          ? `<img class="card-img-real" src="${p.image.startsWith('http')||p.image.startsWith('/')?p.image:p.image.replace(/^.*Frontend\//,'')}" alt="${p.name}" loading="lazy"
                onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
              <div class="card-img-placeholder" style="display:none">
                <i class="fa-solid fa-image"></i>${p.name.split(' ')[0]}
@@ -2819,7 +2952,45 @@ async function submitVoidRefund() {
   }
 }
 
-// ── Theme ─────────────────────────────────────────────────────
+// ── Mobile Cart Drawer ───────────────────────────────────────
+function openMobileCart() {
+  const panel = document.querySelector('.pos-order');
+  if (!panel) return;
+  panel.classList.add('mobile-open');
+  document.getElementById('mobileCartOverlay').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeMobileCart() {
+  const panel = document.querySelector('.pos-order');
+  if (!panel) return;
+  panel.classList.remove('mobile-open');
+  document.getElementById('mobileCartOverlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function updateMobileCartBadge() {
+  const count = (typeof cart !== 'undefined') ? cart.reduce((s, i) => s + i.qty, 0) : 0;
+  const badge = document.getElementById('mobileCartCount');
+  if (!badge) return;
+  if (count > 0) {
+    badge.style.display = 'flex';
+    badge.textContent = count > 99 ? '99+' : count;
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+// Watch the cart scroll element for changes to update the badge
+(function() {
+  const obs = new MutationObserver(updateMobileCartBadge);
+  document.addEventListener('DOMContentLoaded', () => {
+    const el = document.getElementById('cartScroll');
+    if (el) obs.observe(el, { childList: true, subtree: true });
+    updateMobileCartBadge();
+  });
+})();
+
 // ── Live Clock ────────────────────────────────────────────────
 (function startClock(){
   const el=document.getElementById('liveClock');
