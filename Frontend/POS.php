@@ -1360,6 +1360,57 @@ let cart = [], activeCat = 'all', searchQ = '', discount = 0, selTable = '01';
 let sessionRevenue = 0, sessionOrders = 0;
 let currentTotal = 0;
 
+// ── Cart persistence across reloads ──────────────────────────
+function saveCartState() {
+  try {
+    const activeTab = document.querySelector('.o-tab.active');
+    localStorage.setItem('pos_cart', JSON.stringify({
+      cart,
+      discount,
+      activeDiscountType,
+      selTable,
+      orderType: activeTab ? activeTab.textContent.trim() : 'Dine In',
+    }));
+  } catch(e) {}
+}
+
+function clearCartState() {
+  try { localStorage.removeItem('pos_cart'); } catch(e) {}
+}
+
+function restoreCartState() {
+  try {
+    const saved = localStorage.getItem('pos_cart');
+    if (!saved) return;
+    const s = JSON.parse(saved);
+    if (s.cart && s.cart.length) {
+      cart = s.cart;
+      discount = s.discount || 0;
+      activeDiscountType = s.activeDiscountType || null;
+      selTable = s.selTable || '01';
+
+      const inp = document.getElementById('tableInput');
+      if (inp) inp.value = parseInt(selTable) || 1;
+
+      if (activeDiscountType === 'senior') {
+        const b = document.getElementById('btnSenior');
+        if (b) b.classList.add('active');
+      } else if (activeDiscountType === 'pwd') {
+        const b = document.getElementById('btnPWD');
+        if (b) b.classList.add('active');
+      }
+
+      if (s.orderType) {
+        document.querySelectorAll('.o-tab').forEach(t => {
+          t.classList.toggle('active', t.textContent.trim() === s.orderType);
+        });
+      }
+
+      updateCartUI();
+    }
+  } catch(e) {}
+}
+
 const CAT_ICON = {
   'Main Course':'🍽️','Appetizer':'🥗','Dessert':'🍰','Beverage':'☕',
   'Coffee':'☕','Beer & Wine':'🍷','Bites & Treats':'🥐','Croffle':'🧇',
@@ -1407,6 +1458,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Close panel on Escape
   document.addEventListener('keydown', e => { if(e.key==='Escape') closePanel(); });
+
+  // Restore cart if page was reloaded mid-order
+  restoreCartState();
 });
 
 // ── Order history (session) ───────────────────────────────────
@@ -2092,6 +2146,7 @@ function updateCartUI() {
   const sub=cart.reduce((s,c)=>s+c.price*c.qty,0);
   // Keep 20% discount in sync as cart changes
   if(activeDiscountType) discount=parseFloat((sub*0.20).toFixed(2));
+  saveCartState();
   const tot=parseFloat(Math.max(sub-discount,0).toFixed(2));
   currentTotal=tot;
 
@@ -2353,6 +2408,7 @@ function placeOrder() {
         showReceipt(orderData);
 
         // Reset cart state after receipt is shown
+        clearCartState();
         cart=[]; discount=0; activeDiscountType=null;
         document.getElementById('btnSenior').classList.remove('active');
         document.getElementById('btnPWD').classList.remove('active');
@@ -2509,6 +2565,7 @@ function handleReceiptClick(e){
 function closeReceipt(){
   const container=document.getElementById('receiptContainer');
   container.innerHTML='';
+  location.reload();
 }
 
 function printReceipt(){
