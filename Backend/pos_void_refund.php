@@ -3,8 +3,10 @@
 // Handles VOID (cancel full order) and REFUND (partial or full)
 // Both restore ingredient stock back to inventory.
 
-header('Content-Type: application/json');
+
+session_name('STAFF_SESSION');
 session_start();
+header('Content-Type: application/json');
 
 if (!isset($_SESSION['user'])) {
     echo json_encode(['success' => false, 'message' => 'Unauthorized']);

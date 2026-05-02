@@ -2,8 +2,10 @@
 // Backend/pos_process.php
 // Handles POS order placement AND auto-deducts ingredient stock.
 
-header('Content-Type: application/json');
+
+session_name('STAFF_SESSION');
 session_start();
+header('Content-Type: application/json');
 
 if (!isset($_SESSION['user'])) {
     echo json_encode(['success' => false, 'message' => 'Unauthorized']);
@@ -27,6 +29,20 @@ $total_amt     = floatval($data['total_amt']    ?? 0);
 $discount_amt  = floatval($data['discount_amt'] ?? 0);
 $discount_type = $conn->real_escape_string($data['discount_type'] ?? '');
 $items         = $data['items'];
+
+// ── Resolve cashier user_id from session (FK → user.id) ───────
+$user_id = null;
+$email_key  = $_SESSION['user'] ?? '';
+if ($email_key) {
+    $uStmt = $conn->prepare(
+        "SELECT id FROM user WHERE email = ? OR firstname = ? LIMIT 1"
+    );
+    $uStmt->bind_param('ss', $email_key, $email_key);
+    $uStmt->execute();
+    $uStmt->bind_result($user_id);
+    $uStmt->fetch();
+    $uStmt->close();
+}
 
 // ══════════════════════════════════════════════════════════════
 //  PRE-CHECK: verify all ingredients have enough stock BEFORE
@@ -110,10 +126,10 @@ $conn->begin_transaction();
 try {
 
     $stmt = $conn->prepare(
-        "INSERT INTO orders (table_no, status, total_amt, discount_amt, discount_type, created_at)
-         VALUES (?, ?, ?, ?, ?, NOW())"
+        "INSERT INTO orders (table_no, user_id, status, total_amt, discount_amt, discount_type, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, NOW())"
     );
-    $stmt->bind_param('ssdds', $table_no, $status, $total_amt, $discount_amt, $discount_type);
+    $stmt->bind_param('sisdds', $table_no, $user_id, $status, $total_amt, $discount_amt, $discount_type);
     $stmt->execute();
     $order_id = $conn->insert_id;
     $stmt->close();

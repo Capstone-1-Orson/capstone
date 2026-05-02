@@ -1,7 +1,8 @@
 <?php
+session_name('ADMIN_SESSION');
 session_start();
 if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
-    header("Location: ../../Frontend/lockscreen.html");
+    header("Location:../../lockscreen.html");
     exit();
 }
 

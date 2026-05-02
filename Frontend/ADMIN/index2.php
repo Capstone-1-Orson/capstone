@@ -1,7 +1,8 @@
 <?php
+session_name('ADMIN_SESSION');
 session_start();
 if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
-    header("Location: ../../Frontend/lockscreen.html");
+    header("Location: ../../lockscreen.html");
     exit();
 }
 
@@ -135,16 +136,18 @@ $recentOrders = [];
 if ($hasOrderItems) {
     $r = $conn->query(
         "SELECT o.id, o.table_no, o.total_amt, o.created_at,
+                COALESCE(CONCAT(u.firstname,' ',u.lastname), 'N/A') AS cashier_name,
                 GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items
          FROM orders o
          JOIN order_items oi ON oi.order_id = o.id
          JOIN menu m ON m.id = oi.menu_id
+         LEFT JOIN user u ON u.id = o.user_id
          WHERE $VALID
          GROUP BY o.id ORDER BY o.created_at DESC LIMIT 5"
     );
     if ($r) while ($row = $r->fetch_assoc()) $recentOrders[] = $row;
 } else {
-    $r = $conn->query("SELECT id, table_no, total_amt, created_at, '—' AS items FROM orders WHERE $VALID ORDER BY created_at DESC LIMIT 5");
+    $r = $conn->query("SELECT o.id, o.table_no, o.total_amt, o.created_at, COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name, '—' AS items FROM orders o LEFT JOIN user u ON u.id = o.user_id WHERE $VALID ORDER BY o.created_at DESC LIMIT 5");
     if ($r) while ($row = $r->fetch_assoc()) $recentOrders[] = $row;
 }
 
@@ -444,9 +447,23 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
     </a>
     <div class="sidebar">
       <div class="user-panel mt-3 pb-3 mb-3 d-flex">
-        <div class="image"><img src="../dist/img/avatar.png" class="img-circle elevation-2" alt="User Image"></div>
+        <?php
+          $admin_image = $_SESSION['image'] ?? '';
+          $admin_first = $_SESSION['firstname'] ?? '';
+          $admin_last  = $_SESSION['lastname']  ?? '';
+          if (empty($admin_first)) {
+              $admin_first = strpos($_SESSION['user'] ?? '', '@') !== false
+                  ? explode('@', $_SESSION['user'])[0]
+                  : ($_SESSION['user'] ?? 'Admin');
+          }
+          $admin_name  = htmlspecialchars(trim($admin_first . ' ' . $admin_last));
+          $admin_photo = !empty($admin_image)
+              ? '../../' . htmlspecialchars($admin_image)
+              : '../dist/img/avatar.png';
+        ?>
+        <div class="image"><img src="<?= $admin_photo ?>" class="img-circle elevation-2" alt="<?= $admin_name ?>"></div>
         <div class="info">
-          <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user'] ?? 'Admin') ?></a>
+          <a href="#" class="d-block"><?= $admin_name ?></a>
         </div>
       </div>
       <nav class="mt-2">
@@ -826,6 +843,7 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
                     <thead>
                       <tr>
                         <th>Order ID</th>
+                        <th>Cashier</th>
                         <th>Date &amp; Time</th>
                         <th>Number No</th>
                         <th>Items</th>
@@ -837,6 +855,7 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
                         foreach ($recentOrders as $ro): ?>
                       <tr>
                         <td><strong>#<?= (int)$ro['id'] ?></strong></td>
+                        <td><?= htmlspecialchars($ro['cashier_name'] ?? '—') ?></td>
                         <td><small class="text-muted"><?= htmlspecialchars(date('M d, Y g:i A', strtotime($ro['created_at']))) ?></small></td>
                         <td><span class="badge badge-secondary"># <?= htmlspecialchars($ro['table_no']) ?></span></td>
                         <td><?= htmlspecialchars(mb_strimwidth($ro['items'], 0, 50, '…')) ?></td>
@@ -844,7 +863,7 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
                       </tr>
                       <?php endforeach; ?>
                       <?php else: ?>
-                      <tr><td colspan="5" class="text-center text-muted p-3">No recent orders.</td></tr>
+                      <tr><td colspan="6" class="text-center text-muted p-3">No recent orders.</td></tr>
                       <?php endif; ?>
                     </tbody>
                   </table>

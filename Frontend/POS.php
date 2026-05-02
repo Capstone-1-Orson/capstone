@@ -1,8 +1,9 @@
 <?php
 // Frontend/POS.php  (sits directly inside Frontend/)
+session_name('STAFF_SESSION');
 session_start();
 if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'staff') {
-    header("Location:login-v2.html");
+    header("Location:../login-v2.html");
     exit();
 }
 
@@ -12,20 +13,19 @@ if (!isset($conn) || $conn->connect_error) {
     die("Database connection failed: " . ($conn->connect_error ?? 'conn.php did not define $conn'));
 }
 
-// ── Resolve cashier full name from DB (session may store email instead of name) ──
-if (empty($_SESSION['firstname'])) {
-    $email_key = $_SESSION['user'] ?? '';
-    $stmt = $conn->prepare("SELECT firstname, lastname FROM user WHERE email = ? OR firstname = ? LIMIT 1");
-    if ($stmt) {
-        $stmt->bind_param('ss', $email_key, $email_key);
-        $stmt->execute();
-        $stmt->bind_result($_sFirst, $_sLast);
-        if ($stmt->fetch()) {
-            $_SESSION['firstname'] = $_sFirst;
-            $_SESSION['lastname']  = $_sLast;
-        }
-        $stmt->close();
+// ── Resolve cashier full name from DB (always re-fetch to reflect current logged-in user) ──
+$email_key = $_SESSION['user'] ?? '';
+$stmt = $conn->prepare("SELECT firstname, lastname, image FROM user WHERE email = ? LIMIT 1");
+if ($stmt) {
+    $stmt->bind_param('s', $email_key);
+    $stmt->execute();
+    $stmt->bind_result($_sFirst, $_sLast, $_sImage);
+    if ($stmt->fetch()) {
+        $_SESSION['firstname'] = $_sFirst;
+        $_SESSION['lastname']  = $_sLast;
+        $_SESSION['image']     = $_sImage;
     }
+    $stmt->close();
 }
 
 // ── NOTE: run this once in phpMyAdmin if the column doesn't exist yet ──
@@ -1091,7 +1091,7 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 
 <!-- ── Sidebar ─────────────────────────────────────────────── -->
 <aside class="pos-sidebar">
-  <div class="s-logo">♛</div>
+  <div class="s-logo"><i class="fa-solid fa-crown" style="font-size:18px;"></i></div>
   <button class="nav-btn active" title="Orders"><i class="fa-solid fa-receipt"></i>Orders</button>
   <button class="nav-btn" title="Menu"><i class="fa-solid fa-utensils"></i>Menu</button>
   <button class="nav-btn" title="History" style="position:relative">
@@ -1105,18 +1105,28 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
     <i class="fa-solid fa-right-from-bracket"></i>Logout
   </a>
   <?php
-    $av_firstname = $_SESSION['firstname'] ?? ($_SESSION['user'] ?? 'User');
+    $av_firstname = $_SESSION['firstname'] ?? '';
     $av_lastname  = $_SESSION['lastname']  ?? '';
-    $av_image     = $_SESSION['image']    ?? '';
-    $av_initials  = strtoupper(substr($av_firstname, 0, 1) . substr($av_lastname, 0, 1));
-    $av_title     = htmlspecialchars(trim($av_firstname . ' ' . $av_lastname));
+    $av_image     = $_SESSION['image']     ?? '';
+    // Fallback: use session user (email) if no name
+    if (empty($av_firstname)) {
+        $av_fallback  = $_SESSION['user'] ?? 'User';
+        // If it looks like an email, use the part before @
+        $av_firstname = strpos($av_fallback, '@') !== false
+            ? explode('@', $av_fallback)[0]
+            : $av_fallback;
+    }
+    // Build initials: up to 2 chars
+    $av_initials = strtoupper(substr($av_firstname, 0, 1) . substr($av_lastname, 0, 1));
+    if (empty($av_initials)) $av_initials = '?';
+    $av_title = htmlspecialchars(trim($av_firstname . ' ' . $av_lastname));
   ?>
   <div class="s-avatar" title="<?= $av_title ?>">
     <?php if (!empty($av_image)): ?>
       <img src="../<?= htmlspecialchars($av_image) ?>" alt="<?= $av_title ?>"
            style="width:100%;height:100%;object-fit:cover;border-radius:50%;">
     <?php else: ?>
-      <?= $av_initials ?>
+      <?= htmlspecialchars($av_initials) ?>
     <?php endif; ?>
   </div>
 </aside>

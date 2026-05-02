@@ -1,7 +1,8 @@
 <?php
+session_name('ADMIN_SESSION');
 session_start();
 if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
-    header("Location: ../../Frontend/lockscreen.html");
+    header("Location: ../../lockscreen.html");
     exit();
 }
 
@@ -142,6 +143,7 @@ if ($hasOrderItems) {
         "SELECT o.id, o.created_at, o.table_no, o.total_amt,
                 COALESCE(o.discount_amt, 0) AS discount_amt,
                 COALESCE(o.discount_type, '') AS discount_type,
+                COALESCE(CONCAT(u.firstname,' ',u.lastname), 'N/A') AS cashier_name,
                 GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
                 GROUP_CONCAT(
                     CONCAT(
@@ -166,6 +168,7 @@ if ($hasOrderItems) {
                     ORDER BY m.name SEPARATOR ';;'
                 ) AS item_details
          FROM orders o
+         LEFT JOIN user u ON u.id = o.user_id
          JOIN order_items oi ON oi.order_id = o.id
          JOIN menu m ON m.id = oi.menu_id
          WHERE $VALID
@@ -174,7 +177,7 @@ if ($hasOrderItems) {
     );
     if ($r5) while ($row = $r5->fetch_assoc()) $latestOrders[] = $row;
 } else {
-    $r5 = $conn->query("SELECT id, created_at, table_no, total_amt, COALESCE(discount_amt,0) AS discount_amt, COALESCE(discount_type,'') AS discount_type, '—' AS items, '' AS item_details FROM orders WHERE $VALID ORDER BY created_at DESC LIMIT 10");
+    $r5 = $conn->query("SELECT o.id, o.created_at, o.table_no, o.total_amt, COALESCE(o.discount_amt,0) AS discount_amt, COALESCE(o.discount_type,'') AS discount_type, COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name, '—' AS items, '' AS item_details FROM orders o LEFT JOIN user u ON u.id = o.user_id WHERE $VALID ORDER BY o.created_at DESC LIMIT 10");
     if ($r5) while ($row = $r5->fetch_assoc()) $latestOrders[] = $row;
 }
 
@@ -648,6 +651,7 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
                     <tr>
                       <th>Order ID</th>
                       <th>Date &amp; Time</th>
+                      <th>Cashier</th>
                       <th>Items</th>
                       <th>Add-ons</th>
                       <th>Removed</th>
@@ -687,6 +691,7 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
                       <tr>
                         <td><strong>#<?= (int)$lo['id'] ?></strong></td>
                         <td style="white-space:nowrap;"><?= htmlspecialchars($lo['created_at']) ?></td>
+                        <td><?= htmlspecialchars($lo['cashier_name']) ?></td>
                         <td><?= htmlspecialchars($lo['items']) ?></td>
                         <td style="font-size:12px;"><?= $addonsCell ?></td>
                         <td style="font-size:12px;"><?= $removedCell ?></td>
@@ -704,7 +709,7 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
                       </tr>
                       <?php endforeach; ?>
                     <?php else: ?>
-                      <tr><td colspan="7" class="text-center text-muted">No orders found.</td></tr>
+                      <tr><td colspan="8" class="text-center text-muted">No orders found.</td></tr>
                     <?php endif; ?>
                   </tbody>
                 </table>

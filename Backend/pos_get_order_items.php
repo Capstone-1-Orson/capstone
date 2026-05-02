@@ -2,8 +2,10 @@
 // Backend/pos_get_order_items.php
 // Returns order items for a given order_id (used by the Refund modal).
 
-header('Content-Type: application/json');
+
+session_name('STAFF_SESSION');
 session_start();
+header('Content-Type: application/json');
 
 if (!isset($_SESSION['user'])) {
     echo json_encode(['success' => false, 'message' => 'Unauthorized']);

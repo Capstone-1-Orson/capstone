@@ -1,7 +1,8 @@
 <?php
+session_name('ADMIN_SESSION');
 session_start();
 if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
-    header("Location: ../../Frontend/lockscreen.html");
+    header("Location:../../lockscreen.html");
     exit();
 }
 
@@ -82,6 +83,7 @@ if ($hasOrderItems) {
         "SELECT o.id AS order_id, o.created_at, o.table_no, o.status, o.total_amt,
                 COALESCE(o.discount_amt, 0) AS discount_amt,
                 COALESCE(o.discount_type, '') AS discount_type,
+                COALESCE(CONCAT(u.firstname,' ',u.lastname), 'N/A') AS cashier_name,
                 GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
                 SUM(oi.qty) AS total_qty,
                 GROUP_CONCAT(
@@ -107,6 +109,7 @@ if ($hasOrderItems) {
                     ORDER BY m.name SEPARATOR ';;'
                 ) AS item_details
          FROM orders o
+         LEFT JOIN user u ON u.id = o.user_id
          JOIN order_items oi ON oi.order_id = o.id
          JOIN menu m ON m.id = oi.menu_id
          GROUP BY o.id ORDER BY o.created_at DESC LIMIT 100"
@@ -114,10 +117,12 @@ if ($hasOrderItems) {
     if ($res5) while ($row = $res5->fetch_assoc()) $orderRows[] = $row;
 } else {
     $res5 = $conn->query(
-        "SELECT id AS order_id, created_at, table_no, status, total_amt,
-                COALESCE(discount_amt,0) AS discount_amt, COALESCE(discount_type,'') AS discount_type,
+        "SELECT o.id AS order_id, o.created_at, o.table_no, o.status, o.total_amt,
+                COALESCE(o.discount_amt,0) AS discount_amt, COALESCE(o.discount_type,'') AS discount_type,
+                COALESCE(CONCAT(u.firstname,' ',u.lastname), 'N/A') AS cashier_name,
                 '—' AS items, 0 AS total_qty, '' AS item_details
-         FROM orders ORDER BY created_at DESC LIMIT 100"
+         FROM orders o LEFT JOIN user u ON u.id = o.user_id
+         ORDER BY o.created_at DESC LIMIT 100"
     );
     if ($res5) while ($row = $res5->fetch_assoc()) $orderRows[] = $row;
 }
@@ -469,8 +474,8 @@ $chartDataJson   = json_encode($chartData);
                 <tr>
                   <td><?= htmlspecialchars($inv['name']) ?></td>
                   <td><?= htmlspecialchars($inv['unit']) ?></td>
-                  <td><?= number_format($qty, 3) ?></td>
-                  <td><?= number_format($thr, 3) ?></td>
+                  <td><?= number_format($qty, 0) ?></td>
+                  <td><?= number_format($thr, 0) ?></td>
                   <td><?= $badge ?></td>
                 </tr>
                 <?php endforeach; ?>
@@ -492,6 +497,7 @@ $chartDataJson   = json_encode($chartData);
                   <th>Date &amp; Time</th>
                   <th>Number</th>
                   <th>Status</th>
+                  <th>Cashier</th>
                   <th>Items Ordered</th>
                   <th>Add-ons</th>
                   <th>Removed Ingredients</th>
@@ -539,6 +545,7 @@ $chartDataJson   = json_encode($chartData);
                   <td><?= htmlspecialchars($ord['created_at']) ?></td>
                   <td><?= htmlspecialchars($ord['table_no']) ?></td>
                   <td><?= $badge ?></td>
+                  <td><?= htmlspecialchars($ord['cashier_name']) ?></td>
                   <td><?= htmlspecialchars($ord['items']) ?></td>
                   <td style="font-size:12px;"><?= $addonsCell ?></td>
                   <td style="font-size:12px;"><?= $removedCell ?></td>
