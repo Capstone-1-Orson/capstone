@@ -1,4 +1,5 @@
 <?php
+session_name('ADMIN_SESSION');
 session_start();
 if (!isset($_SESSION['user'])) {
     header("Location: ../Frontend/lockscreen.html");

@@ -20,8 +20,10 @@
         linear-gradient(rgba(212,74,122,0.07) 1px, transparent 1px),
         linear-gradient(90deg, rgba(212,74,122,0.07) 1px, transparent 1px);
       background-size: 40px 40px;
-      display: flex; align-items: center; justify-content: center;
-      padding: 2rem 1rem; position: relative; overflow: hidden;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 1.5rem 1rem; position: relative;
+      overflow-x: hidden; overflow-y: auto;
     }
     body::before {
       content: ''; position: fixed;
@@ -30,46 +32,60 @@
       top: 50%; left: 50%; transform: translate(-50%,-50%); pointer-events: none;
     }
 
-    .lock-wrap {
-      position: relative; z-index: 10; width: 100%; max-width: 360px;
+    .brand-top {
       display: flex; flex-direction: column; align-items: center;
+      gap: 6px; margin-bottom: 1.2rem; position: relative; z-index: 10;
     }
-
-    .brand-name { font-size: 1.15rem; font-weight: 700; letter-spacing: 0.06em; color: #2d1a25; margin-bottom: 1.8rem; }
+    .brand-icon {
+      width: 52px; height: 52px; border-radius: 14px;
+      background: linear-gradient(135deg, #D44A7A 0%, #C11C84 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; color: #fff; box-shadow: 0 4px 18px rgba(212,74,122,0.35);
+    }
+    .brand-name { font-size: 1.4rem; font-weight: 700; letter-spacing: 0.04em; color: #2d1a25; }
     .brand-name span { color: #D44A7A; }
-
-    .lock-avatar {
-      width: 76px; height: 76px; border-radius: 50%;
-      border: 3px solid rgba(212,74,122,0.22);
-      object-fit: cover; margin-bottom: 0.9rem;
-      box-shadow: 0 4px 18px rgba(212,74,122,0.18);
-    }
-    .lock-name { font-size: 1rem; font-weight: 600; color: #2d1a25; margin-bottom: 0.25rem; }
-    .lock-role {
-      font-size: 0.70rem; letter-spacing: 0.15em; text-transform: uppercase;
-      color: rgba(90,30,60,0.38); margin-bottom: 1.8rem;
-    }
+    .brand-sub { font-size: 0.70rem; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(90,30,60,0.40); font-weight: 400; }
 
     .lock-card {
-      width: 100%; background: #fff;
-      border: 1px solid rgba(212,74,122,0.15); border-radius: 16px;
-      padding: 1.8rem 1.8rem 1.6rem;
+      position: relative; z-index: 10; width: 100%; max-width: 440px;
+      background: #fff; border: 1px solid rgba(212,74,122,0.15);
+      border-radius: 16px; padding: 1.8rem 2rem 1.5rem;
       box-shadow: 0 4px 6px rgba(212,74,122,0.06), 0 20px 40px rgba(212,74,122,0.10);
     }
 
-    .lock-hint { font-size: 0.80rem; color: rgba(90,30,60,0.42); text-align: center; margin-bottom: 1.2rem; }
+    .dots { display: flex; gap: 6px; margin-bottom: 1.6rem; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(212,74,122,0.15); }
+    .dot.active { background: #D44A7A; box-shadow: 0 0 6px rgba(212,74,122,0.45); }
+
+    .role-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(212,74,122,0.07); border: 1px solid rgba(212,74,122,0.18);
+      border-radius: 20px; padding: 4px 12px 4px 8px;
+      font-size: 0.69rem; font-weight: 600; letter-spacing: 0.13em;
+      text-transform: uppercase; color: #C11C84; margin-bottom: 1rem;
+    }
+    .role-dot { width: 6px; height: 6px; border-radius: 50%; background: #D44A7A; animation: blink 2s ease-in-out infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
+    .card-title-text { font-size: 1.35rem; font-weight: 600; color: #2d1a25; margin-bottom: 0.3rem; }
+    .card-subtitle-text { font-size: 0.82rem; color: rgba(90,30,60,0.45); margin-bottom: 1.2rem; }
 
     .alert-box {
       display: none; align-items: center; gap: 9px;
       background: #fff0f4; border: 1px solid rgba(212,74,122,0.25);
-      border-radius: 10px; padding: 0.65rem 0.9rem;
-      font-size: 0.80rem; color: #b8305e; margin-bottom: 1rem;
+      border-radius: 10px; padding: 0.70rem 1rem;
+      font-size: 0.82rem; color: #b8305e; margin-bottom: 1.2rem;
     }
     .alert-box.show { display: flex; }
-    .alert-box i { flex-shrink: 0; font-size: 12px; }
+    .alert-box i { flex-shrink: 0; }
 
-    .pass-wrap { margin-bottom: 1.2rem; }
-    .pass-wrap input {
+    .field-group { margin-bottom: 1rem; }
+    .field-label {
+      display: block; font-size: 0.68rem; font-weight: 600;
+      letter-spacing: 0.16em; text-transform: uppercase;
+      color: rgba(90,30,60,0.50); margin-bottom: 0.5rem;
+    }
+    .field-group input {
       width: 100%; background: #fdf5f8 !important;
       border: 1px solid rgba(212,74,122,0.20) !important;
       border-radius: 10px !important; padding: 0.80rem 1rem !important;
@@ -78,13 +94,13 @@
       box-shadow: none !important;
       transition: border-color 0.2s, box-shadow 0.2s, background 0.2s !important;
     }
-    .pass-wrap input::placeholder { color: rgba(180,100,130,0.40) !important; }
-    .pass-wrap input:focus {
+    .field-group input::placeholder { color: rgba(180,100,130,0.40) !important; }
+    .field-group input:focus {
       border-color: #D44A7A !important;
       box-shadow: 0 0 0 3px rgba(212,74,122,0.12) !important;
       background: #fff !important;
     }
-    .pass-wrap input.is-error { border-color: rgba(212,74,122,0.55) !important; }
+    .field-group input.is-error { border-color: rgba(212,74,122,0.55) !important; }
 
     .btn-unlock {
       width: 100%; background: linear-gradient(135deg, #D44A7A 0%, #C11C84 100%);
@@ -106,57 +122,87 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .lock-footer { margin-top: 1.2rem; text-align: center; font-size: 0.78rem; color: rgba(90,30,60,0.38); }
-    .lock-footer a { color: #D44A7A; text-decoration: none; font-weight: 500; transition: color 0.18s; }
-    .lock-footer a:hover { color: #b83868; }
+    .divider {
+      display: flex; align-items: center; gap: 10px;
+      margin: 1rem 0 0.8rem; font-size: 0.72rem; color: rgba(180,100,130,0.35);
+    }
+    .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: rgba(212,74,122,0.10); }
+
+    .alt-link {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      font-size: 0.80rem; color: rgba(90,30,60,0.40); text-decoration: none; transition: color 0.18s;
+    }
+    .alt-link:hover { color: #D44A7A; }
+    .alt-link i { font-size: 11px; }
+
+    .card-footer-note {
+      text-align: center; margin-top: 1.2rem; font-size: 0.72rem;
+      color: rgba(180,100,130,0.45); letter-spacing: 0.06em;
+    }
+    .card-footer-note span { margin: 0 6px; }
   </style>
 </head>
 
 <body class="hold-transition lockscreen">
 
-  <div class="lock-wrap">
-
+  <div class="brand-top">
+    <div class="brand-icon">♛</div>
     <div class="brand-name">OPER<span>LYTICS</span></div>
+    <div class="brand-sub">Point of Sale</div>
+  </div>
 
-    <img src="dist/img/user1-128x128.jpg" alt="Admin" class="lock-avatar"
-         onerror="this.style.display='none'">
-    <div class="lock-name">ADMIN</div>
-    <div class="lock-role">Administrator</div>
+  <div class="lock-card">
 
-    <div class="lock-card">
-
-      <p class="lock-hint">Enter your password to unlock the dashboard</p>
-
-      <div class="alert-box" id="alertBox">
-        <i class="fas fa-circle-exclamation"></i>
-        <span id="alertText">Incorrect password. Please try again.</span>
-      </div>
-
-      <!-- ✅ Posts "pass" to login.php — matches the lockscreen branch in login.php -->
-      <form action="Backend/login.php" method="POST" id="lockForm">
-
-        <div class="pass-wrap">
-          <input type="password" id="passInput" name="pass"
-            placeholder="••••••••" required autocomplete="current-password">
-        </div>
-
-        <button type="submit" class="btn-unlock" id="submitBtn">
-          <span class="spinner" id="spinner"></span>
-          <span id="btnText"><i class="fas fa-unlock-keyhole"></i>&nbsp; Unlock</span>
-        </button>
-
-      </form>
-
-      <div class="lock-footer" style="margin-top:1.2rem;">
-        <span style="color:rgba(90,30,60,0.38); font-size:0.78rem;">OPERLYTICS © 2026 &nbsp;·&nbsp; Admin Portal</span>
-      </div>
-
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
     </div>
+
+    <div class="role-badge">
+      <div class="role-dot"></div>
+      Admin Access
+    </div>
+
+    <p class="card-title-text">Welcome back</p>
+    <p class="card-subtitle-text">Enter your password to unlock the dashboard</p>
+
+    <div class="alert-box" id="alertBox">
+      <i class="fas fa-circle-exclamation"></i>
+      <span id="alertText">Incorrect password. Please try again.</span>
+    </div>
+
+    <!-- ✅ Posts "pass" to login.php — matches the lockscreen branch in login.php -->
+    <form action="Backend/login.php" method="POST" id="lockForm">
+
+      <div class="field-group">
+        <label class="field-label" for="passInput">Password</label>
+        <input type="password" id="passInput" name="pass"
+          placeholder="••••••••" required autocomplete="current-password">
+      </div>
+
+      <button type="submit" class="btn-unlock" id="submitBtn">
+        <span class="spinner" id="spinner"></span>
+        <span id="btnText"><i class="fas fa-unlock-keyhole"></i>&nbsp; Unlock</span>
+      </button>
+
+      <div class="divider">or</div>
+
+      <a href="login-v2.html" class="alt-link">
+        <i class="fas fa-shield-halved"></i>
+        Staff login
+      </a>
+
+    </form>
+
+    <p class="card-footer-note">
+      Admin portal <span>·</span> OPERLYTICS © 2026
+    </p>
 
   </div>
 
 <script src="plugins/jquery/jquery.min.js"></script>
 <script src="plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="dist/js/adminlte.min.js"></script>
 <script>
   const params     = new URLSearchParams(window.location.search);
   const errorParam = params.get('error');

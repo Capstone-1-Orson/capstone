@@ -360,7 +360,6 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 .card-bdg.new{background:var(--blue);}
 .card-body-i{padding:11px;flex:1;display:flex;flex-direction:column;gap:7px;min-height:0;}
 .card-name{font-weight:600;font-size:13.5px;line-height:1.3;flex-shrink:0;}
-.card-desc{font-size:11px;color:var(--muted);line-height:1.4;flex-shrink:0;}
 .card-foot{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;margin-top:auto;}
 .card-price{font-size:15px;font-weight:700;color:var(--accent);}
 .card-add-btn{width:100%;background:var(--accent);color:#fff;font-weight:700;font-size:12.5px;padding:9px;display:flex;align-items:center;justify-content:center;gap:5px;opacity:0;transform:translateY(4px);transition:all var(--tr);flex-shrink:0;}
@@ -1967,7 +1966,6 @@ function renderProducts() {
       </div>
       <div class="card-body-i">
         <div class="card-name">${p.name}</div>
-        <div class="card-desc">${p.desc||''}</div>
         <div class="card-foot">
           <span class="card-price">₱${p.price.toLocaleString()}</span>
           <span style="font-size:10px;color:var(--muted)">${p.cat}</span>
