@@ -12,6 +12,22 @@ if (!isset($conn) || $conn->connect_error) {
     die("Database connection failed: " . ($conn->connect_error ?? 'conn.php did not define $conn'));
 }
 
+// ── Resolve cashier full name from DB (session may store email instead of name) ──
+if (empty($_SESSION['firstname'])) {
+    $email_key = $_SESSION['user'] ?? '';
+    $stmt = $conn->prepare("SELECT firstname, lastname FROM user WHERE email = ? OR firstname = ? LIMIT 1");
+    if ($stmt) {
+        $stmt->bind_param('ss', $email_key, $email_key);
+        $stmt->execute();
+        $stmt->bind_result($_sFirst, $_sLast);
+        if ($stmt->fetch()) {
+            $_SESSION['firstname'] = $_sFirst;
+            $_SESSION['lastname']  = $_sLast;
+        }
+        $stmt->close();
+    }
+}
+
 // ── NOTE: run this once in phpMyAdmin if the column doesn't exist yet ──
 // ALTER TABLE menu ADD COLUMN image VARCHAR(255) NULL DEFAULT NULL AFTER description;
 
@@ -1089,8 +1105,8 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
     <i class="fa-solid fa-right-from-bracket"></i>Logout
   </a>
   <?php
-    $av_firstname = $_SESSION['user']     ?? 'User';
-    $av_lastname  = $_SESSION['lastname'] ?? '';
+    $av_firstname = $_SESSION['firstname'] ?? ($_SESSION['user'] ?? 'User');
+    $av_lastname  = $_SESSION['lastname']  ?? '';
     $av_image     = $_SESSION['image']    ?? '';
     $av_initials  = strtoupper(substr($av_firstname, 0, 1) . substr($av_lastname, 0, 1));
     $av_title     = htmlspecialchars(trim($av_firstname . ' ' . $av_lastname));
@@ -2616,6 +2632,7 @@ function initTabs() {
 
 // ── Receipt Modal ─────────────────────────────────────────────
 function showReceipt(data) {
+  window._lastReceiptData = data; // store for printReceipt()
   const now=new Date();
   const dateStr=now.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
   const timeStr=now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
@@ -2702,46 +2719,190 @@ function closeReceipt(){
 }
 
 function printReceipt(){
-  const modal=document.querySelector('.receipt-modal');
-  if(!modal) return;
-  const w=window.open('','_blank','width=420,height=720');
-  w.document.write(`<!DOCTYPE html><html><head><title>Receipt</title>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+  // ── Grab the last placed order data from the receipt modal's data attributes ──
+  const modal = document.querySelector('.receipt-modal');
+  if (!modal) return;
+
+  // Pull live data already rendered in the receipt modal
+  const orderIdEl   = modal.querySelector('.receipt-meta strong');
+  const metaDivs    = modal.querySelectorAll('.receipt-meta div');
+
+  // Re-collect order data from the last showReceipt() call via a stored reference
+  const _d = window._lastReceiptData || {};
+
+  const now       = new Date();
+  const dateStr   = now.toLocaleDateString('en-PH', {weekday:'short', month:'short', day:'numeric', year:'numeric'});
+  // e.g. "Thu Apr 23 2026"
+  const timeStr   = now.toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit', hour12:true});
+  const invNo     = String(_d.orderId || '').padStart(6,'0');
+
+  // VAT computation (12% VAT-inclusive)
+  const total       = parseFloat(_d.total || 0);
+  const vatRate     = 0.12;
+  const vatSales    = parseFloat((total / (1 + vatRate)).toFixed(2));
+  const vatAmt      = parseFloat((total - vatSales).toFixed(2));
+  const cashTend    = parseFloat(_d.cashTendered || 0);
+  const changeDue   = parseFloat(_d.changeDue || 0);
+  const discount    = parseFloat(_d.discount || 0);
+  const subtotal    = parseFloat(_d.subtotal || total);
+
+  // Build items HTML (thermal 80mm style)
+  const itemsHTML = (_d.items || []).map(item => {
+    const lineTotal = (item.price * item.qty).toFixed(2);
+    const qtyPrice  = `${item.qty} PCS x @${parseFloat(item.price).toFixed(2)}`;
+    const removedLine = (item.removedIngs || []).length
+      ? `<div style="font-size:10px;color:#555;margin-left:4px;">No: ${item.removedIngs.map(r=>r.name||r).join(', ')}</div>` : '';
+    const addonLine   = (item.addons || []).filter(a=>a.qty>0).length
+      ? `<div style="font-size:10px;color:#555;margin-left:4px;">+ ${item.addons.filter(a=>a.qty>0).map(a=>`${a.qty>1?a.qty+'x ':''}${a.name}`).join(', ')}</div>` : '';
+    const noteLine    = item.notes
+      ? `<div style="font-size:10px;color:#777;font-style:italic;margin-left:4px;">"${item.notes}"</div>` : '';
+    return `
+      <div style="padding:4px 0;border-bottom:1px dashed #ccc;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;">
+          <span style="font-size:12px;font-weight:700;flex:1;">${item.name}</span>
+          <span style="font-size:12px;font-weight:700;white-space:nowrap;margin-left:8px;">${parseFloat(lineTotal).toLocaleString('en',{minimumFractionDigits:2})}V</span>
+        </div>
+        <div style="font-size:11px;color:#555;">${qtyPrice}</div>
+        ${removedLine}${addonLine}${noteLine}
+      </div>`;
+  }).join('');
+
+  const discountRow = discount > 0 ? `
+    <div class="t-row"><span>Discount (${_d.discountType === 'senior' ? 'Senior 20%' : _d.discountType === 'pwd' ? 'PWD 20%' : 'Disc'})</span><span>-${discount.toFixed(2)}</span></div>` : '';
+
+  const w = window.open('', '_blank', 'width=380,height=800');
+  w.document.write(`<!DOCTYPE html><html><head>
+  <meta charset="UTF-8">
+  <title>Sales Invoice #${invNo}</title>
   <style>
-    *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:'Outfit',sans-serif;background:#fff;color:#111;padding:20px;max-width:360px;margin:auto;}
-    .receipt-store-name{font-family:'Playfair Display',serif;font-size:22px;font-weight:700;text-align:center;}
-    .receipt-store-name span{color:#e91e8c;}
-    .receipt-subtitle{font-size:12px;color:#888;text-align:center;margin-bottom:4px;}
-    .receipt-confirmed-badge{display:table;margin:6px auto 12px;background:#dcfce7;border:1px solid #86efac;color:#16a34a;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;}
-    .receipt-close-x{display:none;}
-    .receipt-meta{display:grid;grid-template-columns:1fr 1fr;gap:5px;font-size:11px;color:#666;border-top:1px dashed #ddd;border-bottom:1px dashed #ddd;padding:8px 0;margin-bottom:10px;}
-    .receipt-meta strong{color:#111;}
-    .receipt-header{text-align:center;padding-bottom:10px;}
-    .receipt-items{padding:6px 0 10px;}
-    .receipt-item-row{display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px dashed #eee;}
-    .ri-name{flex:1;font-size:12px;font-weight:600;}
-    .ri-qty{font-size:11px;color:#888;background:#f3f4f6;padding:1px 5px;border-radius:4px;}
-    .ri-subtotal{font-size:12px;font-weight:700;color:#e91e8c;}
-    .receipt-totals{padding:8px 0;border-top:1px dashed #ddd;}
-    .rt-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;}
-    .rt-lbl{color:#888;} .rt-val{font-weight:500;}
-    .rt-disc{color:#16a34a!important;}
-    .rt-div{border:none;border-top:1px dashed #ddd;margin:5px 0;}
-    .rt-total-row{display:flex;justify-content:space-between;font-size:15px;font-weight:800;padding:5px 0;}
-    .rt-total-row .rt-val{color:#e91e8c;}
-    .receipt-cash{padding:8px 0;border-top:1px dashed #ddd;}
-    .rc-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;} .rc-lbl{color:#888;} .rc-val{font-weight:600;}
-    .rc-change-box{display:flex;justify-content:space-between;font-size:14px;font-weight:800;background:#dcfce7;border:1px solid #86efac;border-radius:8px;padding:8px 10px;margin-top:5px;}
-    .rc-change-box .rc-lbl,.rc-change-box .rc-val{color:#16a34a;}
-    .receipt-footer-btns{display:none;}
-    .footer-note{text-align:center;font-size:11px;color:#aaa;margin-top:14px;padding-top:10px;border-top:1px dashed #ddd;}
-  </style></head><body>`);
-  w.document.write(modal.innerHTML);
-  w.document.write(`<p class="footer-note">Thank you for dining with us! 💕<br>Please come again.</p></body></html>`);
+    @media print {
+      @page { margin: 0; size: 80mm auto; }
+      body { margin: 0; }
+      .no-print { display: none !important; }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 12px;
+      color: #000;
+      background: #fff;
+      width: 80mm;
+      max-width: 80mm;
+      margin: 0 auto;
+      padding: 8px 10px 16px;
+    }
+    .center  { text-align: center; }
+    .bold    { font-weight: bold; }
+    .small   { font-size: 10px; }
+    .xsmall  { font-size: 9px; }
+    .dash    { border: none; border-top: 1px dashed #000; margin: 5px 0; }
+    .solid   { border: none; border-top: 1px solid #000; margin: 5px 0; }
+    .t-row   { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0; }
+    .t-row span:last-child { text-align: right; white-space: nowrap; margin-left: 6px; }
+    .t-total { display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; padding: 4px 0 2px; }
+    .t-total span:last-child { text-align: right; }
+    .block-label { font-size: 10px; color: #444; margin-top: 3px; }
+    .field-row { display: flex; font-size: 10px; padding: 2px 0; }
+    .field-label { width: 105px; flex-shrink: 0; }
+    .field-line { flex: 1; border-bottom: 1px solid #000; min-width: 60px; }
+    .btn-print-action {
+      display: block; width: 100%; margin-top: 14px;
+      padding: 8px; background: #111; color: #fff;
+      font-size: 13px; font-weight: bold; border: none;
+      cursor: pointer; border-radius: 4px;
+    }
+  </style>
+  </head><body>
+
+  <!-- ── STORE HEADER ── -->
+  <div class="center bold" style="font-size:13px; text-transform:uppercase; letter-spacing:1px;">Empress POS</div>
+  <div class="center small">Restaurant &amp; Dining</div>
+  <div class="center xsmall" style="margin-top:3px;">VAT Reg TIN: 000-000-000-00000</div>
+  <div class="center xsmall">10/F Buildcomm Center, Sumilon Rd.,</div>
+  <div class="center xsmall">Cebu Business Park, Hipodromo, Cebu City</div>
+  <div class="center xsmall" style="margin-top:2px;">AccNo: 0812211728322025102684</div>
+  <div class="center xsmall">POS Serial No: PCJL250303616</div>
+  <div class="center xsmall">MIN: 000000000000000</div>
+  <div class="center xsmall">PTU#: FP122025-074-0570372-00009</div>
+  <div class="center xsmall">DATE ISSUED: ${now.toLocaleDateString('en-PH',{month:'2-digit',day:'2-digit',year:'numeric'}).replace(/\//g,'-')}</div>
+  <div class="center bold" style="margin:6px 0 4px;letter-spacing:3px;">* * * SALES INVOICE * * *</div>
+
+  <!-- ── ORDER META ── -->
+  <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:4px;">
+    <div>
+      <div>${dateStr}</div>
+      <div>TM#DJ01</div>
+    </div>
+    <div style="text-align:right;">
+      <div>${timeStr}</div>
+      <div>INV#:${invNo}</div>
+    </div>
+  </div>
+
+  <hr class="dash">
+
+  <!-- ── ITEMS ── -->
+  <div style="padding:2px 0;">${itemsHTML}</div>
+
+  <!-- ── TOTALS ── -->
+  <hr class="dash">
+  <div class="t-row"><span>TOTAL</span><span>${total.toLocaleString('en',{minimumFractionDigits:2})}</span></div>
+  ${discountRow}
+  ${cashTend > 0 ? `<div class="t-row"><span>CASH</span><span>${cashTend.toLocaleString('en',{minimumFractionDigits:2})}</span></div>` : ''}
+  ${changeDue >= 0 ? `<div class="t-row"><span>CHANGE</span><span>${changeDue.toLocaleString('en',{minimumFractionDigits:2})}</span></div>` : ''}
+
+  <hr class="dash">
+
+  <!-- ── VAT BREAKDOWN ── -->
+  <div class="t-row"><span>VAT Sales</span><span>${vatSales.toLocaleString('en',{minimumFractionDigits:2})}</span></div>
+  <div class="t-row"><span>VAT Exempt Sales</span><span>0.00</span></div>
+  <div class="t-row"><span>VAT Zero-Rated Sales</span><span>0.00</span></div>
+  <div class="t-row"><span>Non-Taxable Sales</span><span>0.00</span></div>
+  <div class="t-row"><span>VAT (12%)</span><span>${vatAmt.toLocaleString('en',{minimumFractionDigits:2})}</span></div>
+  <div class="t-row"><span>S.Charge</span><span>0.00</span></div>
+  <div class="t-row bold"><span>Amount Payable</span><span>${total.toLocaleString('en',{minimumFractionDigits:2})}</span></div>
+  <div class="t-row"><span>Transaction#</span><span>${invNo}</span></div>
+
+  <hr class="dash">
+
+  <!-- ── ORDER INFO ── -->
+  <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:2px;">
+    <div>
+      <div># CUSTOMER : ${(_d.items||[]).reduce((s,c)=>s+c.qty,0)}</div>
+      <div>ORDER : Table ${_d.table || selTable}</div>
+      <div>CASHIER : <?php
+        $c_name = trim(($_SESSION['firstname'] ?? '') . ' ' . ($_SESSION['lastname'] ?? ''));
+        echo htmlspecialchars($c_name ?: 'Cashier');
+      ?></div>
+    </div>
+    <div style="text-align:right;font-size:10px;">${(_d.items||[]).length} item(s)</div>
+  </div>
+
+  <hr class="dash">
+
+  <!-- ── CUSTOMER FIELDS ── -->
+  <div class="field-row"><span class="field-label">SOLD TO</span><span>:</span><span class="field-line"></span></div>
+  <div class="field-row"><span class="field-label">ADDRESS</span><span>:</span><span class="field-line"></span></div>
+  <div class="field-row"><span class="field-label">TIN</span><span>:</span><span class="field-line"></span></div>
+  <div class="field-row"><span class="field-label">BUSINESS STYLE</span><span>:</span><span class="field-line"></span></div>
+  <div class="field-row"><span class="field-label">SIGNATURE</span><span>:</span><span class="field-line"></span></div>
+
+  <hr class="dash">
+
+  <!-- ── POS PROVIDER FOOTER ── -->
+  <div class="center xsmall" style="margin-top:4px;">Alliance End to End Solutions Inc.</div>
+  <div class="center xsmall">VAT Reg TIN: 000-000-000-00000</div>
+  <div class="center xsmall">10/F Buildcomm Center, Sumilon Rd.,</div>
+  <div class="center xsmall">Cebu Business Park, Hipodromo, Cebu City</div>
+  <div class="center xsmall">Accr#: 0812211728322025102684</div>
+  <div class="center xsmall">Date Issued: 11-13-2025</div>
+  <div class="center xsmall">Valid Until: 11-12-2030</div>
+
+  <button class="btn-print-action no-print" onclick="window.print()">🖨️ Print</button>
+  </body></html>`);
   w.document.close();
   w.focus();
-  setTimeout(()=>{ w.print(); },600);
+  setTimeout(() => { w.print(); }, 700);
 }
 
 // ── Void / Refund ─────────────────────────────────────────────
