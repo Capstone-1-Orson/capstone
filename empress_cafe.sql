@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: May 02, 2026 at 03:55 PM
+-- Generation Time: May 02, 2026 at 06:01 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -1371,6 +1371,24 @@ INSERT INTO `order_refunds` (`id`, `order_id`, `action`, `refund_amt`, `reason`,
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `sale_report`
+--
+
+CREATE TABLE `sale_report` (
+  `report_id` int(11) NOT NULL,
+  `user_id` int(11) DEFAULT NULL,
+  `order_id` int(11) DEFAULT NULL,
+  `report_date` date NOT NULL,
+  `period_type` enum('daily','weekly','monthly') NOT NULL,
+  `total_sales` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `total_order` int(11) NOT NULL DEFAULT 0,
+  `top_items` varchar(255) DEFAULT NULL,
+  `generate_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `suppliers`
 --
 
@@ -1469,6 +1487,14 @@ ALTER TABLE `order_refunds`
   ADD PRIMARY KEY (`id`);
 
 --
+-- Indexes for table `sale_report`
+--
+ALTER TABLE `sale_report`
+  ADD PRIMARY KEY (`report_id`),
+  ADD KEY `idx_user_id` (`user_id`),
+  ADD KEY `idx_order_id` (`order_id`);
+
+--
 -- Indexes for table `suppliers`
 --
 ALTER TABLE `suppliers`
@@ -1520,6 +1546,12 @@ ALTER TABLE `order_items`
 --
 ALTER TABLE `order_refunds`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+
+--
+-- AUTO_INCREMENT for table `sale_report`
+--
+ALTER TABLE `sale_report`
+  MODIFY `report_id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `suppliers`
