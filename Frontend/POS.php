@@ -1715,17 +1715,7 @@ function refreshHistoryPanel() {
       : isRefunded
         ? `<span class="badge-pill blue" style="font-size:9px"><i class="fa-solid fa-rotate-left" style="font-size:8px"></i> Refunded</span>`
         : '';
-    const actionBtns = isDone ? '' : `
-      <div style="display:flex;gap:5px;margin-top:8px;">
-        <button class="badge-pill red" style="cursor:pointer;font-size:10px;padding:4px 9px;"
-          onclick="openVoidModal(${o.id},'${o.table_no}',${parseFloat(o.total_amt)})">
-          <i class="fa-solid fa-ban"></i> Void
-        </button>
-        <button class="badge-pill blue" style="cursor:pointer;font-size:10px;padding:4px 9px;"
-          onclick="openRefundModal(${o.id},'${o.table_no}',${parseFloat(o.total_amt)})">
-          <i class="fa-solid fa-rotate-left"></i> Refund
-        </button>
-      </div>`;
+    const actionBtns = '';
 
     // ── Build item detail lines ─────────────────────────────────
     let itemDetailHTML = '';

@@ -209,7 +209,38 @@ try {
     );
 
     $itemsJson = json_encode($refundItems);
-    $createdBy = $_SESSION['user']['firstname'] ?? 'staff';
+
+    // ── Resolve real user full name ───────────────────────────
+    // $_SESSION['user'] is the login email (a string), not an array.
+    // POS.php caches firstname/lastname into session after login.
+    $_first    = trim($_SESSION['firstname'] ?? '');
+    $_last     = trim($_SESSION['lastname']  ?? '');
+    $createdBy = trim("$_first $_last");
+
+    // Fallback: query DB if not yet cached in session
+    if ($createdBy === '') {
+        $email = $_SESSION['user'] ?? '';
+        if ($email !== '') {
+            $stmtName = $conn->prepare(
+                "SELECT firstname, lastname FROM user WHERE email = ? LIMIT 1"
+            );
+            $stmtName->bind_param('s', $email);
+            $stmtName->execute();
+            $stmtName->bind_result($_fn, $_ln);
+            if ($stmtName->fetch()) {
+                $createdBy = trim("$_fn $_ln");
+                $_SESSION['firstname'] = $_fn;
+                $_SESSION['lastname']  = $_ln;
+            }
+            $stmtName->close();
+        }
+    }
+
+    // Last resort: store the email so at least something is recorded
+    if ($createdBy === '') {
+        $createdBy = $_SESSION['user'] ?? 'unknown';
+    }
+
     $stmtLog   = $conn->prepare(
         "INSERT INTO order_refunds (order_id, action, refund_amt, reason, items_json, created_by)
          VALUES (?, ?, ?, ?, ?, ?)"

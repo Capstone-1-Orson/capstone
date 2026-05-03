@@ -288,6 +288,11 @@ $conn->close();
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a href="./void_refund.php" class="nav-link">
+                            <i class="nav-icon fas fa-undo-alt"></i><p>Void &amp; Refund</p>
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a href="./settings.php" class="nav-link">
                             <i class="nav-icon fas fa-cog"></i><p>Settings</p>
                         </a>
