@@ -3,7 +3,12 @@
 // DB: operlytics | table: ingredients
 // columns: id, name, unit, stock_qty, low_stock_threshold, created_at, updated_at
 
+session_name('ADMIN_SESSION');
 session_start();
+if (!isset($_SESSION['user']) || ($_SESSION['position'] ?? '') !== 'admin') {
+    header("Location: ../Frontend/lockscreen.html");
+    exit();
+}
 require_once 'conn.php';
 
 $redirect = "../Frontend/ADMIN/inventory.php";
@@ -116,13 +121,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_restock'])) {
 }
 
 // ═══════════════════════════════════════════════
-//  DELETE  (GET  ?action=delete&id=N)
+//  DELETE  (POST  action=delete&id=N)
 // ═══════════════════════════════════════════════
-if ($_SERVER['REQUEST_METHOD'] === 'GET' &&
-    isset($_GET['action']) && $_GET['action'] === 'delete' &&
-    isset($_GET['id'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' &&
+    isset($_POST['action']) && $_POST['action'] === 'delete') {
 
-    $id = intval($_GET['id']);
+    $id = intval($_POST['id'] ?? 0);
 
     if ($id <= 0) {
         $_SESSION['error'] = "Invalid ingredient ID.";

@@ -1,8 +1,9 @@
 <?php
 // Backend/menu_process.php
+session_name('ADMIN_SESSION');
 session_start();
 if (!isset($_SESSION['user'])) {
-    header("Location: ../../Frontend/lockscreen.html");
+    header("Location: ../Frontend/lockscreen.html");
     exit();
 }
 
@@ -79,11 +80,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'get_ingredients') {
 }
 
 // ── DELETE ────────────────────────────────────────────────────
-if (isset($_GET['action']) && $_GET['action'] === 'delete') {
-    $id = (int)($_GET['id'] ?? 0);
+if ($_SERVER['REQUEST_METHOD'] === 'POST' &&
+    isset($_POST['action']) && $_POST['action'] === 'delete') {
+    $id = (int)($_POST['id'] ?? 0);
     if (!$id) {
         $_SESSION['error'] = 'Invalid item ID.';
-        header('Location: ../../Frontend/ADMIN/menu-management.php');
+        header('Location: ../Frontend/ADMIN/menu-management.php');
         exit();
     }
 

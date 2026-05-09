@@ -562,12 +562,11 @@ $conn->close();
                                                 data-expiry="<?= htmlspecialchars($item['expiry_date'] ?? '', ENT_QUOTES) ?>">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        <!-- Delete link -->
-                                        <a href="../../Backend/inventory_process.php?action=delete&id=<?= $item['id'] ?>"
-                                           class="btn btn-sm btn-danger"
-                                           onclick="return confirm('Delete \'<?= htmlspecialchars($item['name'], ENT_QUOTES) ?>\'? This cannot be undone.')">
+                                        <!-- Delete — opens confirm modal -->
+                                        <button type="button" class="btn btn-sm btn-danger"
+                                                onclick="confirmDeleteIngredient(<?= $item['id'] ?>, '<?= htmlspecialchars($item['name'], ENT_QUOTES) ?>')">
                                             <i class="fas fa-trash"></i>
-                                        </a>
+                                        </button>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
@@ -989,6 +988,40 @@ $conn->close();
 </div><!-- /.wrapper -->
 
 
+<!-- ══════════════════════════════════════════════════════════
+     DELETE CONFIRM MODAL
+═══════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="deleteConfirmModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-sm" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-danger">
+                <h5 class="modal-title text-white">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>Delete Ingredient
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body text-center">
+                <p class="mb-1">Are you sure you want to delete</p>
+                <strong id="deleteIngredientName" class="d-block mb-2" style="color:#e91e8c;"></strong>
+                <small class="text-muted">This cannot be undone.</small>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                    <i class="fas fa-times mr-1"></i>Cancel
+                </button>
+                <form id="deleteIngredientForm" action="../../Backend/inventory_process.php" method="POST" style="display:inline;">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="id" id="deleteIngredientId">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash mr-1"></i>Delete
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+
 <!-- ── Scripts ──────────────────────────────────────────────── -->
 <script src="../plugins/jquery/jquery.min.js"></script>
 <script src="../plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
@@ -1163,6 +1196,14 @@ $conn->close();
             $('#editIngExpiry').val(btn.data('expiry') || '');
         });
     });
+</script>
+
+<script>
+    function confirmDeleteIngredient(id, name) {
+        $('#deleteIngredientName').text(name);
+        $('#deleteIngredientId').val(id);
+        $('#deleteConfirmModal').modal('show');
+    }
 </script>
 
 </body>

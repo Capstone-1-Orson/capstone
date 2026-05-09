@@ -827,9 +827,13 @@ $conn->close();
         <button type="button" class="btn btn-secondary" data-dismiss="modal">
           <i class="fas fa-times mr-1"></i>Cancel
         </button>
-        <a id="deleteConfirmBtn" href="#" class="btn btn-danger">
-          <i class="fas fa-trash mr-1"></i>Delete
-        </a>
+        <form id="deleteMenuForm" action="../../Backend/menu_process.php" method="POST" style="display:inline;">
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="id" id="deleteMenuId">
+          <button type="submit" class="btn btn-danger">
+            <i class="fas fa-trash mr-1"></i>Delete
+          </button>
+        </form>
       </div>
     </div>
   </div>
@@ -1053,7 +1057,7 @@ $conn->close();
       $('#editName').val(btn.data('name'));
       $('#editCategory').val(btn.data('category'));
       $('#editPrice').val(btn.data('price'));
-      $('#editStatus').val(btn.data('status'));
+      $('#editStatus').val(String(btn.data('status')));   // cast to string so <select> option matches
       $('#editDescription').val(btn.data('description'));
 
       // Populate image fields
@@ -1068,6 +1072,10 @@ $conn->close();
       } else {
         $('#editCurrentImageWrap').hide();
       }
+
+      // Reset hidden field immediately so stale data never gets submitted if AJAX is slow
+      $('#editItemIngredients').val('[]');
+      editRenderTags();
 
       // Load existing ingredients via AJAX
       editSelected.length = 0;
@@ -1152,7 +1160,7 @@ $conn->close();
 
   function confirmDelete(id, name) {
     $('#deleteItemName').text(name);
-    $('#deleteConfirmBtn').attr('href', '../../Backend/menu_process.php?action=delete&id=' + id);
+    $('#deleteMenuId').val(id);
     $('#deleteConfirmModal').modal('show');
   }
 </script>
