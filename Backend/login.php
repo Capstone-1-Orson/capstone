@@ -17,13 +17,13 @@ function sendOtpEmail(string $toEmail, string $toName, string $otp): bool {
         $mail->isSMTP();
         $mail->Host       = 'smtp.gmail.com';
         $mail->SMTPAuth   = true;
-        $mail->Username   = 'seanpeniero99@gmail.com';   // ← your Gmail
-        $mail->Password   = 'sloq upwx mwdw evii';       // ← Gmail App Password
+        $mail->Username   = 'dummyacctest099@gmail.com';   // ← your Gmail
+        $mail->Password   = 'dzsm xafq hxqg arto';       // ← Gmail App Password
         $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         $mail->Port       = 587;
 
         // ── Message ────────────────────────────────────────────────
-        $mail->setFrom('seanpeniero99@gmail.com', 'OPERLYTICS Security');
+        $mail->setFrom('dummyacctest099@gmail.com', 'OPERLYTICS Security');
         $mail->addAddress($toEmail, $toName);
         $mail->isHTML(true);
         $mail->Subject = 'Your OPERLYTICS Verification Code';
