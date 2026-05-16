@@ -1505,13 +1505,13 @@ const DB_CATS  = <?= $cats_json ?>;
 
 // ── DB-loaded data ────────────────────────────────────────────
 const DB_HISTORY      = <?= $db_history_json ?>;
-const DB_CAT_REVENUE  = <?= $db_cat_revenue_json ?>;
-const DB_TRANSACTIONS = <?= $db_transactions_json ?>;
-const DB_TODAY_REV    = <?= json_encode($db_today_revenue) ?>;
-const DB_TODAY_ORDERS = <?= json_encode($db_today_orders) ?>;
-const DB_TOTAL_REV    = <?= json_encode($db_total_revenue) ?>;
-const DB_TOTAL_ORDERS = <?= json_encode($db_total_orders) ?>;
-const DB_TOP_ITEM     = <?= json_encode($db_top_item) ?>;
+var DB_CAT_REVENUE  = <?= $db_cat_revenue_json ?>;
+var DB_TRANSACTIONS = <?= $db_transactions_json ?>;
+var DB_TODAY_REV    = <?= json_encode($db_today_revenue) ?>;
+var DB_TODAY_ORDERS = <?= json_encode($db_today_orders) ?>;
+var DB_TOTAL_REV    = <?= json_encode($db_total_revenue) ?>;
+var DB_TOTAL_ORDERS = <?= json_encode($db_total_orders) ?>;
+var DB_TOP_ITEM     = <?= json_encode($db_top_item) ?>;
 
 // ── State ─────────────────────────────────────────────────────
 let cart = [], activeCat = 'all', searchQ = '', discount = 0, selTable = '01';
@@ -3211,5 +3211,6 @@ function showToast(msg,color='var(--accent)',dur=2400){
   toastTimer=setTimeout(()=>el.classList.remove('show'),dur);
 }
 </script>
+<script src="dist/js/empress-realtime.js" data-scope="pos"></script>
 </body>
 </html>

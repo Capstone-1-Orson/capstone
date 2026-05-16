@@ -6,6 +6,64 @@ if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
     exit();
 }
 
+
+// ── SSE endpoint ─────────────────────────────────────────────────────────────
+if (isset($_GET['sse'])) {
+    require_once '../../Backend/conn.php';
+    header('Content-Type: text/event-stream');
+    header('Cache-Control: no-cache');
+    header('X-Accel-Buffering: no');
+    @ob_end_clean(); ob_implicit_flush(true);
+
+    $VALID = "status NOT IN ('voided','refunded','partial_refund')";
+    $data  = [];
+
+    $r = $conn->query("SELECT COUNT(*) AS c FROM orders WHERE DATE(created_at)=CURDATE() AND $VALID");
+    $data['ordersToday']   = ($r && $row=$r->fetch_assoc()) ? (int)$row['c'] : 0;
+
+    $r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at)=CURDATE() AND $VALID");
+    $data['dailyRevenue']  = ($r && $row=$r->fetch_assoc()) ? (float)$row['rev'] : 0.0;
+
+    $r = $conn->query("SELECT MAX(id) AS mid FROM orders");
+    $data['latestOrderId'] = ($r && $row=$r->fetch_assoc()) ? (int)$row['mid'] : 0;
+
+    $r = $conn->query("SELECT id, table_no, total_amt, created_at FROM orders ORDER BY id DESC LIMIT 1");
+    if ($r && $row=$r->fetch_assoc()) {
+        $data['latestOrder'] = ['id'=>(int)$row['id'],'table_no'=>$row['table_no'],
+                                'total_amt'=>(float)$row['total_amt'],'created_at'=>$row['created_at']];
+    }
+
+    // Recent orders for table (last 50)
+    $recent = [];
+    $hasOI  = $conn->query("SHOW TABLES LIKE 'order_items'")->num_rows > 0;
+    if ($hasOI) {
+        $r = $conn->query(
+            "SELECT o.id AS order_id, o.created_at, o.table_no, o.status, o.total_amt,
+                    COALESCE(o.discount_amt,0) AS discount_amt,
+                    COALESCE(o.discount_type,'') AS discount_type,
+                    COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
+                    GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
+                    SUM(oi.qty) AS total_qty
+             FROM orders o
+             LEFT JOIN user u ON u.id = o.user_id
+             JOIN order_items oi ON oi.order_id = o.id
+             JOIN menu m ON m.id = oi.menu_id
+             GROUP BY o.id ORDER BY o.created_at DESC LIMIT 50"
+        );
+        if ($r) while ($row=$r->fetch_assoc()) $recent[] = $row;
+    }
+    $data['recentOrders'] = $recent;
+
+    $conn->close();
+    echo "retry: 4000\n";
+    echo "event: stats\n";
+    echo "data: ".json_encode($data)."\n\n";
+    if (ob_get_level()) ob_flush();
+    flush();
+    exit;
+}
+// ── End SSE endpoint ──────────────────────────────────────────────────────────
+
 require_once '../../Backend/conn.php';
 
 // ── Helper: check if a table exists ───────────────────────────
@@ -16,13 +74,40 @@ function tableExists($conn, $table) {
 
 $hasOrderItems = tableExists($conn, 'order_items');
 
+// ── Date Range Filter ─────────────────────────────────────────
+$drpPresets = ['today'=>0,'7days'=>7,'30days'=>30,'3months'=>90,'12months'=>365,'mtd'=>-1,'ytd'=>-1,'alltime'=>-1,'custom'=>-1];
+$selectedRange = (isset($_GET['range']) && array_key_exists($_GET['range'], $drpPresets)) ? $_GET['range'] : 'alltime';
+
+$dateFrom = $dateTo = '';
+if ($selectedRange === 'today') {
+    $df = $dfo = "DATE(created_at)=CURDATE()";
+    $dfO = "DATE(o.created_at)=CURDATE()";
+} elseif ($selectedRange === 'custom') {
+    $dateFrom = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_from']??'') ? $_GET['date_from'] : date('Y-m-d',strtotime('-7 days'));
+    $dateTo   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_to']??'')   ? $_GET['date_to']   : date('Y-m-d');
+    $df  = "DATE(created_at) BETWEEN '$dateFrom' AND '$dateTo'";
+    $dfO = "DATE(o.created_at) BETWEEN '$dateFrom' AND '$dateTo'";
+} elseif ($selectedRange === 'mtd') {
+    $df  = "YEAR(created_at)=YEAR(CURDATE()) AND MONTH(created_at)=MONTH(CURDATE())";
+    $dfO = "YEAR(o.created_at)=YEAR(CURDATE()) AND MONTH(o.created_at)=MONTH(CURDATE())";
+} elseif ($selectedRange === 'ytd') {
+    $df  = "YEAR(created_at)=YEAR(CURDATE())";
+    $dfO = "YEAR(o.created_at)=YEAR(CURDATE())";
+} elseif ($selectedRange === 'alltime') {
+    $df = $dfO = "1=1";
+} else {
+    $days = (int)$drpPresets[$selectedRange];
+    $df  = "created_at >= DATE_SUB(CURDATE(), INTERVAL $days DAY)";
+    $dfO = "o.created_at >= DATE_SUB(CURDATE(), INTERVAL $days DAY)";
+}
+
 // ── Summary Stats ─────────────────────────────────────────────
 // NOTE: voided / refunded / partial_refund orders are excluded from all stats
 $VALID = "status NOT IN ('voided','refunded','partial_refund')";
 
 $totalOrders  = 0;
 $totalRevenue = 0.0;
-$res = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE $VALID");
+$res = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE $VALID AND $df");
 if ($res && $row = $res->fetch_assoc()) {
     $totalOrders  = (int)$row['cnt'];
     $totalRevenue = (float)$row['rev'];
@@ -31,14 +116,14 @@ if ($res && $row = $res->fetch_assoc()) {
 // Refund stats
 $totalRefunds   = 0;
 $totalRefundAmt = 0.0;
-$rRef = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(refund_amt),0) AS amt FROM order_refunds");
+$rRef = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(refund_amt),0) AS amt FROM order_refunds WHERE $df");
 if ($rRef && $rowRef = $rRef->fetch_assoc()) {
     $totalRefunds   = (int)$rowRef['cnt'];
     $totalRefundAmt = (float)$rowRef['amt'];
 }
 
 $totalTables = 0;
-$res2 = $conn->query("SELECT COUNT(DISTINCT table_no) AS cnt FROM orders WHERE $VALID");
+$res2 = $conn->query("SELECT COUNT(DISTINCT table_no) AS cnt FROM orders WHERE $VALID AND $df");
 if ($res2 && $row2 = $res2->fetch_assoc()) {
     $totalTables = (int)$row2['cnt'];
 }
@@ -50,7 +135,7 @@ if ($hasOrderItems) {
          FROM order_items oi
          JOIN menu m ON m.id = oi.menu_id
          JOIN orders o ON o.id = oi.order_id
-         WHERE $VALID
+         WHERE $VALID AND $dfO
          GROUP BY oi.menu_id ORDER BY total_qty DESC LIMIT 1"
     );
     if ($res3 && $row3 = $res3->fetch_assoc()) {
@@ -112,7 +197,8 @@ if ($hasOrderItems) {
          LEFT JOIN user u ON u.id = o.user_id
          JOIN order_items oi ON oi.order_id = o.id
          JOIN menu m ON m.id = oi.menu_id
-         GROUP BY o.id ORDER BY o.created_at DESC LIMIT 100"
+         WHERE $dfO
+         GROUP BY o.id ORDER BY o.created_at DESC LIMIT 500"
     );
     if ($res5) while ($row = $res5->fetch_assoc()) $orderRows[] = $row;
 } else {
@@ -122,7 +208,8 @@ if ($hasOrderItems) {
                 COALESCE(CONCAT(u.firstname,' ',u.lastname), 'N/A') AS cashier_name,
                 '—' AS items, 0 AS total_qty, '' AS item_details
          FROM orders o LEFT JOIN user u ON u.id = o.user_id
-         ORDER BY o.created_at DESC LIMIT 100"
+         WHERE $dfO
+         ORDER BY o.created_at DESC LIMIT 500"
     );
     if ($res5) while ($row = $res5->fetch_assoc()) $orderRows[] = $row;
 }
@@ -135,7 +222,7 @@ if ($hasOrderItems) {
          FROM order_items oi
          JOIN menu m ON m.id = oi.menu_id
          JOIN orders o ON o.id = oi.order_id
-         WHERE $VALID
+         WHERE $VALID AND $dfO
          GROUP BY m.category ORDER BY revenue DESC"
     );
     if ($res6) while ($row = $res6->fetch_assoc()) $catSales[] = $row;
@@ -276,6 +363,57 @@ $chartDataJson   = json_encode($chartData);
       .content-header h1 { font-size: 1.2rem; }
     }
 
+    /* ══ DRP: Date Range Picker ════════════════════════════════ */
+    #drpBackdrop{display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.3);backdrop-filter:blur(2px);}
+    #drpPopup{display:none;position:fixed;z-index:9001;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,.2);width:min(780px,96vw);overflow:hidden;}
+    body.dark-mode #drpPopup{background:#1e1e2e;color:#ddd;}
+    .drp-inner{display:flex;}
+    .drp-presets{width:158px;flex-shrink:0;border-right:1px solid #f0f0f0;padding:16px 0;}
+    body.dark-mode .drp-presets{border-color:#333;}
+    .drp-pi{padding:9px 20px;cursor:pointer;font-size:.85rem;color:#444;border-left:3px solid transparent;transition:background .12s,color .12s;}
+    body.dark-mode .drp-pi{color:#ccc;}
+    .drp-pi:hover{background:#fdf0f8;color:#e91e8c;}
+    .drp-pi.active{font-weight:700;color:#e91e8c;border-left-color:#e91e8c;background:#fdf0f8;}
+    .drp-cals{flex:1;padding:18px 22px;display:flex;flex-direction:column;}
+    .drp-months{display:flex;gap:24px;flex:1;}
+    .drp-mon{flex:1;min-width:0;}
+    .drp-mnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+    .drp-mnav strong{font-size:.9rem;color:#222;}
+    body.dark-mode .drp-mnav strong{color:#eee;}
+    .drp-nb{background:none;border:1px solid #ddd;border-radius:6px;width:26px;height:26px;cursor:pointer;color:#666;font-size:.95rem;display:flex;align-items:center;justify-content:center;}
+    .drp-nb:hover{background:#fdf0f8;border-color:#e91e8c;color:#e91e8c;}
+    .drp-cal{width:100%;border-collapse:collapse;}
+    .drp-cal th{text-align:center;font-size:.72rem;font-weight:600;color:#aaa;padding:4px 0;}
+    .drp-cal td{text-align:center;padding:0;width:14.28%;height:34px;font-size:.83rem;cursor:pointer;position:relative;color:#333;}
+    body.dark-mode .drp-cal td{color:#ddd;}
+    .drp-day{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;position:relative;z-index:1;transition:background .12s,color .12s;}
+    .drp-cal td:not(.oth):hover .drp-day{background:#f5e8fb;color:#e91e8c;}
+    .drp-cal td.oth .drp-day{color:#ccc;cursor:default;}
+    body.dark-mode .drp-cal td.oth .drp-day{color:#555;}
+    .drp-cal td.ds .drp-day,.drp-cal td.de .drp-day{background:#e91e8c!important;color:#fff!important;font-weight:700;}
+    .drp-cal td.ir::before{content:'';position:absolute;inset:2px 0;background:#fde8f5;z-index:0;}
+    .drp-cal td.ds::before{left:50%;}
+    .drp-cal td.de::before{right:50%;}
+    .drp-cal td.ds.de::before{display:none;}
+    .drp-cal td.tod .drp-day::after{content:'';position:absolute;bottom:3px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:#e91e8c;}
+    .drp-cal td.ds .drp-day::after,.drp-cal td.de .drp-day::after{background:#fff;}
+    .drp-foot{display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid #f0f0f0;}
+    body.dark-mode .drp-foot{border-color:#333;}
+    .drp-rl{font-size:.82rem;color:#888;}
+    .drp-rl strong{color:#333;}
+    body.dark-mode .drp-rl strong{color:#ddd;}
+    #drpTriggerBtn{display:inline-flex;align-items:center;gap:7px;border:1px solid #ccc;border-radius:8px;padding:5px 13px;background:#fff;cursor:pointer;font-size:.83rem;color:#444;transition:border-color .15s,box-shadow .15s;white-space:nowrap;}
+    body.dark-mode #drpTriggerBtn{background:#2a2a3e;border-color:#444;color:#ddd;}
+    #drpTriggerBtn:hover{border-color:#e91e8c;box-shadow:0 0 0 3px rgba(233,30,140,.1);}
+    #drpTriggerBtn .dci{color:#e91e8c;}
+    #drpTriggerBtn .dcv{color:#aaa;font-size:.65rem;transition:transform .2s;}
+    #drpTriggerBtn.open .dcv{transform:rotate(180deg);}
+    @media(max-width:600px){.drp-months{flex-direction:column;}.drp-presets{width:100%;border-right:none;border-bottom:1px solid #eee;display:flex;flex-wrap:wrap;padding:8px;}.drp-pi{padding:5px 10px;border-left:none;}.drp-inner{flex-direction:column;}}
+
+</style>
+<style>
+@keyframes rtPulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.55)}70%{box-shadow:0 0 0 7px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+@keyframes toastSlideIn{from{opacity:0;transform:translateY(30px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
 </style>
 </head>
 <body class="hold-transition dark-mode sidebar-mini layout-fixed layout-navbar-fixed layout-footer-fixed">
@@ -307,6 +445,10 @@ $chartDataJson   = json_encode($chartData);
       </li>
       <li class="nav-item">
         <a class="nav-link" data-widget="fullscreen" href="#" role="button"><i class="fas fa-expand-arrows-alt"></i></a>
+      </li>
+      <li class="nav-item d-flex align-items-center px-2">
+        <span class="rt-live-dot" style="width:9px;height:9px;background:#22c55e;border-radius:50%;display:inline-block;margin-right:5px;animation:rtPulse 1.8s ease infinite;" title="Live — connected"></span>
+        <span class="d-none d-sm-inline" style="font-size:.72rem;font-weight:600;color:#aaa;">Live</span>
       </li>
       <li class="nav-item">
         <a class="nav-link" id="darkModeToggle" href="#" role="button"><i class="fas fa-moon"></i></a>
@@ -344,12 +486,60 @@ $chartDataJson   = json_encode($chartData);
   </aside>
 
   <div class="content-wrapper">
+
+    <!-- DRP Backdrop & Popup -->
+    <div id="drpBackdrop" onclick="drpClose()"></div>
+    <div id="drpPopup">
+      <div class="drp-inner">
+        <div class="drp-presets">
+          <?php foreach(['today'=>'Today','7days'=>'Last 7 days','30days'=>'Last 30 days','3months'=>'Last 3 months','12months'=>'Last 12 months','mtd'=>'Month to date','ytd'=>'Year to date','alltime'=>'All time'] as $pk=>$pv): ?>
+          <div class="drp-pi<?= $selectedRange===$pk?' active':'' ?>" data-p="<?= $pk ?>"><?= $pv ?></div>
+          <?php endforeach; ?>
+        </div>
+        <div class="drp-cals">
+          <div class="drp-months">
+            <div class="drp-mon">
+              <div class="drp-mnav"><button class="drp-nb" id="drpPrev">&#8249;</button><strong id="drpTA"></strong><span></span></div>
+              <table class="drp-cal" id="drpCA"></table>
+            </div>
+            <div class="drp-mon">
+              <div class="drp-mnav"><span></span><strong id="drpTB"></strong><button class="drp-nb" id="drpNext">&#8250;</button></div>
+              <table class="drp-cal" id="drpCB"></table>
+            </div>
+          </div>
+          <div class="drp-foot">
+            <div class="drp-rl">Range:&nbsp;<strong id="drpRL">—</strong></div>
+            <div style="display:flex;gap:8px">
+              <button type="button" class="btn btn-sm btn-light" onclick="drpClose()" style="border:1px solid #ddd;min-width:68px">Cancel</button>
+              <button type="button" class="btn btn-sm" id="drpApply" style="background:#e91e8c;color:#fff;border:none;min-width:68px">Apply</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <form method="GET" id="drpForm" style="display:none">
+      <input type="hidden" name="range"     id="drpFR" value="<?= htmlspecialchars($selectedRange) ?>">
+      <input type="hidden" name="date_from" id="drpFF" value="<?= htmlspecialchars($dateFrom) ?>">
+      <input type="hidden" name="date_to"   id="drpFT" value="<?= htmlspecialchars($dateTo) ?>">
+    </form>
+
     <div class="content-header">
       <div class="container-fluid">
-        <div class="row mb-2">
+        <div class="row mb-2 align-items-center">
           <div class="col-sm-6"><h1 class="m-0">Reports</h1></div>
-          <div class="col-sm-6">
-            <ol class="breadcrumb float-sm-right">
+          <div class="col-sm-6 d-flex align-items-center justify-content-sm-end flex-wrap" style="gap:10px">
+            <button type="button" id="drpTriggerBtn" onclick="drpToggle()">
+              <i class="fas fa-calendar-alt dci"></i>
+              <span id="drpLabel"><?php
+                $lbl=['today'=>'Today','7days'=>'Last 7 Days','30days'=>'Last 30 Days','3months'=>'Last 3 Months',
+                      '12months'=>'Last 12 Months','mtd'=>'Month to Date','ytd'=>'Year to Date','alltime'=>'All Time'];
+                echo $selectedRange==='custom'
+                  ? date('M d, Y',strtotime($dateFrom)).' – '.date('M d, Y',strtotime($dateTo))
+                  : ($lbl[$selectedRange]??'All Time');
+              ?></span>
+              <i class="fas fa-chevron-down dcv"></i>
+            </button>
+            <ol class="breadcrumb m-0">
               <li class="breadcrumb-item"><a href="#">Home</a></li>
               <li class="breadcrumb-item active">Reports</li>
             </ol>
@@ -488,7 +678,7 @@ $chartDataJson   = json_encode($chartData);
         <!-- ── Order Report ──────────────────────────────── -->
         <div class="card mb-3">
           <div class="card-header">
-            <h3 class="card-title"><i class="fas fa-receipt mr-2"></i>Order Report</h3>
+            <h3 class="card-title"><i class="fas fa-receipt mr-2"></i>Order Report&nbsp;<span class="rt-live-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;vertical-align:middle;margin-left:4px;" title="Live"></span></h3>
           </div>
           <div class="card-body">
             <table id="example2" class="table table-bordered table-striped">
@@ -507,7 +697,7 @@ $chartDataJson   = json_encode($chartData);
                   <th>Total (&#8369;)</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody id="orderReportTbody" data-rt-container="reportOrders">
                 <?php foreach ($orderRows as $ord):
                   $st = $ord['status'] ?? 'Done';
                   if ($st === 'voided')          { $badge = '<span class="badge badge-danger">Voided</span>';          $rowClass = 'table-danger'; }
@@ -541,7 +731,7 @@ $chartDataJson   = json_encode($chartData);
                   $addonsCell  = !empty($allAddons)  ? implode('<br>', $allAddons)  : '<span class="text-muted">—</span>';
                   $removedCell = !empty($allRemoved) ? implode('<br>', $allRemoved) : '<span class="text-muted">—</span>';
                 ?>
-                <tr class="<?= $rowClass ?>">
+                <tr class="<?= $rowClass ?>" data-order-id="<?= (int)$ord['order_id'] ?>">
                   <td><strong>#<?= (int)$ord['order_id'] ?></strong></td>
                   <td><?= htmlspecialchars($ord['created_at']) ?></td>
                   <td><?= htmlspecialchars($ord['table_no']) ?></td>
@@ -688,5 +878,245 @@ $(function () {
   });
 });
 </script>
+<script>
+/* ── Date Range Picker ─────────────────────────────────────── */
+(function(){
+  var MN=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var DN=['M','T','W','T','F','S','S'];
+  var today=new Date();today.setHours(0,0,0,0);
+  var vY=today.getFullYear(),vM=today.getMonth()>0?today.getMonth()-1:11;
+  if(today.getMonth()===0)vY--;
+  var sA=null,sB=null,ph=0;
+  <?php if($selectedRange==='custom'&&$dateFrom&&$dateTo):?>
+  sA=new Date('<?=$dateFrom?>');sA.setHours(0,0,0,0);
+  sB=new Date('<?=$dateTo?>');sB.setHours(0,0,0,0);
+  vY=sA.getFullYear();vM=sA.getMonth();
+  <?php elseif($selectedRange==='today'):?>sA=new Date(today);sB=new Date(today);
+  <?php elseif($selectedRange==='7days'):?>sB=new Date(today);sA=new Date(today);sA.setDate(sA.getDate()-6);
+  <?php elseif($selectedRange==='30days'):?>sB=new Date(today);sA=new Date(today);sA.setDate(sA.getDate()-29);
+  <?php endif;?>
+  function iso(d){return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());}
+  function p2(n){return String(n).padStart(2,'0');}
+  function fmt(d){return d?MN[d.getMonth()].slice(0,3)+' '+d.getDate()+', '+d.getFullYear():'—';}
+  function sd(a,b){return a&&b&&a.getTime()===b.getTime();}
+  function build(tid,yr,mo){
+    var t=document.getElementById(tid);t.innerHTML='';
+    var hr=t.insertRow();DN.forEach(function(h){var th=document.createElement('th');th.textContent=h;hr.appendChild(th);});
+    var fd=(new Date(yr,mo,1).getDay()+6)%7,dm=new Date(yr,mo+1,0).getDate(),dp=new Date(yr,mo,0).getDate();
+    for(var i=0;i<42;i++){
+      if(i%7===0)t.insertRow();
+      var tr=t.rows[t.rows.length-1],td=document.createElement('td');
+      var oth=(i<fd)||(i>=fd+dm),dy,cy,cm;
+      if(i<fd){dy=dp-fd+i+1;cm=mo-1;cy=yr;if(cm<0){cm=11;cy--;}}
+      else if(i>=fd+dm){dy=i-fd-dm+1;cm=mo+1;cy=yr;if(cm>11){cm=0;cy++;}}
+      else{dy=i-fd+1;cm=mo;cy=yr;}
+      var cd=new Date(cy,cm,dy);cd.setHours(0,0,0,0);
+      if(oth)td.classList.add('oth');
+      if(sd(cd,today))td.classList.add('tod');
+      if(!oth){
+        if(sA&&sB){
+          if(sd(cd,sA)&&sd(cd,sB))td.classList.add('ds','de');
+          else if(sd(cd,sA))td.classList.add('ds');
+          else if(sd(cd,sB))td.classList.add('de');
+          else if(cd>sA&&cd<sB)td.classList.add('ir');
+        }else if(sA&&!sB&&sd(cd,sA))td.classList.add('ds','de');
+        (function(d){td.addEventListener('click',function(){click(d);});})(cd);
+      }
+      var sp=document.createElement('span');sp.className='drp-day';sp.textContent=dy;td.appendChild(sp);
+      tr.appendChild(td);
+    }
+  }
+  function render(){
+    var yA=vY,mA=vM,mB=mA+1,yB=yA;if(mB>11){mB=0;yB++;}
+    document.getElementById('drpTA').textContent=MN[mA]+', '+yA;
+    document.getElementById('drpTB').textContent=MN[mB]+', '+yB;
+    build('drpCA',yA,mA);build('drpCB',yB,mB);
+    document.getElementById('drpRL').textContent=sA?(sB&&!sd(sA,sB)?fmt(sA)+' – '+fmt(sB):fmt(sA)):'—';
+  }
+  function click(d){
+    if(ph===0||(sA&&sB)){sA=new Date(d);sB=null;ph=1;}
+    else{if(d<sA){sB=new Date(sA);sA=new Date(d);}else{sB=new Date(d);}ph=0;}
+    render();
+  }
+  window.drpToggle=function(){
+    var p=document.getElementById('drpPopup'),b=document.getElementById('drpBackdrop'),btn=document.getElementById('drpTriggerBtn');
+    if(p.style.display==='block'){drpClose();return;}
+    p.style.display='block';b.style.display='block';btn.classList.add('open');render();
+  };
+  window.drpClose=function(){
+    document.getElementById('drpPopup').style.display='none';
+    document.getElementById('drpBackdrop').style.display='none';
+    document.getElementById('drpTriggerBtn').classList.remove('open');
+  };
+  document.getElementById('drpPrev').addEventListener('click',function(){vM--;if(vM<0){vM=11;vY--;}render();});
+  document.getElementById('drpNext').addEventListener('click',function(){vM++;if(vM>11){vM=0;vY++;}render();});
+  document.querySelectorAll('.drp-pi').forEach(function(el){
+    el.addEventListener('click',function(){
+      var pk=this.dataset.p;sB=new Date(today);sA=new Date(today);
+      if(pk==='7days')sA.setDate(sA.getDate()-6);
+      else if(pk==='30days')sA.setDate(sA.getDate()-29);
+      else if(pk==='3months')sA.setMonth(sA.getMonth()-3);
+      else if(pk==='12months')sA.setFullYear(sA.getFullYear()-1);
+      else if(pk==='mtd')sA=new Date(today.getFullYear(),today.getMonth(),1);
+      else if(pk==='ytd')sA=new Date(today.getFullYear(),0,1);
+      else if(pk==='alltime')sA=new Date(2000,0,1);
+      sA.setHours(0,0,0,0);sB.setHours(0,0,0,0);
+      vY=sA.getFullYear();vM=sA.getMonth();ph=0;
+      document.querySelectorAll('.drp-pi').forEach(function(e){e.classList.remove('active');});
+      this.classList.add('active');
+      document.getElementById('drpFR').value=pk;
+      document.getElementById('drpFF').value='';
+      document.getElementById('drpFT').value='';
+      document.getElementById('drpForm').submit();
+    });
+  });
+  document.getElementById('drpApply').addEventListener('click',function(){
+    if(!sA)return;if(!sB)sB=new Date(sA);
+    document.getElementById('drpFR').value='custom';
+    document.getElementById('drpFF').value=iso(sA);
+    document.getElementById('drpFT').value=iso(sB);
+    document.getElementById('drpForm').submit();
+  });
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')drpClose();});
+})();
+</script>
+<script src="../dist/js/empress-realtime.js" data-scope="admin"></script>
+
+
+<!-- ══ NEW ORDER REAL-TIME NOTIFICATION ══════════════════════════════ -->
+<div id="newOrderToast" style="
+  display:none;position:fixed;bottom:24px;right:24px;z-index:99999;
+  min-width:300px;max-width:360px;
+  background:linear-gradient(135deg,#e91e8c 0%,#9c27b0 100%);
+  color:#fff;border-radius:14px;
+  box-shadow:0 8px 32px rgba(233,30,140,.45);
+  padding:16px 20px;font-family:'Source Sans Pro',sans-serif;">
+  <div style="display:flex;align-items:flex-start;gap:12px;">
+    <div style="font-size:1.6rem;line-height:1;">🛎️</div>
+    <div style="flex:1;">
+      <div style="font-weight:700;font-size:.95rem;margin-bottom:2px;">New Order Received!</div>
+      <div id="noToastMsg" style="font-size:.82rem;opacity:.9;">A new order just came in.</div>
+    </div>
+    <button onclick="document.getElementById('newOrderToast').style.display='none'"
+      style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;padding:0;opacity:.8;">✕</button>
+  </div>
+  <div style="margin-top:10px;display:flex;gap:8px;">
+    <div id="noToastBadge" style="background:rgba(255,255,255,.2);border-radius:20px;padding:3px 10px;font-size:.78rem;font-weight:600;"></div>
+    <div id="noToastTime"  style="background:rgba(255,255,255,.15);border-radius:20px;padding:3px 10px;font-size:.78rem;"></div>
+  </div>
+</div>
+
+<script>
+/* ── empress-realtime: report.php ── */
+(function(){
+  'use strict';
+  var SSE_URL = 'report.php?sse=1';
+  var _lastId = null;
+
+  function peso(v){ return '₱'+parseFloat(v).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+  function flash(el, colour){
+    el.style.transition='none';
+    el.style.backgroundColor=colour||'rgba(233,30,140,.18)';
+    setTimeout(function(){ el.style.transition='background-color 1.4s ease'; el.style.backgroundColor=''; },80);
+  }
+
+  function setDot(ok){
+    document.querySelectorAll('.rt-live-dot').forEach(function(d){
+      d.style.background = ok ? '#22c55e' : '#ef4444';
+      d.title = ok ? 'Live — connected' : 'Live — reconnecting…';
+    });
+  }
+
+  function showToast(d){
+    var toast=document.getElementById('newOrderToast');
+    var msg=document.getElementById('noToastMsg');
+    var badge=document.getElementById('noToastBadge');
+    var time=document.getElementById('noToastTime');
+    if(!toast) return;
+    var lo=d.latestOrder||{};
+    if(msg)   msg.textContent  ='Table '+(lo.table_no||'—')+' — '+peso(lo.total_amt||0);
+    if(badge) badge.textContent='#'+(lo.id||'');
+    if(time)  time.textContent =new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:true});
+    toast.style.display='block';
+    toast.style.animation='none';
+    void toast.offsetWidth;
+    toast.style.animation='toastSlideIn .35s cubic-bezier(.22,1,.36,1)';
+    clearTimeout(toast._t);
+    toast._t=setTimeout(function(){ toast.style.display='none'; },8000);
+    try{
+      var ctx=new(window.AudioContext||window.webkitAudioContext)();
+      var osc=ctx.createOscillator(); var g=ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.type='sine'; osc.frequency.value=880;
+      g.gain.setValueAtTime(0.3,ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.4);
+      osc.start(); osc.stop(ctx.currentTime+0.4);
+    }catch(e){}
+  }
+
+  function updateOrderTable(orders){
+    var tbody=document.getElementById('orderReportTbody');
+    if(!tbody||!orders||!orders.length) return;
+    var prevIds=Array.from(tbody.querySelectorAll('tr[data-order-id]')).map(function(r){ return r.getAttribute('data-order-id'); });
+    var newIds =orders.map(function(o){ return String(o.order_id); });
+    if(JSON.stringify(prevIds)===JSON.stringify(newIds)) return;
+
+    var html=orders.map(function(o){
+      var st=o.status||'done';
+      var badge='', rowCls='';
+      if(st==='voided')         { badge='<span class="badge badge-danger">Voided</span>';          rowCls='table-danger'; }
+      else if(st==='refunded')  { badge='<span class="badge badge-info">Refunded</span>';           rowCls='table-info';   }
+      else if(st==='partial_refund'){ badge='<span class="badge badge-warning">Partial Refund</span>'; rowCls='table-warning';}
+      else                      { badge='<span class="badge badge-success">Done</span>';            rowCls=''; }
+      var isNew=prevIds.indexOf(String(o.order_id))===-1;
+      var discount='<span class="text-muted">—</span>';
+      if(parseFloat(o.discount_amt)>0){
+        var dtype=o.discount_type==='senior'?'Senior 20%':(o.discount_type==='pwd'?'PWD 20%':'Discount');
+        discount='<span class="badge badge-success" style="font-size:11px;">'+dtype+'</span><br>'
+                +'<span class="text-danger font-weight-bold">-₱'+parseFloat(o.discount_amt).toLocaleString('en',{minimumFractionDigits:2})+'</span>';
+      }
+      var totalCell=rowCls?('<s class="text-muted">₱'+parseFloat(o.total_amt).toFixed(2)+'</s>'):'₱'+parseFloat(o.total_amt).toLocaleString('en',{minimumFractionDigits:2});
+      return '<tr class="'+rowCls+'" data-order-id="'+o.order_id+'"'+(isNew?' data-rt-new="1"':'')+'>'
+        +'<td><strong>#'+o.order_id+'</strong></td>'
+        +'<td>'+o.created_at+'</td>'
+        +'<td>'+o.table_no+'</td>'
+        +'<td>'+badge+'</td>'
+        +'<td>'+o.cashier_name+'</td>'
+        +'<td>'+(o.items||'—')+'</td>'
+        +'<td><span class="text-muted">—</span></td>'
+        +'<td><span class="text-muted">—</span></td>'
+        +'<td>'+(o.total_qty||0)+'</td>'
+        +'<td>'+discount+'</td>'
+        +'<td>'+totalCell+'</td>'
+        +'</tr>';
+    }).join('');
+    tbody.innerHTML=html;
+    tbody.querySelectorAll('tr[data-rt-new="1"]').forEach(function(tr){ flash(tr,'rgba(233,30,140,.18)'); });
+  }
+
+  function connect(){
+    if(!window.EventSource) return;
+    var es=new EventSource(SSE_URL);
+    es.addEventListener('stats',function(e){
+      try{
+        var d=JSON.parse(e.data);
+        setDot(true);
+        if(_lastId===null){ _lastId=d.latestOrderId; updateOrderTable(d.recentOrders); return; }
+        if(d.latestOrderId>_lastId){ _lastId=d.latestOrderId; showToast(d); }
+        updateOrderTable(d.recentOrders);
+      }catch(ex){}
+    });
+    es.onerror=function(){ setDot(false); };
+    es.onopen =function(){ setDot(true);  };
+  }
+
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',connect);
+  } else { connect(); }
+})();
+</script>
+<!-- ══ END real-time ═══════════════════════════════════════════════════ -->
+
 </body>
 </html>

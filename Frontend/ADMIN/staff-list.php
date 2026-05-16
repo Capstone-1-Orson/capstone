@@ -30,6 +30,9 @@ if (empty($_SESSION['csrf_token'])) {
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
 
   <link rel="stylesheet" href="../dist/css/empress-cafe-theme.css">
+<style>
+@keyframes rtPulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.55)}70%{box-shadow:0 0 0 7px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+</style>
 </head>
 <style>
   body,
@@ -206,7 +209,11 @@ if (empty($_SESSION['csrf_token'])) {
             <i class="fas fa-expand-arrows-alt"></i>
           </a>
         </li>
-        <li class="nav-item">
+        <li class="nav-item d-flex align-items-center px-2" title="Real-time: connected" style="font-size:.72rem;font-weight:600;color:#6c757d;">
+        <span class="rt-live-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;margin-right:5px;box-shadow:0 0 0 0 rgba(34,197,94,.5);animation:rtPulse 1.8s ease infinite;" title="Live data connected"></span>
+        <span class="d-none d-sm-inline rt-live-label">Live</span>
+      </li>
+      <li class="nav-item">
           <a class="nav-link" id="darkModeToggle" href="#" role="button">
             <i class="fas fa-moon"></i>
           </a>
@@ -321,6 +328,7 @@ if (empty($_SESSION['csrf_token'])) {
                         <th>Photo</th>
                         <th>Name</th>
                         <th>Email</th>
+                        <th>Verified</th>
                         <th>Password</th>
                         <th>Position</th>
                         <th>Contact</th>
@@ -345,6 +353,7 @@ if (empty($_SESSION['csrf_token'])) {
                         data-contact="<?= htmlspecialchars($row['contact'], ENT_QUOTES); ?>"
                         data-address="<?= htmlspecialchars($row['address'], ENT_QUOTES); ?>"
                         data-image="<?= htmlspecialchars($row['image'] ?? '', ENT_QUOTES); ?>"
+                        data-verified="<?= intval($row['email_verified'] ?? 0); ?>"
                       >
                         <!-- <td>*</td> -->
                         <td>
@@ -356,6 +365,13 @@ if (empty($_SESSION['csrf_token'])) {
                         </td>
                         <td><?= $fullname; ?></td>
                         <td><?= htmlspecialchars($row['email']); ?></td>
+                        <td>
+                          <?php if (!empty($row['email_verified'])): ?>
+                            <span class="badge badge-success"><i class="fas fa-check-circle mr-1"></i>Verified</span>
+                          <?php else: ?>
+                            <span class="badge badge-warning text-dark"><i class="fas fa-envelope mr-1"></i>Unverified</span>
+                          <?php endif; ?>
+                        </td>
                         <td>*****</td>
                         <td>
                           <?php if ($row['position'] == 'admin'): ?>
@@ -366,8 +382,21 @@ if (empty($_SESSION['csrf_token'])) {
                         </td>
                         <td><?= htmlspecialchars($row['contact']); ?></td>
                         <td><?= htmlspecialchars($row['address']); ?></td>
-                        <td>
-                          <button class="btn btn-sm btn-primary view-btn">View</button>
+                        <td class="d-flex flex-wrap gap-1" style="gap:4px;">
+                          <button class="btn btn-sm btn-primary view-btn">
+                            <i class="fas fa-eye mr-1"></i>View
+                          </button>
+                          <?php if (empty($row['email_verified'])): ?>
+                          <form action="../../Backend/process.php" method="POST" class="d-inline"
+                                onsubmit="return confirm('Resend verification email to ' + <?= json_encode($row['email']) ?> + '?');">
+                            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+                            <input type="hidden" name="user_id"   value="<?= $row['id'] ?>">
+                            <button type="submit" name="resend_verification" class="btn btn-sm btn-warning text-dark"
+                                    title="Resend verification email">
+                              <i class="fas fa-envelope mr-1"></i>Resend
+                            </button>
+                          </form>
+                          <?php endif; ?>
                         </td>
                       </tr>
                       <?php } ?>
@@ -697,6 +726,102 @@ if (empty($_SESSION['csrf_token'])) {
       }
     }
   </script>
+
+<!-- ══ NEW ORDER REAL-TIME NOTIFICATION (SSE) ══════════════════════ -->
+<div id="newOrderToast" style="
+  display:none;position:fixed;bottom:24px;right:24px;z-index:99999;
+  min-width:300px;max-width:360px;
+  background:linear-gradient(135deg,#e91e8c 0%,#9c27b0 100%);
+  color:#fff;border-radius:14px;
+  box-shadow:0 8px 32px rgba(233,30,140,.45);
+  padding:16px 20px;font-family:'Source Sans Pro',sans-serif;
+  animation:toastSlideIn .35s cubic-bezier(.22,1,.36,1);
+">
+  <div style="display:flex;align-items:flex-start;gap:12px;">
+    <div style="font-size:1.6rem;line-height:1;">🛎️</div>
+    <div style="flex:1;">
+      <div style="font-weight:700;font-size:.95rem;margin-bottom:2px;">New Order Received!</div>
+      <div id="noToastMsg" style="font-size:.82rem;opacity:.9;">A new order just came in.</div>
+    </div>
+    <button onclick="document.getElementById('newOrderToast').style.display='none'"
+      style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;padding:0;line-height:1;opacity:.8;">✕</button>
+  </div>
+  <div style="margin-top:10px;display:flex;gap:8px;">
+    <div id="noToastOrderBadge" style="background:rgba(255,255,255,.2);border-radius:20px;padding:3px 10px;font-size:.78rem;font-weight:600;"></div>
+    <div id="noToastTimeBadge"  style="background:rgba(255,255,255,.15);border-radius:20px;padding:3px 10px;font-size:.78rem;"></div>
+  </div>
+</div>
+<style>
+@keyframes toastSlideIn{from{opacity:0;transform:translateY(30px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+</style>
+<script>
+/* ── empress-realtime-notify: new-order toast on all admin pages ── */
+(function(){
+  'use strict';
+  var SSE_URL = 'index2.php?sse=1';
+  var _lastId  = null;
+
+  function showNewOrderToast(d) {
+    var toast = document.getElementById('newOrderToast');
+    var msg   = document.getElementById('noToastMsg');
+    var badge = document.getElementById('noToastOrderBadge');
+    var time  = document.getElementById('noToastTimeBadge');
+    if (!toast) return;
+    var lo = d.latestOrder || {};
+    if (msg)   msg.textContent   = 'Table ' + (lo.table_no || '—') + ' — ₱' + parseFloat(lo.total_amt || 0).toLocaleString('en',{minimumFractionDigits:2});
+    if (badge) badge.textContent = '#' + (lo.id || '');
+    if (time)  time.textContent  = new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:true});
+    toast.style.display   = 'block';
+    toast.style.animation = 'none';
+    void toast.offsetWidth;
+    toast.style.animation = 'toastSlideIn .35s cubic-bezier(.22,1,.36,1)';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function(){ toast.style.display='none'; }, 8000);
+    /* beep */
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ctx.createOscillator(); var g = ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.type = 'sine'; osc.frequency.value = 880;
+      g.gain.setValueAtTime(0.3, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      osc.start(); osc.stop(ctx.currentTime + 0.4);
+    } catch(e){}
+  }
+
+  function setDot(ok) {
+    document.querySelectorAll('.rt-live-dot').forEach(function(el){
+      el.style.background = ok ? '#22c55e' : '#ef4444';
+      el.title = ok ? 'Live — connected' : 'Live — reconnecting…';
+    });
+  }
+
+  function connect() {
+    if (!window.EventSource) return;
+    var es = new EventSource(SSE_URL);
+    es.addEventListener('stats', function(e){
+      try {
+        var d = JSON.parse(e.data);
+        setDot(true);
+        if (_lastId === null) { _lastId = d.latestOrderId; return; }
+        if (d.latestOrderId > _lastId) {
+          _lastId = d.latestOrderId;
+          showNewOrderToast(d);
+        }
+      } catch(ex){}
+    });
+    es.onerror = function(){ setDot(false); };
+    es.onopen  = function(){ setDot(true);  };
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', connect);
+  } else {
+    connect();
+  }
+})();
+</script>
+<!-- ══ END real-time notification ════════════════════════════════════ -->
 
 </body>
 </html>
