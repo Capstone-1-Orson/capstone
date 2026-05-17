@@ -196,20 +196,12 @@ $conn->close();
         <a href="index2.php" class="nav-link">Home</a>
       </li>
     </ul>
-    <ul class="navbar-nav ml-auto">
-      <li class="nav-item">
-        <a class="nav-link" data-widget="fullscreen" href="#" role="button">
-          <i class="fas fa-expand-arrows-alt"></i>
-        </a>
-      </li>
-      <li class="nav-item d-flex align-items-center px-2" title="Real-time: connected" style="font-size:.72rem;font-weight:600;color:#6c757d;">
-        <span class="rt-live-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;margin-right:5px;box-shadow:0 0 0 0 rgba(34,197,94,.5);animation:rtPulse 1.8s ease infinite;" title="Live data connected"></span>
-        <span class="d-none d-sm-inline rt-live-label">Live</span>
+       <ul class="navbar-nav ml-auto">
+<li class="nav-item">
+        <a class="nav-link" data-widget="fullscreen" href="#" role="button"><i class="fas fa-expand-arrows-alt"></i></a>
       </li>
       <li class="nav-item">
-        <a class="nav-link" id="darkModeToggle" href="#" role="button">
-          <i class="fas fa-moon"></i>
-        </a>
+        <a class="nav-link" id="darkModeToggle" href="#" role="button"><i class="fas fa-moon"></i></a>
       </li>
     </ul>
   </nav>
@@ -417,11 +409,10 @@ $conn->close();
                             data-status="<?= htmlspecialchars($s['status'] ?? '', ENT_QUOTES) ?>">
                       <i class="fas fa-edit"></i>
                     </button>
-                    <a href="../../Backend/supplier_process.php?action=delete&id=<?= $s['id'] ?>"
-                       class="btn btn-sm btn-danger"
-                       onclick="return confirm('Delete \'<?= htmlspecialchars($s['name'], ENT_QUOTES) ?>\'? This cannot be undone.')">
+                    <button type="button" class="btn btn-sm btn-danger"
+                       onclick="confirmDeleteSupplier(<?= $s['id'] ?>, '<?= htmlspecialchars($s['name'], ENT_QUOTES) ?>')">
                       <i class="fas fa-trash"></i>
-                    </a>
+                    </button>
                   </td>
                 </tr>
                 <?php endforeach; ?>
@@ -759,6 +750,108 @@ $conn->close();
   });
 </script>
 
+
+<!-- ══ DELETE SUPPLIER CONFIRM MODAL — custom blur overlay ══════════ -->
+<div id="deleteSupplierModal" style="
+  display:none;position:fixed;inset:0;z-index:99998;
+  background:rgba(0,0,0,.65);backdrop-filter:blur(6px);
+  align-items:center;justify-content:center;
+">
+  <div id="deleteSupplierBox" style="
+    background:linear-gradient(145deg,#1a0a1e 0%,#1a1a2e 100%);
+    border:1px solid rgba(233,30,140,.3);
+    border-radius:18px;
+    box-shadow:0 32px 80px rgba(0,0,0,.7),0 0 0 1px rgba(233,30,140,.15),inset 0 1px 0 rgba(255,255,255,.06);
+    width:100%;max-width:400px;margin:16px;
+    overflow:hidden;
+    transform:scale(.88) translateY(20px);opacity:0;
+    transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .25s ease;
+  ">
+    <!-- Header -->
+    <div style="
+      background:linear-gradient(135deg,rgba(233,30,140,.18) 0%,rgba(156,39,176,.1) 100%);
+      border-bottom:1px solid rgba(233,30,140,.18);
+      padding:20px 22px 16px;display:flex;align-items:center;gap:14px;
+    ">
+      <div style="
+        width:44px;height:44px;border-radius:50%;flex-shrink:0;
+        background:linear-gradient(135deg,#f59e0b,#e91e8c);
+        display:flex;align-items:center;justify-content:center;
+        box-shadow:0 4px 16px rgba(233,30,140,.4);
+        font-size:1.15rem;color:#fff;
+      "><i class="fas fa-trash"></i></div>
+      <div>
+        <div style="font-family:'DM Sans',sans-serif;font-weight:700;font-size:1rem;color:#fff;line-height:1.2;">Delete Supplier</div>
+        <div style="font-family:'DM Sans',sans-serif;font-size:.75rem;color:rgba(255,255,255,.45);margin-top:2px;">Confirm before deleting</div>
+      </div>
+      <button onclick="closeDeleteSupplierModal()" style="
+        margin-left:auto;background:none;border:none;cursor:pointer;
+        color:rgba(255,255,255,.4);font-size:1.2rem;line-height:1;
+        transition:color .2s;padding:2px 6px;border-radius:6px;
+      " onmouseover="this.style.color='#e91e8c'" onmouseout="this.style.color='rgba(255,255,255,.4)'">&#x2715;</button>
+    </div>
+    <!-- Body -->
+    <div style="padding:22px 22px 8px;">
+      <p style="font-family:'DM Sans',sans-serif;color:rgba(255,255,255,.7);font-size:.875rem;margin:0 0 6px;">
+        Are you sure you want to delete
+      </p>
+      <div style="
+        background:rgba(233,30,140,.1);border:1px solid rgba(233,30,140,.25);
+        border-radius:10px;padding:10px 14px;margin-bottom:4px;
+        display:flex;align-items:center;gap:10px;
+      ">
+        <i class="fas fa-truck" style="color:#e91e8c;font-size:.85rem;"></i>
+        <span id="deleteSupplierName" style="font-family:'DM Sans',sans-serif;font-weight:600;color:#fff;font-size:.9rem;word-break:break-all;"></span>
+      </div>
+      <p style="font-family:'DM Sans',sans-serif;color:rgba(255,255,255,.35);font-size:.75rem;margin:8px 0 0;">
+        <i class="fas fa-info-circle mr-1"></i>This cannot be undone.
+      </p>
+    </div>
+    <!-- Footer -->
+    <div style="padding:16px 22px 20px;display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="closeDeleteSupplierModal()" style="
+        font-family:'DM Sans',sans-serif;font-weight:600;font-size:.82rem;
+        background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);
+        color:rgba(255,255,255,.65);border-radius:22px;padding:8px 20px;cursor:pointer;
+        transition:background .2s,color .2s;
+      " onmouseover="this.style.background='rgba(255,255,255,.13)';this.style.color='#fff'"
+         onmouseout="this.style.background='rgba(255,255,255,.07)';this.style.color='rgba(255,255,255,.65)'">
+        Cancel
+      </button>
+      <a id="deleteSupplierLink" href="#" style="
+        font-family:'DM Sans',sans-serif;font-weight:700;font-size:.82rem;
+        background:linear-gradient(135deg,#f59e0b 0%,#e91e8c 100%);
+        border:none;color:#fff;border-radius:22px;padding:8px 24px;cursor:pointer;
+        box-shadow:0 4px 16px rgba(233,30,140,.4);
+        transition:transform .18s,box-shadow .18s;
+        display:inline-flex;align-items:center;gap:8px;text-decoration:none;
+      " onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 22px rgba(233,30,140,.55)'"
+         onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(233,30,140,.4)'">
+        <i class="fas fa-trash"></i> Delete
+      </a>
+    </div>
+  </div>
+</div>
+<script>
+  function confirmDeleteSupplier(id, name) {
+    document.getElementById('deleteSupplierName').textContent = name;
+    document.getElementById('deleteSupplierLink').href = '../../Backend/supplier_process.php?action=delete&id=' + id;
+    var overlay = document.getElementById('deleteSupplierModal');
+    var box = document.getElementById('deleteSupplierBox');
+    overlay.style.display = 'flex';
+    requestAnimationFrame(function(){ box.style.transform='scale(1) translateY(0)'; box.style.opacity='1'; });
+  }
+  function closeDeleteSupplierModal() {
+    var overlay = document.getElementById('deleteSupplierModal');
+    var box = document.getElementById('deleteSupplierBox');
+    box.style.transform='scale(.88) translateY(20px)'; box.style.opacity='0';
+    setTimeout(function(){ overlay.style.display='none'; }, 280);
+  }
+  document.getElementById('deleteSupplierModal').addEventListener('click', function(e){
+    if(e.target === this) closeDeleteSupplierModal();
+  });
+</script>
+<!-- ══ END DELETE SUPPLIER CONFIRM MODAL ══════════════════════════ -->
 
 <!-- ══ NEW ORDER REAL-TIME NOTIFICATION (SSE) ══════════════════════ -->
 <div id="newOrderToast" style="

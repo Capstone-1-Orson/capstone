@@ -198,7 +198,14 @@ $conn->close();
     }
     html { overflow-y: scroll; }
 
-    /* 6. Mobile tweaks */
+    /* 6. Modal frosted-glass backdrop */
+    .modal-content {
+      background: rgba(0,0,0,.45) !important;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+
+    /* 7. Mobile tweaks */
     @media (max-width: 576px) {
       .dataTables_wrapper .dataTables_paginate .paginate_button {
         padding: 3px 6px !important;
@@ -228,20 +235,14 @@ $conn->close();
                 <a href="index2.php" class="nav-link">Home</a>
             </li>
         </ul>
-        <ul class="navbar-nav ml-auto">
-            <li class="nav-item">
-                <a class="nav-link" data-widget="fullscreen"><i class="fas fa-expand-arrows-alt"></i></a>
-            </li>
-            <li class="nav-item d-flex align-items-center px-2" title="Real-time: connected" style="font-size:.72rem;font-weight:600;color:#6c757d;">
-        <span class="rt-live-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;margin-right:5px;box-shadow:0 0 0 0 rgba(34,197,94,.5);animation:rtPulse 1.8s ease infinite;" title="Live data connected"></span>
-        <span class="d-none d-sm-inline rt-live-label">Live</span>
+            <ul class="navbar-nav ml-auto">
+<li class="nav-item">
+        <a class="nav-link" data-widget="fullscreen" href="#" role="button"><i class="fas fa-expand-arrows-alt"></i></a>
       </li>
       <li class="nav-item">
-                <a class="nav-link" id="darkModeToggle" href="#" role="button">
-                    <i class="fas fa-moon"></i>
-                </a>
-            </li>
-        </ul>
+        <a class="nav-link" id="darkModeToggle" href="#" role="button"><i class="fas fa-moon"></i></a>
+      </li>
+    </ul>
     </nav>
 
     <!-- ── Sidebar ────────────────────────────────────────────── -->
@@ -590,84 +591,89 @@ $conn->close();
     <!-- ══════════════════════════════════════════════════════════
          ADD INGREDIENT MODAL
     ═══════════════════════════════════════════════════════════ -->
-    <div class="modal fade" id="addInventoryModal" tabindex="-1" role="dialog">
-        <div class="modal-dialog modal-lg" role="document">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-plus-circle mr-2"></i>Add Ingredient</h5>
-                    <button type="button" class="close" data-dismiss="modal">&times;</button>
-                </div>
-
-                <form action="../../Backend/inventory_process.php" method="POST">
-                    <div class="modal-body">
-
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label>Ingredient Name</label>
-                                    <input type="text" name="name" class="form-control" placeholder="e.g. Chicken Breast" required>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label>Unit</label>
-                                    <select name="unit" class="form-control" required>
-                                        <option value="">-- Select Unit --</option>
-                                        <option value="g">g (grams)</option>
-                                        <option value="kg">kg (kilograms)</option>
-                                        <option value="ml">ml (milliliters)</option>
-                                        <option value="L">L (liters)</option>
-                                        <option value="pcs">pcs (pieces)</option>
-                                        <option value="tbsp">tbsp (tablespoon)</option>
-                                        <option value="tsp">tsp (teaspoon)</option>
-                                        <option value="cups">cups</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label>Stock Quantity</label>
-                                    <input type="number" name="stock_qty" class="form-control" step="0.01" min="0" placeholder="e.g. 100" required>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label>Low Stock Threshold</label>
-                                    <input type="number" name="low_stock_threshold" class="form-control" step="0.01" min="0" placeholder="e.g. 20">
-                                    <small class="text-muted">Alert will trigger when stock falls at or below this value.</small>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label><i class="fas fa-calendar-times mr-1 text-warning"></i> Expiry Date <small class="text-muted">(optional)</small></label>
-                                    <input type="date" name="expiry_date" class="form-control" min="<?= date('Y-m-d') ?>">
-                                    <small class="text-muted">Leave blank if this ingredient has no expiry.</small>
-                                </div>
-                            </div>
-                        </div>
-
-                    </div><!-- /.modal-body -->
-
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-dismiss="modal">
-                            <i class="fas fa-times mr-1"></i>Close
-                        </button>
-                        <button type="submit" name="save_ingredient" class="btn btn-success">
-                            <i class="fas fa-save mr-1"></i>Save Ingredient
-                        </button>
+     <div style="
+      background:linear-gradient(135deg,rgba(233,30,140,.18) 0%,rgba(156,39,176,.1) 100%);
+      border-bottom:1px solid rgba(233,30,140,.18);
+      padding:20px 22px 16px;display:flex;align-items:center;gap:14px;
+    ">
+        <div class="modal fade" id="addInventoryModal" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-lg" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="fas fa-plus-circle mr-2"></i>Add Ingredient</h5>
+                        <button type="button" class="close" data-dismiss="modal">&times;</button>
                     </div>
-                </form>
 
+                    <form action="../../Backend/inventory_process.php" method="POST">
+                        <div class="modal-body">
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>Ingredient Name</label>
+                                        <input type="text" name="name" class="form-control" placeholder="e.g. Chicken Breast" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>Unit</label>
+                                        <select name="unit" class="form-control" required>
+                                            <option value="">-- Select Unit --</option>
+                                            <option value="g">g (grams)</option>
+                                            <option value="kg">kg (kilograms)</option>
+                                            <option value="ml">ml (milliliters)</option>
+                                            <option value="L">L (liters)</option>
+                                            <option value="pcs">pcs (pieces)</option>
+                                            <option value="tbsp">tbsp (tablespoon)</option>
+                                            <option value="tsp">tsp (teaspoon)</option>
+                                            <option value="cups">cups</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>Stock Quantity</label>
+                                        <input type="number" name="stock_qty" class="form-control" step="0.01" min="0" placeholder="e.g. 100" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>Low Stock Threshold</label>
+                                        <input type="number" name="low_stock_threshold" class="form-control" step="0.01" min="0" placeholder="e.g. 20">
+                                        <small class="text-muted">Alert will trigger when stock falls at or below this value.</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label><i class="fas fa-calendar-times mr-1 text-warning"></i> Expiry Date <small class="text-muted">(optional)</small></label>
+                                        <input type="date" name="expiry_date" class="form-control" min="<?= date('Y-m-d') ?>">
+                                        <small class="text-muted">Leave blank if this ingredient has no expiry.</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div><!-- /.modal-body -->
+
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                                <i class="fas fa-times mr-1"></i>Close
+                            </button>
+                            <button type="submit" name="save_ingredient" class="btn btn-success">
+                                <i class="fas fa-save mr-1"></i>Save Ingredient
+                            </button>
+                        </div>
+                    </form>
+
+                </div>
             </div>
         </div>
     </div>
-
 
     <!-- ══════════════════════════════════════════════════════════
          EDIT INGREDIENT MODAL
@@ -815,7 +821,7 @@ $conn->close();
     ═══════════════════════════════════════════════════════════ -->
     <div class="modal fade" id="expiringModal" tabindex="-1" role="dialog">
         <div class="modal-dialog modal-lg" role="document">
-            <div class="modal-content">
+            <div class="modal-content" >
                 <div class="modal-header" style="background:#fd7e14;color:#fff;">
                     <h5 class="modal-title"><i class="fas fa-hourglass-half mr-2"></i>Ingredients Expiring Within 30 Days</h5>
                     <button type="button" class="close" data-dismiss="modal" style="color:#fff;">&times;</button>
@@ -998,34 +1004,90 @@ $conn->close();
 <!-- ══════════════════════════════════════════════════════════
      DELETE CONFIRM MODAL
 ═══════════════════════════════════════════════════════════ -->
-<div class="modal fade" id="deleteConfirmModal" tabindex="-1" role="dialog">
-    <div class="modal-dialog modal-sm" role="document">
-        <div class="modal-content">
-            <div class="modal-header bg-danger">
-                <h5 class="modal-title text-white">
-                    <i class="fas fa-exclamation-triangle mr-2"></i>Delete Ingredient
-                </h5>
-                <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
-            </div>
-            <div class="modal-body text-center">
-                <p class="mb-1">Are you sure you want to delete</p>
-                <strong id="deleteIngredientName" class="d-block mb-2" style="color:#e91e8c;"></strong>
-                <small class="text-muted">This cannot be undone.</small>
-            </div>
-            <div class="modal-footer justify-content-center">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">
-                    <i class="fas fa-times mr-1"></i>Cancel
-                </button>
-                <form id="deleteIngredientForm" action="../../Backend/inventory_process.php" method="POST" style="display:inline;">
-                    <input type="hidden" name="action" value="delete">
-                    <input type="hidden" name="id" id="deleteIngredientId">
-                    <button type="submit" class="btn btn-danger">
-                        <i class="fas fa-trash mr-1"></i>Delete
-                    </button>
-                </form>
-            </div>
-        </div>
+<!-- DELETE CONFIRM MODAL — custom blur overlay matching resend style -->
+<div id="deleteConfirmModal" style="
+  display:none;position:fixed;inset:0;z-index:99998;
+  background:rgba(0,0,0,.65);backdrop-filter:blur(6px);
+  align-items:center;justify-content:center;
+">
+  <div id="deleteConfirmBox" style="
+    background:linear-gradient(145deg,#1a0a1e 0%,#1a1a2e 100%);
+    border:1px solid rgba(233,30,140,.3);
+    border-radius:18px;
+    box-shadow:0 32px 80px rgba(0,0,0,.7),0 0 0 1px rgba(233,30,140,.15),inset 0 1px 0 rgba(255,255,255,.06);
+    width:100%;max-width:400px;margin:16px;
+    overflow:hidden;
+    transform:scale(.88) translateY(20px);opacity:0;
+    transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .25s ease;
+  ">
+    <!-- Header -->
+    <div style="
+      background:linear-gradient(135deg,rgba(233,30,140,.18) 0%,rgba(156,39,176,.1) 100%);
+      border-bottom:1px solid rgba(233,30,140,.18);
+      padding:20px 22px 16px;display:flex;align-items:center;gap:14px;
+    ">
+      <div style="
+        width:44px;height:44px;border-radius:50%;flex-shrink:0;
+        background:linear-gradient(135deg,#f59e0b,#e91e8c);
+        display:flex;align-items:center;justify-content:center;
+        box-shadow:0 4px 16px rgba(233,30,140,.4);
+        font-size:1.15rem;color:#fff;
+      "><i class="fas fa-trash"></i></div>
+      <div>
+        <div style="font-family:'DM Sans',sans-serif;font-weight:700;font-size:1rem;color:#fff;line-height:1.2;">Delete Ingredient</div>
+        <div style="font-family:'DM Sans',sans-serif;font-size:.75rem;color:rgba(255,255,255,.45);margin-top:2px;">Confirm before deleting</div>
+      </div>
+      <button onclick="closeDeleteIngredientModal()" style="
+        margin-left:auto;background:none;border:none;cursor:pointer;
+        color:rgba(255,255,255,.4);font-size:1.2rem;line-height:1;
+        transition:color .2s;padding:2px 6px;border-radius:6px;
+      " onmouseover="this.style.color='#e91e8c'" onmouseout="this.style.color='rgba(255,255,255,.4)'">&#x2715;</button>
     </div>
+    <!-- Body -->
+    <div style="padding:22px 22px 8px;">
+      <p style="font-family:'DM Sans',sans-serif;color:rgba(255,255,255,.7);font-size:.875rem;margin:0 0 6px;">
+        Are you sure you want to delete
+      </p>
+      <div style="
+        background:rgba(233,30,140,.1);border:1px solid rgba(233,30,140,.25);
+        border-radius:10px;padding:10px 14px;margin-bottom:4px;
+        display:flex;align-items:center;gap:10px;
+      ">
+        <i class="fas fa-box" style="color:#e91e8c;font-size:.85rem;"></i>
+        <span id="deleteIngredientName" style="font-family:'DM Sans',sans-serif;font-weight:600;color:#fff;font-size:.9rem;word-break:break-all;"></span>
+      </div>
+      <p style="font-family:'DM Sans',sans-serif;color:rgba(255,255,255,.35);font-size:.75rem;margin:8px 0 0;">
+        <i class="fas fa-info-circle mr-1"></i>This cannot be undone.
+      </p>
+    </div>
+    <!-- Footer -->
+    <div style="padding:16px 22px 20px;display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="closeDeleteIngredientModal()" style="
+        font-family:'DM Sans',sans-serif;font-weight:600;font-size:.82rem;
+        background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);
+        color:rgba(255,255,255,.65);border-radius:22px;padding:8px 20px;cursor:pointer;
+        transition:background .2s,color .2s;
+      " onmouseover="this.style.background='rgba(255,255,255,.13)';this.style.color='#fff'"
+         onmouseout="this.style.background='rgba(255,255,255,.07)';this.style.color='rgba(255,255,255,.65)'">
+        Cancel
+      </button>
+      <form id="deleteIngredientForm" action="../../Backend/inventory_process.php" method="POST" style="display:inline;">
+        <input type="hidden" name="action" value="delete">
+        <input type="hidden" name="id" id="deleteIngredientId">
+        <button type="submit" style="
+          font-family:'DM Sans',sans-serif;font-weight:700;font-size:.82rem;
+          background:linear-gradient(135deg,#f59e0b 0%,#e91e8c 100%);
+          border:none;color:#fff;border-radius:22px;padding:8px 24px;cursor:pointer;
+          box-shadow:0 4px 16px rgba(233,30,140,.4);
+          transition:transform .18s,box-shadow .18s;
+          display:inline-flex;align-items:center;gap:8px;
+        " onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 22px rgba(233,30,140,.55)'"
+           onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(233,30,140,.4)'">
+          <i class="fas fa-trash"></i> Delete
+        </button>
+      </form>
+    </div>
+  </div>
 </div>
 
 
@@ -1207,10 +1269,22 @@ $conn->close();
 
 <script>
     function confirmDeleteIngredient(id, name) {
-        $('#deleteIngredientName').text(name);
-        $('#deleteIngredientId').val(id);
-        $('#deleteConfirmModal').modal('show');
+        document.getElementById('deleteIngredientName').textContent = name;
+        document.getElementById('deleteIngredientId').value = id;
+        var overlay = document.getElementById('deleteConfirmModal');
+        var box = document.getElementById('deleteConfirmBox');
+        overlay.style.display = 'flex';
+        requestAnimationFrame(function(){ box.style.transform='scale(1) translateY(0)'; box.style.opacity='1'; });
     }
+    function closeDeleteIngredientModal() {
+        var overlay = document.getElementById('deleteConfirmModal');
+        var box = document.getElementById('deleteConfirmBox');
+        box.style.transform='scale(.88) translateY(20px)'; box.style.opacity='0';
+        setTimeout(function(){ overlay.style.display='none'; }, 280);
+    }
+    document.getElementById('deleteConfirmModal').addEventListener('click', function(e){
+        if(e.target === this) closeDeleteIngredientModal();
+    });
 </script>
 
 

@@ -9,6 +9,29 @@ if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
 if (empty($_SESSION['csrf_token'])) {
   $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
+
+// ── Real-time AJAX: return staff rows as JSON ──────────────────────
+if (isset($_GET['rt_staff'])) {
+  include('../../Backend/conn.php');
+  $result = mysqli_query($conn, "SELECT * FROM user WHERE position = 'staff' ORDER BY id ASC");
+  $staff  = [];
+  while ($row = mysqli_fetch_assoc($result)) {
+    $staff[] = [
+      'id'             => (int)$row['id'],
+      'firstname'      => $row['firstname'],
+      'lastname'       => $row['lastname'],
+      'email'          => $row['email'],
+      'email_verified' => (int)($row['email_verified'] ?? 0),
+      'position'       => $row['position'],
+      'contact'        => $row['contact'],
+      'address'        => $row['address'],
+      'image'          => $row['image'] ?? '',
+    ];
+  }
+  header('Content-Type: application/json');
+  echo json_encode(['staff' => $staff, 'ts' => time()]);
+  exit();
+}
 ?>
 
 <!DOCTYPE html>
@@ -184,35 +207,11 @@ if (empty($_SESSION['csrf_token'])) {
       </ul>
 
       <ul class="navbar-nav ml-auto">
-        <li class="nav-item">
-          <a class="nav-link" data-widget="navbar-search" href="#" role="button">
-            <i class="fas fa-search"></i>
-          </a>
-          <div class="navbar-search-block">
-            <form class="form-inline">
-              <div class="input-group input-group-sm">
-                <input class="form-control form-control-navbar" type="search" placeholder="Search" aria-label="Search">
-                <div class="input-group-append">
-                  <button class="btn btn-navbar" type="submit">
-                    <i class="fas fa-search"></i>
-                  </button>
-                  <button class="btn btn-navbar" type="button" data-widget="navbar-search">
-                    <i class="fas fa-times"></i>
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </li>
-        <li class="nav-item">
+<li class="nav-item">
           <a class="nav-link" data-widget="fullscreen" href="#" role="button">
             <i class="fas fa-expand-arrows-alt"></i>
           </a>
         </li>
-        <li class="nav-item d-flex align-items-center px-2" title="Real-time: connected" style="font-size:.72rem;font-weight:600;color:#6c757d;">
-        <span class="rt-live-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;margin-right:5px;box-shadow:0 0 0 0 rgba(34,197,94,.5);animation:rtPulse 1.8s ease infinite;" title="Live data connected"></span>
-        <span class="d-none d-sm-inline rt-live-label">Live</span>
-      </li>
       <li class="nav-item">
           <a class="nav-link" id="darkModeToggle" href="#" role="button">
             <i class="fas fa-moon"></i>
@@ -313,15 +312,24 @@ if (empty($_SESSION['csrf_token'])) {
             <div class="col-12">
               <div class="card">
 
-                <div class="card-header">
-                  <h3 class="card-title">Staff Directory</h3>
-                  <button type="button" class="btn btn-success float-right" data-toggle="modal" data-target="#addUserModal">
+                <div class="card-header d-flex align-items-center flex-wrap" style="gap:8px;">
+                  <h3 class="card-title mb-0 mr-2">Staff Directory</h3>
+                  <!-- Live indicator -->
+                  <span style="display:inline-flex;align-items:center;gap:5px;font-size:.78rem;opacity:.85;">
+                    <span class="rt-staff-dot" style="
+                      display:inline-block;width:9px;height:9px;border-radius:50%;
+                      background:#6b7280;animation:rtPulse 1.8s infinite;transition:background .4s;
+                    " title="Connecting..."></span>
+                    <span class="rt-staff-label" style="color:#6b7280;">connecting...</span>
+                  </span>
+                  <small class="rt-staff-updated text-muted ml-1" style="font-size:.75rem;"></small>
+                  <button type="button" class="btn btn-success ml-auto" data-toggle="modal" data-target="#addUserModal">
                     + Add User
                   </button>
                 </div>
 
                 <div class="card-body table-responsive p-0">
-                  <table class="table table-hover text-nowrap">
+                  <table id="staffTable" class="table table-hover text-nowrap">
                     <thead>
                       <tr>
                         <!-- <th>ID</th> -->
@@ -337,7 +345,7 @@ if (empty($_SESSION['csrf_token'])) {
                       </tr>
                     </thead>
 
-                    <tbody>
+                    <tbody id="staffTableBody">
                       <?php
                       include('../../Backend/conn.php');
                       $result = mysqli_query($conn, "SELECT * FROM user WHERE position = 'staff'");
@@ -387,15 +395,14 @@ if (empty($_SESSION['csrf_token'])) {
                             <i class="fas fa-eye mr-1"></i>View
                           </button>
                           <?php if (empty($row['email_verified'])): ?>
-                          <form action="../../Backend/process.php" method="POST" class="d-inline"
-                                onsubmit="return confirm('Resend verification email to ' + <?= json_encode($row['email']) ?> + '?');">
-                            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
-                            <input type="hidden" name="user_id"   value="<?= $row['id'] ?>">
-                            <button type="submit" name="resend_verification" class="btn btn-sm btn-warning text-dark"
-                                    title="Resend verification email">
-                              <i class="fas fa-envelope mr-1"></i>Resend
-                            </button>
-                          </form>
+                          <button type="button"
+                            class="btn btn-sm btn-warning text-dark resend-trigger"
+                            data-email="<?= htmlspecialchars($row['email'], ENT_QUOTES) ?>"
+                            data-userid="<?= $row['id'] ?>"
+                            data-csrf="<?= $_SESSION['csrf_token'] ?>"
+                            title="Resend verification email">
+                            <i class="fas fa-envelope mr-1"></i>Resend
+                          </button>
                           <?php endif; ?>
                         </td>
                       </tr>
@@ -578,24 +585,88 @@ if (empty($_SESSION['csrf_token'])) {
     </div>
 
     <!-- ==================== DELETE CONFIRM MODAL ==================== -->
-    <div class="modal fade" id="deleteConfirmModal" tabindex="-1" role="dialog">
-      <div class="modal-dialog modal-sm" role="document">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Confirm Delete</h5>
-            <button type="button" class="close" data-dismiss="modal">&times;</button>
+    <!-- DELETE CONFIRM MODAL — custom blur overlay matching resend style -->
+    <div id="deleteConfirmModal" style="
+      display:none;position:fixed;inset:0;z-index:99998;
+      background:rgba(0,0,0,.65);backdrop-filter:blur(6px);
+      align-items:center;justify-content:center;
+    ">
+      <div id="deleteConfirmBox" style="
+        background:linear-gradient(145deg,#1a0a1e 0%,#1a1a2e 100%);
+        border:1px solid rgba(233,30,140,.3);
+        border-radius:18px;
+        box-shadow:0 32px 80px rgba(0,0,0,.7),0 0 0 1px rgba(233,30,140,.15),inset 0 1px 0 rgba(255,255,255,.06);
+        width:100%;max-width:400px;margin:16px;
+        overflow:hidden;
+        transform:scale(.88) translateY(20px);opacity:0;
+        transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .25s ease;
+      ">
+        <!-- Header -->
+        <div style="
+          background:linear-gradient(135deg,rgba(233,30,140,.18) 0%,rgba(156,39,176,.1) 100%);
+          border-bottom:1px solid rgba(233,30,140,.18);
+          padding:20px 22px 16px;display:flex;align-items:center;gap:14px;
+        ">
+          <div style="
+            width:44px;height:44px;border-radius:50%;flex-shrink:0;
+            background:linear-gradient(135deg,#f59e0b,#e91e8c);
+            display:flex;align-items:center;justify-content:center;
+            box-shadow:0 4px 16px rgba(233,30,140,.4);
+            font-size:1.15rem;color:#fff;
+          "><i class="fas fa-trash"></i></div>
+          <div>
+            <div style="font-family:'DM Sans',sans-serif;font-weight:700;font-size:1rem;color:#fff;line-height:1.2;">Delete Staff</div>
+            <div style="font-family:'DM Sans',sans-serif;font-size:.75rem;color:rgba(255,255,255,.45);margin-top:2px;">Confirm before deleting</div>
           </div>
-          <div class="modal-body">
-            <p>Are you sure you want to delete <strong id="delete_name"></strong>?</p>
+          <button onclick="closeDeleteModal()" style="
+            margin-left:auto;background:none;border:none;cursor:pointer;
+            color:rgba(255,255,255,.4);font-size:1.2rem;line-height:1;
+            transition:color .2s;padding:2px 6px;border-radius:6px;
+          " onmouseover="this.style.color='#e91e8c'" onmouseout="this.style.color='rgba(255,255,255,.4)'">&#x2715;</button>
+        </div>
+        <!-- Body -->
+        <div style="padding:22px 22px 8px;">
+          <p style="font-family:'DM Sans',sans-serif;color:rgba(255,255,255,.7);font-size:.875rem;margin:0 0 6px;">
+            Are you sure you want to delete
+          </p>
+          <div style="
+            background:rgba(233,30,140,.1);border:1px solid rgba(233,30,140,.25);
+            border-radius:10px;padding:10px 14px;margin-bottom:4px;
+            display:flex;align-items:center;gap:10px;
+          ">
+            <i class="fas fa-user" style="color:#e91e8c;font-size:.85rem;"></i>
+            <span id="delete_name" style="font-family:'DM Sans',sans-serif;font-weight:600;color:#fff;font-size:.9rem;word-break:break-all;"></span>
           </div>
-          <div class="modal-footer">
-            <form action="../../Backend/process.php" method="POST">
-              <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
-              <input type="hidden" name="user_id" id="delete_id">
-              <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-              <button type="submit" name="delete_user" class="btn btn-danger">Yes, Delete</button>
-            </form>
-          </div>
+          <p style="font-family:'DM Sans',sans-serif;color:rgba(255,255,255,.35);font-size:.75rem;margin:8px 0 0;">
+            <i class="fas fa-info-circle mr-1"></i>This cannot be undone.
+          </p>
+        </div>
+        <!-- Footer -->
+        <div style="padding:16px 22px 20px;display:flex;gap:10px;justify-content:flex-end;">
+          <button onclick="closeDeleteModal()" style="
+            font-family:'DM Sans',sans-serif;font-weight:600;font-size:.82rem;
+            background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);
+            color:rgba(255,255,255,.65);border-radius:22px;padding:8px 20px;cursor:pointer;
+            transition:background .2s,color .2s;
+          " onmouseover="this.style.background='rgba(255,255,255,.13)';this.style.color='#fff'"
+             onmouseout="this.style.background='rgba(255,255,255,.07)';this.style.color='rgba(255,255,255,.65)'">
+            Cancel
+          </button>
+          <form action="../../Backend/process.php" method="POST" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+            <input type="hidden" name="user_id" id="delete_id">
+            <button type="submit" name="delete_user" style="
+              font-family:'DM Sans',sans-serif;font-weight:700;font-size:.82rem;
+              background:linear-gradient(135deg,#f59e0b 0%,#e91e8c 100%);
+              border:none;color:#fff;border-radius:22px;padding:8px 24px;cursor:pointer;
+              box-shadow:0 4px 16px rgba(233,30,140,.4);
+              transition:transform .18s,box-shadow .18s;
+              display:inline-flex;align-items:center;gap:8px;
+            " onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 22px rgba(233,30,140,.55)'"
+               onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(233,30,140,.4)'">
+              <i class="fas fa-trash"></i> Delete
+            </button>
+          </form>
         </div>
       </div>
     </div>
@@ -684,11 +755,19 @@ if (empty($_SESSION['csrf_token'])) {
         var firstname = $('#view_firstname').val();
         var lastname  = $('#view_lastname').val();
 
-        $('#delete_id').val(id);
-        $('#delete_name').text(firstname + ' ' + lastname);
+        document.getElementById('delete_id').value = id;
+        document.getElementById('delete_name').textContent = firstname + ' ' + lastname;
 
         $('#viewUserModal').modal('hide');
-        $('#deleteConfirmModal').modal('show');
+
+        var overlay = document.getElementById('deleteConfirmModal');
+        var box = document.getElementById('deleteConfirmBox');
+        overlay.style.display = 'flex';
+        requestAnimationFrame(function(){ box.style.transform='scale(1) translateY(0)'; box.style.opacity='1'; });
+      });
+
+      document.getElementById('deleteConfirmModal').addEventListener('click', function(e){
+        if(e.target === this) closeDeleteModal();
       });
 
       // ── Dark mode toggle ───────────────────────────────────────
@@ -822,6 +901,424 @@ if (empty($_SESSION['csrf_token'])) {
 })();
 </script>
 <!-- ══ END real-time notification ════════════════════════════════════ -->
+
+<!-- ══ STAFF LIST REAL-TIME POLLING ════════════════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  var POLL_MS   = 10000; // poll every 10 s
+  var CSRF      = <?= json_encode($_SESSION['csrf_token']) ?>;
+  var _snapshot = null;  // JSON string of last staff array for diff
+  var _timer    = null;
+
+  /* ── helpers ───────────────────────────────────────────────────── */
+  function setStatus(ok, label) {
+    document.querySelectorAll('.rt-staff-dot').forEach(function (el) {
+      el.style.background = ok ? '#22c55e' : '#ef4444';
+      el.title = ok ? 'Live — auto-refreshing' : 'Reconnecting...';
+    });
+    document.querySelectorAll('.rt-staff-label').forEach(function (el) {
+      el.textContent = ok ? 'live' : 'reconnecting...';
+      el.style.color  = ok ? '#22c55e' : '#ef4444';
+    });
+  }
+
+  function setUpdated() {
+    var now = new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+    document.querySelectorAll('.rt-staff-updated').forEach(function (el) {
+      el.textContent = 'Updated ' + now;
+    });
+  }
+
+  function escHtml(s) {
+    return String(s || '')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
+  /* ── build a single <tr> from a staff object ───────────────────── */
+  function buildRow(s) {
+    var img = s.image
+      ? '<img src="../../' + escHtml(s.image) + '" class="img-circle elevation-1" style="width:38px;height:38px;object-fit:cover;">'
+      : '<img src="../dist/img/user2-160x160.jpg" class="img-circle elevation-1" style="width:38px;height:38px;object-fit:cover;">';
+
+    var verifiedBadge = s.email_verified
+      ? '<span class="badge badge-success"><i class="fas fa-check-circle mr-1"></i>Verified</span>'
+      : '<span class="badge badge-warning text-dark"><i class="fas fa-envelope mr-1"></i>Unverified</span>';
+
+    var posBadge = s.position === 'admin'
+      ? '<span class="badge badge-danger">Admin</span>'
+      : '<span class="badge badge-success">Staff</span>';
+
+    var resendBtn = !s.email_verified
+      ? '<button type="button" class="btn btn-sm btn-warning text-dark resend-trigger"' +
+          ' data-email="' + escHtml(s.email) + '"' +
+          ' data-userid="' + s.id + '"' +
+          ' data-csrf="' + escHtml(CSRF) + '">' +
+          '<i class="fas fa-envelope mr-1"></i>Resend</button>'
+      : '';
+
+    var tr = document.createElement('tr');
+    tr.setAttribute('data-id',        s.id);
+    tr.setAttribute('data-firstname',  escHtml(s.firstname));
+    tr.setAttribute('data-lastname',   escHtml(s.lastname));
+    tr.setAttribute('data-email',      escHtml(s.email));
+    tr.setAttribute('data-position',   escHtml(s.position));
+    tr.setAttribute('data-contact',    escHtml(s.contact));
+    tr.setAttribute('data-address',    escHtml(s.address));
+    tr.setAttribute('data-image',      escHtml(s.image));
+    tr.setAttribute('data-verified',   s.email_verified);
+
+    tr.innerHTML =
+      '<td>' + img + '</td>' +
+      '<td>' + escHtml(s.firstname + ' ' + s.lastname) + '</td>' +
+      '<td>' + escHtml(s.email) + '</td>' +
+      '<td>' + verifiedBadge + '</td>' +
+      '<td>*****</td>' +
+      '<td>' + posBadge + '</td>' +
+      '<td>' + escHtml(s.contact) + '</td>' +
+      '<td>' + escHtml(s.address) + '</td>' +
+      '<td class="d-flex flex-wrap" style="gap:4px;">' +
+        '<button class="btn btn-sm btn-primary view-btn"><i class="fas fa-eye mr-1"></i>View</button>' +
+        resendBtn +
+      '</td>';
+
+    return tr;
+  }
+
+  /* ── diff & patch tbody ────────────────────────────────────────── */
+  function applyStaff(staffArr) {
+    var newSnap = JSON.stringify(staffArr);
+    if (newSnap === _snapshot) return; // nothing changed
+    _snapshot = newSnap;
+
+    var tbody = document.getElementById('staffTableBody');
+    if (!tbody) return;
+
+    /* build a map of existing rows by id */
+    var existing = {};
+    tbody.querySelectorAll('tr[data-id]').forEach(function (tr) {
+      existing[tr.getAttribute('data-id')] = tr;
+    });
+
+    var newIds = staffArr.map(function (s) { return String(s.id); });
+
+    /* remove rows no longer present */
+    Object.keys(existing).forEach(function (id) {
+      if (newIds.indexOf(id) === -1) {
+        existing[id].remove();
+        delete existing[id];
+      }
+    });
+
+    /* add/update rows in order */
+    staffArr.forEach(function (s, idx) {
+      var id  = String(s.id);
+      var newTr = buildRow(s);
+
+      if (!existing[id]) {
+        /* new row — flash it */
+        newTr.style.transition = 'background-color 1.2s';
+        newTr.style.backgroundColor = 'rgba(34,197,94,.25)';
+        tbody.appendChild(newTr);
+        setTimeout(function () { newTr.style.backgroundColor = ''; }, 1500);
+      } else {
+        /* check if data changed */
+        var oldSnip = existing[id].innerHTML;
+        if (oldSnip !== newTr.innerHTML) {
+          existing[id].innerHTML  = newTr.innerHTML;
+          /* copy data attrs */
+          Array.from(newTr.attributes).forEach(function (attr) {
+            existing[id].setAttribute(attr.name, attr.value);
+          });
+          existing[id].style.transition       = 'background-color 1.2s';
+          existing[id].style.backgroundColor  = 'rgba(99,102,241,.2)';
+          setTimeout(function () { existing[id].style.backgroundColor = ''; }, 1500);
+        }
+        /* ensure correct DOM order */
+        var rows = tbody.children;
+        if (rows[idx] !== existing[id]) {
+          tbody.insertBefore(existing[id], rows[idx] || null);
+        }
+      }
+    });
+  }
+
+  /* ── fetch once ────────────────────────────────────────────────── */
+  function poll() {
+    fetch(window.location.pathname + '?rt_staff=1', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (data) {
+        setStatus(true);
+        setUpdated();
+        applyStaff(data.staff || []);
+      })
+      .catch(function () {
+        setStatus(false);
+      })
+      .finally(function () {
+        _timer = setTimeout(poll, POLL_MS);
+      });
+  }
+
+  /* ── start after DOM ready ─────────────────────────────────────── */
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', poll);
+  } else {
+    poll();
+  }
+
+  /* ── pause polling while a modal is open (avoids flicker) ──────── */
+  document.addEventListener('show.bs.modal',  function () { clearTimeout(_timer); });
+  document.addEventListener('shown.bs.modal', function () { clearTimeout(_timer); });
+  document.addEventListener('hidden.bs.modal', function () {
+    clearTimeout(_timer);
+    _timer = setTimeout(poll, 1000); // quick refresh after modal closes
+  });
+
+})();
+</script>
+<!-- ══ END staff real-time ══════════════════════════════════════════ -->
+
+<!-- ══ RESEND CONFIRM MODAL ════════════════════════════════════════ -->
+<div id="resendConfirmModal" style="
+  display:none;position:fixed;inset:0;z-index:99998;
+  background:rgba(0,0,0,.65);backdrop-filter:blur(6px);
+  align-items:center;justify-content:center;
+">
+  <div id="resendModalBox" style="
+    background:linear-gradient(145deg,#1a0a1e 0%,#1a1a2e 100%);
+    border:1px solid rgba(233,30,140,.3);
+    border-radius:18px;
+    box-shadow:0 32px 80px rgba(0,0,0,.7),0 0 0 1px rgba(233,30,140,.15),inset 0 1px 0 rgba(255,255,255,.06);
+    width:100%;max-width:400px;margin:16px;
+    overflow:hidden;
+    transform:scale(.88) translateY(20px);opacity:0;
+    transition:transform .3s cubic-bezier(.34,1.56,.64,1),opacity .25s ease;
+  ">
+    <!-- Header -->
+    <div style="
+      background:linear-gradient(135deg,rgba(233,30,140,.18) 0%,rgba(156,39,176,.1) 100%);
+      border-bottom:1px solid rgba(233,30,140,.18);
+      padding:20px 22px 16px;display:flex;align-items:center;gap:14px;
+    ">
+      <div style="
+        width:44px;height:44px;border-radius:50%;flex-shrink:0;
+        background:linear-gradient(135deg,#f59e0b,#e91e8c);
+        display:flex;align-items:center;justify-content:center;
+        box-shadow:0 4px 16px rgba(233,30,140,.4);
+        font-size:1.15rem;color:#fff;
+      "><i class="fas fa-envelope"></i></div>
+      <div>
+        <div style="font-family:'DM Sans',sans-serif;font-weight:700;font-size:1rem;color:#fff;line-height:1.2;">Resend Verification Email</div>
+        <div style="font-family:'DM Sans',sans-serif;font-size:.75rem;color:rgba(255,255,255,.45);margin-top:2px;">Confirm before sending</div>
+      </div>
+      <button onclick="closeResendModal()" style="
+        margin-left:auto;background:none;border:none;cursor:pointer;
+        color:rgba(255,255,255,.4);font-size:1.2rem;line-height:1;
+        transition:color .2s;padding:2px 6px;border-radius:6px;
+      " onmouseover="this.style.color='#e91e8c'" onmouseout="this.style.color='rgba(255,255,255,.4)'">&#x2715;</button>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:22px 22px 8px;">
+      <p style="font-family:'DM Sans',sans-serif;color:rgba(255,255,255,.7);font-size:.875rem;margin:0 0 6px;">
+        Send a new verification link to:
+      </p>
+      <div style="
+        background:rgba(233,30,140,.1);border:1px solid rgba(233,30,140,.25);
+        border-radius:10px;padding:10px 14px;margin-bottom:4px;
+        display:flex;align-items:center;gap:10px;
+      ">
+        <i class="fas fa-at" style="color:#e91e8c;font-size:.85rem;"></i>
+        <span id="resendEmailDisplay" style="font-family:'DM Sans',sans-serif;font-weight:600;color:#fff;font-size:.9rem;word-break:break-all;"></span>
+      </div>
+      <p style="font-family:'DM Sans',sans-serif;color:rgba(255,255,255,.35);font-size:.75rem;margin:8px 0 0;">
+        <i class="fas fa-info-circle mr-1"></i>The previous link will be invalidated.
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:16px 22px 20px;display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="closeResendModal()" style="
+        font-family:'DM Sans',sans-serif;font-weight:600;font-size:.82rem;
+        background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);
+        color:rgba(255,255,255,.65);border-radius:22px;padding:8px 20px;cursor:pointer;
+        transition:background .2s,color .2s;
+      " onmouseover="this.style.background='rgba(255,255,255,.13)';this.style.color='#fff'"
+         onmouseout="this.style.background='rgba(255,255,255,.07)';this.style.color='rgba(255,255,255,.65)'">
+        Cancel
+      </button>
+      <button id="resendConfirmBtn" onclick="submitResend()" style="
+        font-family:'DM Sans',sans-serif;font-weight:700;font-size:.82rem;
+        background:linear-gradient(135deg,#f59e0b 0%,#e91e8c 100%);
+        border:none;color:#fff;border-radius:22px;padding:8px 24px;cursor:pointer;
+        box-shadow:0 4px 16px rgba(233,30,140,.4);
+        transition:transform .18s,box-shadow .18s;
+        display:flex;align-items:center;gap:8px;
+      " onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 22px rgba(233,30,140,.55)'"
+         onmouseout="this.style.transform='';this.style.boxShadow='0 4px 16px rgba(233,30,140,.4)'">
+        <i class="fas fa-paper-plane"></i> Send Email
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden resend form (submitted programmatically) -->
+<form id="resendHiddenForm" action="../../Backend/process.php" method="POST" style="display:none;">
+  <input type="hidden" name="csrf_token" id="resendCsrf">
+  <input type="hidden" name="user_id"   id="resendUserId">
+  <button type="submit" name="resend_verification"></button>
+</form>
+
+<!-- ══ RESEND SUCCESS TOAST ══════════════════════════════════════════ -->
+<div id="resendToast" style="
+  display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);
+  z-index:99999;min-width:300px;max-width:380px;
+  background:linear-gradient(135deg,#f59e0b 0%,#e91e8c 60%,#9c27b0 100%);
+  color:#fff;border-radius:16px;
+  box-shadow:0 12px 40px rgba(233,30,140,.5),0 4px 12px rgba(0,0,0,.3);
+  padding:0;font-family:'DM Sans',sans-serif;
+  opacity:0;transition:opacity .3s,transform .35s cubic-bezier(.34,1.56,.64,1);
+  overflow:hidden;
+">
+  <!-- Progress bar -->
+  <div id="resendToastBar" style="height:3px;background:rgba(255,255,255,.4);width:100%;transform-origin:left;"></div>
+  <div style="padding:14px 18px;display:flex;align-items:center;gap:13px;">
+    <!-- Animated icon -->
+    <div style="
+      width:40px;height:40px;border-radius:50%;flex-shrink:0;
+      background:rgba(255,255,255,.2);
+      display:flex;align-items:center;justify-content:center;font-size:1.1rem;
+    ">
+      <i class="fas fa-check" id="resendToastIcon"></i>
+    </div>
+    <div style="flex:1;">
+      <div style="font-weight:700;font-size:.9rem;margin-bottom:2px;">Email Sent!</div>
+      <div id="resendToastMsg" style="font-size:.78rem;opacity:.88;"></div>
+    </div>
+    <button onclick="hideResendToast()" style="
+      background:none;border:none;color:rgba(255,255,255,.7);font-size:1rem;
+      cursor:pointer;padding:2px 4px;line-height:1;transition:color .2s;flex-shrink:0;
+    " onmouseover="this.style.color='#fff'" onmouseout="this.style.color='rgba(255,255,255,.7)'">&#x2715;</button>
+  </div>
+</div>
+
+<style>
+/* ── Sending spinner state ──────────────────────────────────────── */
+@keyframes resendSpin { to { transform: rotate(360deg); } }
+.resend-sending { animation: resendSpin .7s linear infinite !important; display:inline-block; }
+@keyframes toastBarShrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+</style>
+
+<script>
+/* ══ Resend confirm + toast ════════════════════════════════════════ */
+var _resendData = {};
+var _toastTimer = null;
+
+/* ── Open modal ────────────────────────────────────────────────── */
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.resend-trigger');
+  if (!btn) return;
+  _resendData = {
+    email:  btn.dataset.email,
+    userid: btn.dataset.userid,
+    csrf:   btn.dataset.csrf
+  };
+  document.getElementById('resendEmailDisplay').textContent = _resendData.email;
+  var overlay = document.getElementById('resendConfirmModal');
+  var box     = document.getElementById('resendModalBox');
+  overlay.style.display = 'flex';
+  // Force reflow then animate in
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      box.style.transform = 'scale(1) translateY(0)';
+      box.style.opacity   = '1';
+    });
+  });
+  // Reset confirm button
+  var btn2 = document.getElementById('resendConfirmBtn');
+  btn2.disabled = false;
+  btn2.innerHTML = '<i class="fas fa-paper-plane"></i> Send Email';
+});
+
+
+/* ── Close delete modal ────────────────────────────────────────── */
+function closeDeleteModal() {
+  var overlay = document.getElementById('deleteConfirmModal');
+  var box     = document.getElementById('deleteConfirmBox');
+  box.style.transform = 'scale(.88) translateY(20px)';
+  box.style.opacity   = '0';
+  setTimeout(function(){ overlay.style.display = 'none'; }, 280);
+}
+
+/* ── Close modal ───────────────────────────────────────────────── */
+function closeResendModal() {
+  var overlay = document.getElementById('resendConfirmModal');
+  var box     = document.getElementById('resendModalBox');
+  box.style.transform = 'scale(.88) translateY(20px)';
+  box.style.opacity   = '0';
+  setTimeout(function(){ overlay.style.display = 'none'; }, 280);
+}
+
+/* Close on backdrop click */
+document.getElementById('resendConfirmModal').addEventListener('click', function(e){
+  if (e.target === this) closeResendModal();
+});
+
+/* ── Submit resend ─────────────────────────────────────────────── */
+function submitResend() {
+  var btn = document.getElementById('resendConfirmBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-envelope resend-sending"></i> Sending…';
+
+  document.getElementById('resendCsrf').value   = _resendData.csrf;
+  document.getElementById('resendUserId').value = _resendData.userid;
+
+  // Short delay for UX feel, then submit
+  setTimeout(function(){
+    closeResendModal();
+    showResendToast(_resendData.email);
+    // Submit the hidden form after toast appears
+    setTimeout(function(){
+      document.getElementById('resendHiddenForm').submit();
+    }, 600);
+  }, 700);
+}
+
+/* ── Show toast ────────────────────────────────────────────────── */
+function showResendToast(email) {
+  var toast = document.getElementById('resendToast');
+  var bar   = document.getElementById('resendToastBar');
+  var msg   = document.getElementById('resendToastMsg');
+  if (!toast) return;
+
+  msg.textContent = 'Verification link sent to ' + email;
+  toast.style.display   = 'block';
+  bar.style.animation   = 'none';
+  bar.style.transform   = 'scaleX(1)';
+
+  clearTimeout(_toastTimer);
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      toast.style.opacity   = '1';
+      toast.style.transform = 'translateX(-50%) translateY(0)';
+      bar.style.animation   = 'toastBarShrink 5s linear forwards';
+    });
+  });
+
+  _toastTimer = setTimeout(hideResendToast, 5000);
+}
+
+function hideResendToast() {
+  var toast = document.getElementById('resendToast');
+  toast.style.opacity   = '0';
+  toast.style.transform = 'translateX(-50%) translateY(20px)';
+  setTimeout(function(){ toast.style.display = 'none'; }, 350);
+}
+</script>
+<!-- ══ END resend notification ══════════════════════════════════════ -->
 
 </body>
 </html>

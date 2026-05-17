@@ -255,13 +255,9 @@ $pendingOrdersJson = json_encode($pendingOrders);
         <a href="index2.php" class="nav-link">Home</a>
       </li>
     </ul>
-    <ul class="navbar-nav ml-auto">
-      <li class="nav-item">
+       <ul class="navbar-nav ml-auto">
+<li class="nav-item">
         <a class="nav-link" data-widget="fullscreen" href="#" role="button"><i class="fas fa-expand-arrows-alt"></i></a>
-      </li>
-      <li class="nav-item d-flex align-items-center px-2" title="Real-time: connected" style="font-size:.72rem;font-weight:600;color:#6c757d;">
-        <span class="rt-live-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;margin-right:5px;box-shadow:0 0 0 0 rgba(34,197,94,.5);animation:rtPulse 1.8s ease infinite;" title="Live data connected"></span>
-        <span class="d-none d-sm-inline rt-live-label">Live</span>
       </li>
       <li class="nav-item">
         <a class="nav-link" id="darkModeToggle" href="#" role="button"><i class="fas fa-moon"></i></a>

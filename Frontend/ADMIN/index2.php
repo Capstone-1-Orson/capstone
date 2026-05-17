@@ -104,7 +104,7 @@ if (isset($_GET['sse'])) {
     if ($r) while ($row = $r->fetch_assoc()) $invRows[] = $row;
     $data['inventory'] = $invRows;
 
-    // 7. Recent orders (last 20)
+    // 7. Recent orders — today only (SSE is used for live "today" view)
     $recentOrders = [];
     if ($hasOrderItems) {
         $r = $conn->query(
@@ -115,7 +115,8 @@ if (isset($_GET['sse'])) {
              JOIN order_items oi ON oi.order_id = o.id
              JOIN menu m ON m.id = oi.menu_id
              LEFT JOIN user u ON u.id = o.user_id
-             GROUP BY o.id ORDER BY o.created_at DESC LIMIT 20"
+             WHERE $VALID AND DATE(o.created_at) = CURDATE()
+             GROUP BY o.id ORDER BY o.created_at DESC LIMIT 50"
         );
         if ($r) while ($row = $r->fetch_assoc()) $recentOrders[] = $row;
     }
@@ -168,19 +169,25 @@ $selectedRange = isset($_GET['range']) && array_key_exists($_GET['range'], $allo
     ? $_GET['range'] : '7days';
 
 // Build date condition
+$dateFrom = $dateTo = '';
 if ($selectedRange === 'today') {
-    $dateFilter = "DATE(o.created_at) = CURDATE()";
+    $dateFilter       = "DATE(o.created_at) = CURDATE()";
     $dateFilterSimple = "DATE(created_at) = CURDATE()";
 } elseif ($selectedRange === 'custom') {
-    $dateFrom = isset($_GET['date_from']) ? $_GET['date_from'] : date('Y-m-d', strtotime('-7 days'));
-    $dateTo   = isset($_GET['date_to'])   ? $_GET['date_to']   : date('Y-m-d');
-    // Sanitize: only allow valid date strings
-    $dateFrom = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom) ? $dateFrom : date('Y-m-d', strtotime('-7 days'));
-    $dateTo   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)   ? $dateTo   : date('Y-m-d');
+    $dateFrom = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_from']??'') ? $_GET['date_from'] : date('Y-m-d', strtotime('-7 days'));
+    $dateTo   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_to']??'')   ? $_GET['date_to']   : date('Y-m-d');
     $dateFilter       = "DATE(o.created_at) BETWEEN '$dateFrom' AND '$dateTo'";
     $dateFilterSimple = "DATE(created_at)   BETWEEN '$dateFrom' AND '$dateTo'";
+} elseif ($selectedRange === 'mtd') {
+    $dateFilter       = "YEAR(o.created_at)=YEAR(CURDATE()) AND MONTH(o.created_at)=MONTH(CURDATE())";
+    $dateFilterSimple = "YEAR(created_at)=YEAR(CURDATE()) AND MONTH(created_at)=MONTH(CURDATE())";
+} elseif ($selectedRange === 'ytd') {
+    $dateFilter       = "YEAR(o.created_at)=YEAR(CURDATE())";
+    $dateFilterSimple = "YEAR(created_at)=YEAR(CURDATE())";
+} elseif ($selectedRange === 'alltime') {
+    $dateFilter = $dateFilterSimple = "1=1";
 } else {
-    $days = $allowedRanges[$selectedRange];
+    $days = (int)$allowedRanges[$selectedRange];
     $dateFilter       = "o.created_at >= DATE_SUB(CURDATE(), INTERVAL $days DAY)";
     $dateFilterSimple = "created_at   >= DATE_SUB(CURDATE(), INTERVAL $days DAY)";
 }
@@ -537,7 +544,7 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
     }
 
     /* ══ DATE RANGE PICKER ══════════════════════════════════════ */
-    #drpBackdrop{display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.45);backdrop-filter:blur(2px);}
+    #drpBackdrop{display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.45);backdrop-filter:blur(6px);}
     #drpPopup{display:none;position:fixed;z-index:9001;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,.25);width:min(780px,96vw);overflow:hidden;font-family:'Source Sans Pro',sans-serif;}
     body.dark-mode #drpPopup{background:#252535;color:#e0e0e0;}
     #drpPopup .drp-inner{display:flex;}
@@ -637,21 +644,7 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
       </li>
     </ul>
     <ul class="navbar-nav ml-auto">
-      <li class="nav-item">
-        <a class="nav-link" data-widget="navbar-search" href="#" role="button"><i class="fas fa-search"></i></a>
-        <div class="navbar-search-block">
-          <form class="form-inline">
-            <div class="input-group input-group-sm">
-              <input class="form-control form-control-navbar" type="search" placeholder="Search">
-              <div class="input-group-append">
-                <button class="btn btn-navbar" type="submit"><i class="fas fa-search"></i></button>
-                <button class="btn btn-navbar" type="button" data-widget="navbar-search"><i class="fas fa-times"></i></button>
-              </div>
-            </div>
-          </form>
-        </div>
-      </li>
-      <li class="nav-item">
+<li class="nav-item">
         <a class="nav-link" data-widget="fullscreen" href="#" role="button"><i class="fas fa-expand-arrows-alt"></i></a>
       </li>
       <li class="nav-item">
@@ -715,11 +708,11 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
             <button type="button" id="drpTriggerBtn" onclick="drpToggle()">
               <i class="fas fa-calendar-alt drp-cal-icon"></i>
               <span id="drpTriggerLabel"><?php
-                if ($selectedRange === 'today')        echo 'Today';
-                elseif ($selectedRange === '7days')    echo 'Last 7 Days';
-                elseif ($selectedRange === '30days')   echo 'Last 30 Days';
-                elseif ($selectedRange === 'custom')   echo date('M d, Y', strtotime($dateFrom??'now')).' – '.date('M d, Y', strtotime($dateTo??'now'));
-                else echo 'Select Range';
+                $lbl=['today'=>'Today','7days'=>'Last 7 Days','30days'=>'Last 30 Days','3months'=>'Last 3 Months',
+                      '12months'=>'Last 12 Months','mtd'=>'Month to Date','ytd'=>'Year to Date','alltime'=>'All Time'];
+                echo $selectedRange==='custom'
+                  ? date('M d, Y',strtotime($dateFrom)).' – '.date('M d, Y',strtotime($dateTo))
+                  : ($lbl[$selectedRange]??'All Time');
               ?></span>
               <i class="fas fa-chevron-down drp-chevron"></i>
             </button>
@@ -1131,8 +1124,8 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
         <!-- Hidden submit form -->
         <form method="GET" id="drpForm" style="display:none;">
           <input type="hidden" name="range"     id="drpFR" value="<?= htmlspecialchars($selectedRange) ?>">
-          <input type="hidden" name="date_from" id="drpFF"  value="<?= htmlspecialchars($selectedRange==='custom' ? ($dateFrom??'') : '') ?>">
-          <input type="hidden" name="date_to"   id="drpFT"    value="<?= htmlspecialchars($selectedRange==='custom' ? ($dateTo??'')   : '') ?>">
+          <input type="hidden" name="date_from" id="drpFF"  value="<?= htmlspecialchars($dateFrom) ?>">
+          <input type="hidden" name="date_to"   id="drpFT"    value="<?= htmlspecialchars($dateTo) ?>">
         </form>
 
         <div class="row">
@@ -1141,7 +1134,7 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
               <div class="card-header border-transparent d-flex flex-wrap align-items-center" style="gap:8px;">
                 <h3 class="card-title mr-auto"><i class="fas fa-receipt mr-2"></i>Recent Orders History&nbsp;<span class="rt-live-dot live-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;vertical-align:middle;margin-left:4px;" title="Live data connected"></span></h3>
                 <!-- Summary badge -->
-                <span class="badge badge-secondary" style="font-size:.8rem;">
+                <span id="recentOrdersBadge" class="badge badge-secondary" style="font-size:.8rem;">
                   <?= count($recentOrders) ?> order<?= count($recentOrders)!==1?'s':'' ?>
                   <?php if ($selectedRange==='today'):       ?>· Today
                   <?php elseif ($selectedRange==='7days'):   ?>· Last 7 Days
@@ -1149,6 +1142,10 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
                   <?php elseif ($selectedRange==='custom'):  ?>· <?= date('M d',strtotime($dateFrom??'now')) ?> – <?= date('M d, Y',strtotime($dateTo??'now')) ?>
                   <?php endif; ?>
                 </span>
+                <!-- Date-range picker trigger (only shown for today view) -->
+                <?php if ($selectedRange === 'today'): ?>
+                <small class="text-muted ml-1" style="font-size:.75rem;">(live)</small>
+                <?php endif; ?>
               </div>
               <div class="card-body p-0">
                 <div class="table-responsive">
@@ -1408,6 +1405,7 @@ $(function () {
   'use strict';
 
   var SSE_URL = 'index2.php?sse=1';
+  var SELECTED_RANGE = <?= json_encode($selectedRange) ?>;
 
   function peso(v, dec) {
     return '₱' + parseFloat(v).toLocaleString('en', {
@@ -1501,41 +1499,58 @@ $(function () {
   function updateRecentOrders(orders) {
     var tbodies = document.querySelectorAll('[data-rt-container="recentOrders"]');
     if (!tbodies.length || !orders || !orders.length) return;
+
+    // Only overwrite the table rows when the user is viewing "today" (live mode).
+    // For any other date-filter range the PHP-rendered rows are authoritative —
+    // we must NOT replace them with the SSE payload (which is always last 20 all-time).
+    var isLiveMode = (SELECTED_RANGE === 'today');
+
     tbodies.forEach(function (tbody) {
       var prevIds = Array.from(tbody.querySelectorAll('tr[data-order-id]'))
         .map(function (r) { return r.getAttribute('data-order-id'); });
-      var newIds  = orders.map(function (o) { return String(o.id); });
-      if (JSON.stringify(prevIds) === JSON.stringify(newIds)) return;
-      var html = orders.map(function (o) {
-        var statusBadge = '';
-        if      (o.status === 'voided')         statusBadge = '<span class="badge badge-danger">Voided</span>';
-        else if (o.status === 'refunded')       statusBadge = '<span class="badge badge-info">Refunded</span>';
-        else if (o.status === 'partial_refund') statusBadge = '<span class="badge badge-warning">Partial Refund</span>';
-        else                                    statusBadge = '<span class="badge badge-success">Completed</span>';
-        var date    = new Date(o.created_at);
-        var timeStr = date.toLocaleTimeString('en-PH', {hour:'2-digit',minute:'2-digit',hour12:true});
-        var dateStr = date.toLocaleDateString('en-PH', {month:'short',day:'numeric'});
-        var isNew   = prevIds.indexOf(String(o.id)) === -1 ? ' data-rt-new="1"' : '';
-        return '<tr data-order-id="' + o.id + '"' + isNew + '>' +
-          '<td><strong>#' + o.id + '</strong></td>' +
-          '<td>' + (o.table_no || '—') + '</td>' +
-          '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (o.items||'') + '">' + (o.items || '—') + '</td>' +
-          '<td>' + (o.cashier_name || 'N/A') + '</td>' +
-          '<td><small class="text-muted">' + dateStr + ' ' + timeStr + '</small></td>' +
-          '<td><strong class="text-success">₱' + parseFloat(o.total_amt).toLocaleString('en',{minimumFractionDigits:2}) + '</strong></td>' +
-          '<td>' + statusBadge + '</td>' +
-          '</tr>';
-      }).join('');
-      tbody.innerHTML = html;
-      /* Flash highlight rows that are brand-new */
-      tbody.querySelectorAll('tr[data-rt-new="1"]').forEach(function (tr) {
-        tr.style.transition = 'none';
-        tr.style.backgroundColor = 'rgba(233,30,140,0.18)';
-        setTimeout(function () {
-          tr.style.transition = 'background-color 1.4s ease';
-          tr.style.backgroundColor = '';
-        }, 80);
-      });
+
+      if (isLiveMode) {
+        var newIds  = orders.map(function (o) { return String(o.id); });
+        if (JSON.stringify(prevIds) === JSON.stringify(newIds)) return;
+        var html = orders.map(function (o) {
+          var statusBadge = '';
+          if      (o.status === 'voided')         statusBadge = '<span class="badge badge-danger">Voided</span>';
+          else if (o.status === 'refunded')       statusBadge = '<span class="badge badge-info">Refunded</span>';
+          else if (o.status === 'partial_refund') statusBadge = '<span class="badge badge-warning">Partial Refund</span>';
+          else                                    statusBadge = '<span class="badge badge-success">Completed</span>';
+          var date    = new Date(o.created_at);
+          var timeStr = date.toLocaleTimeString('en-PH', {hour:'2-digit',minute:'2-digit',hour12:true});
+          var dateStr = date.toLocaleDateString('en-PH', {month:'short',day:'numeric'});
+          var isNew   = prevIds.indexOf(String(o.id)) === -1 ? ' data-rt-new="1"' : '';
+          return '<tr data-order-id="' + o.id + '"' + isNew + '>' +
+            '<td><strong>#' + o.id + '</strong></td>' +
+            '<td>' + (o.table_no || '—') + '</td>' +
+            '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (o.items||'') + '">' + (o.items || '—') + '</td>' +
+            '<td>' + (o.cashier_name || 'N/A') + '</td>' +
+            '<td><small class="text-muted">' + dateStr + ' ' + timeStr + '</small></td>' +
+            '<td><strong class="text-success">₱' + parseFloat(o.total_amt).toLocaleString('en',{minimumFractionDigits:2}) + '</strong></td>' +
+            '<td>' + statusBadge + '</td>' +
+            '</tr>';
+        }).join('');
+        tbody.innerHTML = html;
+        /* Flash highlight rows that are brand-new */
+        tbody.querySelectorAll('tr[data-rt-new="1"]').forEach(function (tr) {
+          tr.style.transition = 'none';
+          tr.style.backgroundColor = 'rgba(233,30,140,0.18)';
+          setTimeout(function () {
+            tr.style.transition = 'background-color 1.4s ease';
+            tr.style.backgroundColor = '';
+          }, 80);
+        });
+      }
+      // In live mode, also update the summary badge count to reflect real-time row count
+      if (isLiveMode) {
+        var badge = document.getElementById('recentOrdersBadge');
+        if (badge) {
+          var count = tbody.querySelectorAll('tr[data-order-id]').length;
+          badge.textContent = count + ' order' + (count !== 1 ? 's' : '') + ' · Today';
+        }
+      }
     });
   }
 

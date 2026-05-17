@@ -253,6 +253,30 @@ if ($hasOrderItems) {
 }
 $maxCatRev = !empty($catRevenue) ? (float)$catRevenue[0]['revenue'] : 1;
 
+// ── AJAX: real-time top items endpoint ────────────────────────
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'topitems') {
+    $ajaxItems = [];
+    if ($hasOrderItems) {
+        $rAjax = $conn->query(
+            "SELECT m.name, m.category, m.price,
+                    SUM(oi.qty) AS qty_sold,
+                    SUM(oi.qty * oi.unit_price) AS revenue
+             FROM order_items oi
+             JOIN menu m ON m.id = oi.menu_id
+             JOIN orders o ON o.id = oi.order_id
+             WHERE $VALID AND $dfO
+             GROUP BY oi.menu_id
+             ORDER BY qty_sold DESC
+             LIMIT 10"
+        );
+        if ($rAjax) while ($row = $rAjax->fetch_assoc()) $ajaxItems[] = $row;
+    }
+    $conn->close();
+    header('Content-Type: application/json');
+    echo json_encode(['items' => $ajaxItems]);
+    exit();
+}
+
 $conn->close();
 
 // JSON for charts
@@ -393,7 +417,7 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
     }
 
     /* ══ DRP: Date Range Picker ════════════════════════════════ */
-    #drpBackdrop{display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.45);backdrop-filter:blur(2px);}
+    #drpBackdrop{display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.45);backdrop-filter:blur(6px);}
     #drpPopup{display:none;position:fixed;z-index:9001;top:50%;left:50%;transform:translate(-50%,-50%);background:#fff;border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,.25);width:min(780px,96vw);overflow:hidden;}
     body.dark-mode #drpPopup{background:#252535;color:#e0e0e0;}
     .drp-inner{display:flex;}
@@ -465,26 +489,8 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
       </li>
     </ul>
     <ul class="navbar-nav ml-auto">
-      <li class="nav-item">
-        <a class="nav-link" data-widget="navbar-search" href="#" role="button"><i class="fas fa-search"></i></a>
-        <div class="navbar-search-block">
-          <form class="form-inline">
-            <div class="input-group input-group-sm">
-              <input class="form-control form-control-navbar" type="search" placeholder="Search">
-              <div class="input-group-append">
-                <button class="btn btn-navbar" type="submit"><i class="fas fa-search"></i></button>
-                <button class="btn btn-navbar" type="button" data-widget="navbar-search"><i class="fas fa-times"></i></button>
-              </div>
-            </div>
-          </form>
-        </div>
-      </li>
-      <li class="nav-item">
+<li class="nav-item">
         <a class="nav-link" data-widget="fullscreen" href="#" role="button"><i class="fas fa-expand-arrows-alt"></i></a>
-      </li>
-      <li class="nav-item d-flex align-items-center px-2" title="Real-time: connected" style="font-size:.72rem;font-weight:600;color:#6c757d;">
-        <span class="rt-live-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;margin-right:5px;box-shadow:0 0 0 0 rgba(34,197,94,.5);animation:rtPulse 1.8s ease infinite;" title="Live data connected"></span>
-        <span class="d-none d-sm-inline rt-live-label">Live</span>
       </li>
       <li class="nav-item">
         <a class="nav-link" id="darkModeToggle" href="#" role="button"><i class="fas fa-moon"></i></a>
@@ -860,13 +866,18 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
         <div class="row">
           <div class="col-12">
             <div class="card">
-              <div class="card-header">
-                <h3 class="card-title"><i class="fas fa-star mr-2"></i>Top Selling Items</h3>
+              <div class="card-header d-flex align-items-center justify-content-between">
+                <h3 class="card-title">
+                  <i class="fas fa-star mr-2"></i>Top Selling Items
+                  <span class="rt-live-dot top-items-live-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;vertical-align:middle;margin-left:6px;" title="Live — updating"></span>
+                </h3>
+                <small class="text-muted" id="topItemsLastUpdated" style="font-size:11px;"></small>
               </div>
               <div class="card-body">
                 <table id="example1" class="table table-bordered table-striped">
                   <thead>
                     <tr>
+                      <th>#</th>
                       <th>Item</th>
                       <th>Category</th>
                       <th>Unit Price (&#8369;)</th>
@@ -874,10 +885,11 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
                       <th>Revenue (&#8369;)</th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody id="topItemsTbody">
                     <?php if (!empty($tableItems)): ?>
-                      <?php foreach ($tableItems as $ti): ?>
+                      <?php foreach ($tableItems as $tiIdx => $ti): ?>
                       <tr>
+                        <td><span class="badge badge-secondary"><?= $tiIdx + 1 ?></span></td>
                         <td><?= htmlspecialchars($ti['name']) ?></td>
                         <td><?= htmlspecialchars($ti['category']) ?></td>
                         <td><?= number_format((float)$ti['price'], 2) ?></td>
@@ -886,7 +898,7 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
                       </tr>
                       <?php endforeach; ?>
                     <?php else: ?>
-                      <tr><td colspan="5" class="text-center text-muted">No sales data yet.</td></tr>
+                      <tr><td colspan="6" class="text-center text-muted">No sales data yet.</td></tr>
                     <?php endif; ?>
                   </tbody>
                 </table>
@@ -1034,7 +1046,7 @@ $(function () {
 $(function () {
   $('#example1').DataTable({
     responsive: true, lengthChange: false, autoWidth: false,
-    order: [[3, 'desc']],
+    order: [[4, 'desc']],
     buttons: ['copy','csv','excel','pdf','print','colvis']
   }).buttons().container().appendTo('#example1_wrapper .col-md-6:eq(0)');
 });
@@ -1294,6 +1306,155 @@ $(function () {
   }
 })();
 </script>
-<!-- ══ END real-time notification ════════════════════════════════════ -->
+<!-- ══ TOP SELLING ITEMS — REAL-TIME POLLING ══════════════════════ -->
+<script>
+(function(){
+  'use strict';
+
+  var POLL_INTERVAL = 30000; // refresh every 30 seconds
+
+  // Snapshot of qty per item name from the last render — used to detect qty increases
+  var _prevQty = {};
+
+  function buildUrl() {
+    var params = new URLSearchParams(window.location.search);
+    params.set('ajax', 'topitems');
+    return window.location.pathname + '?' + params.toString();
+  }
+
+  function setDot(ok) {
+    var dot = document.querySelector('.top-items-live-dot');
+    if (!dot) return;
+    dot.style.background = ok ? '#22c55e' : '#ef4444';
+    dot.title = ok ? 'Live — connected' : 'Live — reconnecting…';
+  }
+
+  function fmtNum(n, decimals) {
+    return parseFloat(n || 0).toLocaleString('en', {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
+  }
+
+  function rankBadge(rank) {
+    if (rank === 1) return '<span class="badge" style="background:#f4c542;color:#333;">🥇 1</span>';
+    if (rank === 2) return '<span class="badge" style="background:#b0b8c1;color:#fff;">🥈 2</span>';
+    if (rank === 3) return '<span class="badge" style="background:#cd7f32;color:#fff;">🥉 3</span>';
+    return '<span class="badge badge-secondary">' + rank + '</span>';
+  }
+
+  function flashRow(tr, color) {
+    tr.style.transition = 'none';
+    tr.style.backgroundColor = color;
+    setTimeout(function(){
+      tr.style.transition = 'background-color 1.6s ease';
+      tr.style.backgroundColor = '';
+    }, 80);
+  }
+
+  function flashCell(td, color) {
+    td.style.transition = 'none';
+    td.style.backgroundColor = color;
+    setTimeout(function(){
+      td.style.transition = 'background-color 1.6s ease';
+      td.style.backgroundColor = '';
+    }, 80);
+  }
+
+  function renderRows(items) {
+    var tbody = document.getElementById('topItemsTbody');
+    var tsEl  = document.getElementById('topItemsLastUpdated');
+    if (!tbody) return;
+
+    if (!items || !items.length) {
+      // Destroy DataTables before wiping tbody
+      if ($.fn.DataTable.isDataTable('#example1')) {
+        $('#example1').DataTable().destroy();
+      }
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No sales data yet.</td></tr>';
+      return;
+    }
+
+    // Snapshot prev state from DOM before destroy
+    var prevQtyMap  = {};
+    var prevRankMap = {};
+    tbody.querySelectorAll('tr[data-item-name]').forEach(function(tr, idx){
+      var name = tr.getAttribute('data-item-name');
+      prevQtyMap[name]  = parseInt(tr.getAttribute('data-item-qty') || '0', 10);
+      prevRankMap[name] = idx;
+    });
+
+    // Destroy DataTables so we can safely rewrite tbody
+    if ($.fn.DataTable.isDataTable('#example1')) {
+      $('#example1').DataTable().destroy();
+    }
+
+    // Build new rows
+    var html = items.map(function(it, idx){
+      var qty = parseInt(it.qty_sold, 10);
+      var escaped = it.name.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return '<tr data-item-name="' + escaped + '" data-item-qty="' + qty + '">'
+        + '<td>' + rankBadge(idx + 1) + '</td>'
+        + '<td>' + escaped + '</td>'
+        + '<td>' + (it.category || '—') + '</td>'
+        + '<td>' + fmtNum(it.price, 2) + '</td>'
+        + '<td class="qty-cell"><strong>' + qty + '</strong></td>'
+        + '<td>₱' + fmtNum(it.revenue, 2) + '</td>'
+        + '</tr>';
+    }).join('');
+
+    tbody.innerHTML = html;
+
+    // Apply highlights after DOM is updated
+    tbody.querySelectorAll('tr[data-item-name]').forEach(function(tr, idx){
+      var name    = tr.getAttribute('data-item-name');
+      var qty     = parseInt(tr.getAttribute('data-item-qty'), 10);
+      var wasNew  = !(name in prevQtyMap);
+      var qtyUp   = !wasNew && qty > (prevQtyMap[name] || 0);
+      var rankChg = !wasNew && prevRankMap[name] !== idx;
+
+      if (wasNew) {
+        // Brand-new item — highlight whole row pink
+        flashRow(tr, 'rgba(233,30,140,.18)');
+      } else if (qtyUp) {
+        // Qty increased — flash the qty cell green, row subtly
+        flashRow(tr, 'rgba(40,167,69,.10)');
+        var qtyTd = tr.querySelector('.qty-cell');
+        if (qtyTd) flashCell(qtyTd, 'rgba(40,167,69,.45)');
+      } else if (rankChg) {
+        // Rank shifted — highlight row amber
+        flashRow(tr, 'rgba(255,193,7,.25)');
+      }
+    });
+
+    // Reinitialize DataTables
+    $('#example1').DataTable({
+      responsive: true, lengthChange: false, autoWidth: false,
+      order: [[4, 'desc']],
+      buttons: ['copy','csv','excel','pdf','print','colvis']
+    }).buttons().container().appendTo('#example1_wrapper .col-md-6:eq(0)');
+
+    if (tsEl) {
+      var now = new Date();
+      tsEl.textContent = 'Updated ' + now.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
+    }
+  }
+
+  function poll() {
+    fetch(buildUrl(), {cache: 'no-store'})
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        setDot(true);
+        renderRows(data.items || []);
+      })
+      .catch(function(){
+        setDot(false);
+      });
+  }
+
+  // Wait for DOM + DataTables to be ready before starting the poll loop
+  $(function(){
+    setInterval(poll, POLL_INTERVAL);
+  });
+})();
+</script>
+<!-- ══ END top items real-time ═══════════════════════════════════ -->
 
 </body>

@@ -6,6 +6,39 @@ if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
     exit();
 }
 
+// ── AJAX: Activity Log endpoints (server-side, shared across tabs) ─
+if (isset($_GET['ajax'])) {
+    if (!isset($_SESSION['activity_log'])) $_SESSION['activity_log'] = [];
+
+    if ($_GET['ajax'] === 'get_log') {
+        header('Content-Type: application/json');
+        echo json_encode(['log' => array_slice($_SESSION['activity_log'], 0, 30)]);
+        exit();
+    }
+
+    if ($_GET['ajax'] === 'add_log' && isset($_POST['type'], $_POST['msg'])) {
+        $entry = [
+            'type' => preg_replace('/[^a-z_]/', '', $_POST['type']),
+            'msg'  => substr(strip_tags($_POST['msg']), 0, 200),
+            'user' => htmlspecialchars($_SESSION['user'] ?? 'Admin'),
+            'time' => date('M j, Y g:i A'),
+            'ts'   => time(),
+        ];
+        array_unshift($_SESSION['activity_log'], $entry);
+        $_SESSION['activity_log'] = array_slice($_SESSION['activity_log'], 0, 30);
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
+        exit();
+    }
+
+    if ($_GET['ajax'] === 'clear_log') {
+        $_SESSION['activity_log'] = [];
+        header('Content-Type: application/json');
+        echo json_encode(['ok' => true]);
+        exit();
+    }
+}
+
 require_once '../../Backend/conn.php';
 
 $message = '';
@@ -62,6 +95,18 @@ if (isset($_POST['action']) && $_POST['action'] === 'backup') {
     $sql .= "SET FOREIGN_KEY_CHECKS=1;\n";
 
     $filename = 'empress_cafe_backup_' . date('Ymd_His') . '.sql';
+
+    // ── Log to server-side session before sending file ──
+    if (!isset($_SESSION['activity_log'])) $_SESSION['activity_log'] = [];
+    array_unshift($_SESSION['activity_log'], [
+        'type' => 'backup',
+        'msg'  => 'Database backup downloaded: ' . $filename,
+        'user' => htmlspecialchars($_SESSION['user'] ?? 'Admin'),
+        'time' => date('M j, Y g:i A'),
+        'ts'   => time(),
+    ]);
+    $_SESSION['activity_log'] = array_slice($_SESSION['activity_log'], 0, 30);
+
     header('Content-Type: application/octet-stream');
     header('Content-Disposition: attachment; filename="' . $filename . '"');
     header('Content-Length: ' . strlen($sql));
@@ -118,9 +163,23 @@ if (isset($_POST['action']) && $_POST['action'] === 'restore') {
                 if ($errors === 0) {
                     $message = 'Database restored successfully! All data has been recovered.';
                     $msgType = 'success';
+                    if (!isset($_SESSION['activity_log'])) $_SESSION['activity_log'] = [];
+                    array_unshift($_SESSION['activity_log'], [
+                        'type' => 'restore', 'msg' => 'Database restored successfully',
+                        'user' => htmlspecialchars($_SESSION['user'] ?? 'Admin'),
+                        'time' => date('M j, Y g:i A'), 'ts' => time(),
+                    ]);
+                    $_SESSION['activity_log'] = array_slice($_SESSION['activity_log'], 0, 30);
                 } else {
                     $message = "Restore completed with $errors error(s). Most data may have been recovered. Check database manually if needed.";
                     $msgType = 'warning';
+                    if (!isset($_SESSION['activity_log'])) $_SESSION['activity_log'] = [];
+                    array_unshift($_SESSION['activity_log'], [
+                        'type' => 'restore_warn', 'msg' => "Restore completed with $errors error(s)",
+                        'user' => htmlspecialchars($_SESSION['user'] ?? 'Admin'),
+                        'time' => date('M j, Y g:i A'), 'ts' => time(),
+                    ]);
+                    $_SESSION['activity_log'] = array_slice($_SESSION['activity_log'], 0, 30);
                 }
             }
         }
@@ -231,8 +290,17 @@ $conn->close();
       margin-right: 12px;
       flex-shrink: 0;
     }
-    .dot-success { background: #28a745; }
-    .dot-restore { background: #17a2b8; }
+    .dot-success     { background: #28a745; }
+    .dot-restore     { background: #17a2b8; }
+    .dot-restore_warn{ background: #ffc107; }
+
+    @keyframes logItemIn {
+      from { opacity: 0; transform: translateX(-12px); background: rgba(233,30,140,.13); }
+      to   { opacity: 1; transform: translateX(0);     background: transparent; }
+    }
+    .backup-timeline .item.rt-new {
+      animation: logItemIn .5s ease forwards;
+    }
   
     
     /* FIX: Table hover visible in light mode */
@@ -358,13 +426,9 @@ $conn->close();
         <a href="index2.php" class="nav-link">Home</a>
       </li>
     </ul>
-    <ul class="navbar-nav ml-auto">
-      <li class="nav-item">
+       <ul class="navbar-nav ml-auto">
+<li class="nav-item">
         <a class="nav-link" data-widget="fullscreen" href="#" role="button"><i class="fas fa-expand-arrows-alt"></i></a>
-      </li>
-      <li class="nav-item d-flex align-items-center px-2" title="Real-time: connected" style="font-size:.72rem;font-weight:600;color:#6c757d;">
-        <span class="rt-live-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;margin-right:5px;box-shadow:0 0 0 0 rgba(34,197,94,.5);animation:rtPulse 1.8s ease infinite;" title="Live data connected"></span>
-        <span class="d-none d-sm-inline rt-live-label">Live</span>
       </li>
       <li class="nav-item">
         <a class="nav-link" id="darkModeToggle" href="#" role="button"><i class="fas fa-moon"></i></a>
@@ -561,10 +625,16 @@ $conn->close();
           <div class="col-md-8 mb-4">
             <div class="card elevation-2" style="border-radius:12px; border:none;">
               <div class="card-header d-flex align-items-center justify-content-between">
-                <h6 class="mb-0"><i class="fas fa-list-alt mr-2"></i>Recent Backup / Restore Activity</h6>
-                <button class="btn btn-sm btn-outline-secondary" onclick="clearLog()">
-                  <i class="fas fa-trash-alt mr-1"></i>Clear Log
-                </button>
+                <h6 class="mb-0">
+                  <i class="fas fa-list-alt mr-2"></i>Recent Backup / Restore Activity
+                  <span id="logLiveDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;vertical-align:middle;margin-left:6px;" title="Live"></span>
+                </h6>
+                <div class="d-flex align-items-center" style="gap:10px;">
+                  <small class="text-muted" id="logLastUpdated" style="font-size:11px;"></small>
+                  <button class="btn btn-sm btn-outline-secondary" id="clearLogBtn">
+                    <i class="fas fa-trash-alt mr-1"></i>Clear Log
+                  </button>
+                </div>
               </div>
               <div class="card-body">
                 <div class="backup-timeline" id="activityLog">
@@ -744,80 +814,131 @@ function startBackup() {
   }, 3500);
 }
 
-// ── Activity Log ───────────────────────────────────────────────
-var LOG_KEY = 'empress_backup_log';
+// ── Activity Log — Real-Time (server-side session) ─────────────
+(function(){
+  'use strict';
 
-function getLog() {
-  try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []; }
-  catch(e) { return []; }
-}
+  var POLL_MS   = 10000;   // poll every 10 seconds
+  var _lastTs   = 0;       // timestamp of newest entry we've seen
+  var _polling  = null;
 
-function saveLog(log) {
-  localStorage.setItem(LOG_KEY, JSON.stringify(log.slice(-20))); // keep last 20
-}
-
-function addLog(type, msg) {
-  var log = getLog();
-  log.unshift({
-    type: type,
-    msg: msg,
-    time: new Date().toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })
-  });
-  saveLog(log);
-  renderLog();
-}
-
-function renderLog() {
-  var log = getLog();
+  var dot       = document.getElementById('logLiveDot');
+  var tsEl      = document.getElementById('logLastUpdated');
   var container = document.getElementById('activityLog');
-  var empty = document.getElementById('emptyLog');
-  if (log.length === 0) {
-    empty.style.display = 'block';
-    return;
+  var emptyEl   = document.getElementById('emptyLog');
+  var clearBtn  = document.getElementById('clearLogBtn');
+
+  function setDot(ok) {
+    if (!dot) return;
+    dot.style.background = ok ? '#22c55e' : '#ef4444';
+    dot.title = ok ? 'Live — connected' : 'Live — reconnecting…';
   }
-  empty.style.display = 'none';
 
-  // Remove old items (keep empty div)
-  var oldItems = container.querySelectorAll('.item');
-  oldItems.forEach(function(el) { el.remove(); });
+  function escHtml(t) {
+    return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
 
-  log.forEach(function(entry) {
-    var div = document.createElement('div');
-    div.className = 'item';
-    var dotClass = entry.type === 'backup' ? 'dot-success' : 'dot-restore';
-    var icon = entry.type === 'backup' ? 'fa-download text-success' : 'fa-upload text-info';
-    div.innerHTML =
-      '<div class="dot ' + dotClass + '"></div>' +
-      '<div class="flex-grow-1">' +
-        '<strong><i class="fas ' + icon + ' mr-1"></i>' + escHtml(entry.msg) + '</strong>' +
-        '<br><small class="text-muted">' + escHtml(entry.time) + '</small>' +
-      '</div>';
-    container.insertBefore(div, container.querySelector('.item') || empty);
+  function typeConfig(type) {
+    var map = {
+      backup:       { dot: 'dot-success',      icon: 'fa-download text-success',  label: 'Backup' },
+      restore:      { dot: 'dot-restore',       icon: 'fa-upload text-info',       label: 'Restore' },
+      restore_warn: { dot: 'dot-restore_warn',  icon: 'fa-exclamation-triangle text-warning', label: 'Restore (warnings)' },
+    };
+    return map[type] || { dot: 'dot-success', icon: 'fa-circle text-muted', label: type };
+  }
+
+  function renderLog(entries, highlightNew) {
+    if (!container) return;
+
+    // Remove old rendered items
+    container.querySelectorAll('.item').forEach(function(el){ el.remove(); });
+
+    if (!entries || entries.length === 0) {
+      if (emptyEl) emptyEl.style.display = 'block';
+      return;
+    }
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    entries.forEach(function(entry, idx) {
+      var cfg = typeConfig(entry.type);
+      var isNew = highlightNew && entry.ts > _lastTs;
+      var div = document.createElement('div');
+      div.className = 'item' + (isNew ? ' rt-new' : '');
+      div.innerHTML =
+        '<div class="dot ' + cfg.dot + '"></div>' +
+        '<div class="flex-grow-1">' +
+          '<strong><i class="fas ' + cfg.icon + ' mr-1"></i>' + escHtml(entry.msg) + '</strong>' +
+          '<br><small class="text-muted">' +
+            '<i class="fas fa-user mr-1" style="opacity:.5;"></i>' + escHtml(entry.user) +
+            ' &nbsp;·&nbsp; ' + escHtml(entry.time) +
+          '</small>' +
+        '</div>';
+      container.insertBefore(div, emptyEl);
+    });
+
+    // Update _lastTs to the most recent entry
+    if (highlightNew && entries.length > 0) {
+      _lastTs = Math.max(_lastTs, entries[0].ts || 0);
+    }
+  }
+
+  function updateTimestamp() {
+    if (tsEl) {
+      var now = new Date();
+      tsEl.textContent = 'Updated ' + now.toLocaleTimeString('en-PH', {hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:true});
+    }
+  }
+
+  function fetchLog(isFirst) {
+    fetch('settings.php?ajax=get_log', {cache: 'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(data) {
+        setDot(true);
+        renderLog(data.log || [], !isFirst);
+        if (isFirst && data.log && data.log.length > 0) {
+          _lastTs = data.log[0].ts || 0;
+        }
+        updateTimestamp();
+      })
+      .catch(function(){ setDot(false); });
+  }
+
+  // ── Public: add entry via server (called after backup/restore events) ──
+  window.addServerLog = function(type, msg) {
+    fetch('settings.php?ajax=add_log', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: 'type=' + encodeURIComponent(type) + '&msg=' + encodeURIComponent(msg)
+    })
+    .then(function(){ fetchLog(false); })
+    .catch(function(){});
+  };
+
+  // ── Clear log ──────────────────────────────────────────────────
+  if (clearBtn) {
+    clearBtn.addEventListener('click', function() {
+      fetch('settings.php?ajax=clear_log', {method: 'POST', cache: 'no-store'})
+        .then(function(){ _lastTs = 0; fetchLog(true); })
+        .catch(function(){});
+    });
+  }
+
+  // ── Start ──────────────────────────────────────────────────────
+  $(function() {
+    fetchLog(true);
+    _polling = setInterval(function(){ fetchLog(false); }, POLL_MS);
+
+    // If page loaded after a restore POST, log is already saved server-side
+    // Just fetch — no need to call addServerLog again
   });
-}
 
-function clearLog() {
-  localStorage.removeItem(LOG_KEY);
-  renderLog();
-}
+})();
 
-function escHtml(t) {
-  return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
+// ── Legacy stubs so existing onclick calls don't break ─────────
+function addLog(type, msg) { if (window.addServerLog) window.addServerLog(type, msg); }
+function clearLog() { document.getElementById('clearLogBtn') && document.getElementById('clearLogBtn').click(); }
+function escHtml(t) { return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// ── Init on load ───────────────────────────────────────────────
-$(function() {
-  renderLog();
-
-  // Show restore result in log if message exists
-  <?php if ($message && $msgType === 'success'): ?>
-  addLog('restore', 'Database restored successfully');
-  <?php elseif ($message && $msgType === 'warning'): ?>
-  addLog('restore', 'Restore completed with warnings');
-  <?php elseif ($message && $msgType === 'danger'): ?>
-  addLog('restore', 'Restore failed — <?= addslashes(htmlspecialchars($message)) ?>');
-  <?php endif; ?>
-});
 </script>
 
 
