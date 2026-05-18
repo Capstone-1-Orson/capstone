@@ -189,11 +189,6 @@ function showResult(string $type, string $heading, string $body): never
       </div>
       <h2><?= $heading ?></h2>
       <p><?= $body ?></p>
-      <?php if ($showBtn): ?>
-        <a href="<?= $loginUrl ?>" class="btn">
-          <i class="fas fa-sign-in-alt mr-1"></i> Go to Login
-        </a>
-      <?php endif; ?>
     </div>
 
     <div class="card-footer">

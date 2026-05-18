@@ -143,17 +143,132 @@ if ($hasOrderItems) {
     }
 }
 
-// ── Sales Chart (last 7 days) ─────────────────────────────────
+// ── Sales Chart — dynamic, respects date range ────────────────
+// Use monthly grouping for wide ranges, daily for narrow ones
 $chartLabels = [];
 $chartData   = [];
-for ($i = 6; $i >= 0; $i--) {
-    $date = date('Y-m-d', strtotime("-$i days"));
-    $chartLabels[] = date('M d', strtotime("-$i days"));
-    $stmt = $conn->prepare("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at) = ? AND $VALID");
-    $stmt->bind_param('s', $date);
-    $stmt->execute();
-    $chartData[] = (float)$stmt->get_result()->fetch_assoc()['rev'];
-    $stmt->close();
+
+if (in_array($selectedRange, ['3months','12months','mtd','ytd','alltime'])) {
+    // ── Monthly grouping ──────────────────────────────────────
+    if ($selectedRange === '3months') {
+        $monthCount = 3;
+    } elseif ($selectedRange === '12months') {
+        $monthCount = 12;
+    } elseif ($selectedRange === 'mtd') {
+        $monthCount = 1;
+    } elseif ($selectedRange === 'ytd') {
+        $monthCount = (int)date('n'); // months elapsed this year
+    } else {
+        // alltime — show last 12 months as a sensible default
+        $monthCount = 12;
+    }
+    $monthSlots = [];
+    for ($i = $monthCount - 1; $i >= 0; $i--) {
+        $key              = date('Y-m', strtotime("-$i months"));
+        $monthSlots[$key] = 0.0;
+        $chartLabels[]    = date('M Y', strtotime("-$i months"));
+    }
+    $mStmt = $conn->prepare(
+        "SELECT DATE_FORMAT(created_at,'%Y-%m') AS ym,
+                COALESCE(SUM(total_amt),0) AS rev
+         FROM orders
+         WHERE created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL " . ($monthCount - 1) . " MONTH),'%Y-%m-01')
+           AND $VALID
+         GROUP BY ym"
+    );
+    $mStmt->execute();
+    $mRes = $mStmt->get_result();
+    while ($row = $mRes->fetch_assoc()) {
+        if (isset($monthSlots[$row['ym']])) {
+            $monthSlots[$row['ym']] = (float)$row['rev'];
+        }
+    }
+    $mStmt->close();
+    $chartData = array_values($monthSlots);
+
+} elseif ($selectedRange === 'custom' && $dateFrom && $dateTo) {
+    // ── Custom range — daily if ≤ 60 days, monthly otherwise ──
+    $diffDays = (int)((strtotime($dateTo) - strtotime($dateFrom)) / 86400) + 1;
+    if ($diffDays <= 60) {
+        $daySlots = [];
+        for ($i = 0; $i < $diffDays; $i++) {
+            $key           = date('Y-m-d', strtotime($dateFrom) + $i * 86400);
+            $daySlots[$key] = 0.0;
+            $chartLabels[]  = date('M d', strtotime($dateFrom) + $i * 86400);
+        }
+        $cStmt = $conn->prepare(
+            "SELECT DATE(created_at) AS d, COALESCE(SUM(total_amt),0) AS rev
+             FROM orders
+             WHERE DATE(created_at) BETWEEN ? AND ?
+               AND $VALID
+             GROUP BY d"
+        );
+        $cStmt->bind_param('ss', $dateFrom, $dateTo);
+        $cStmt->execute();
+        $cRes = $cStmt->get_result();
+        while ($row = $cRes->fetch_assoc()) {
+            if (isset($daySlots[$row['d']])) $daySlots[$row['d']] = (float)$row['rev'];
+        }
+        $cStmt->close();
+        $chartData = array_values($daySlots);
+    } else {
+        // Monthly grouping for long custom ranges
+        $start = new DateTime($dateFrom);
+        $end   = new DateTime($dateTo);
+        $start->modify('first day of this month');
+        $monthSlots = [];
+        $cur = clone $start;
+        while ($cur <= $end) {
+            $key              = $cur->format('Y-m');
+            $monthSlots[$key] = 0.0;
+            $chartLabels[]    = $cur->format('M Y');
+            $cur->modify('+1 month');
+        }
+        $cStmt = $conn->prepare(
+            "SELECT DATE_FORMAT(created_at,'%Y-%m') AS ym, COALESCE(SUM(total_amt),0) AS rev
+             FROM orders
+             WHERE DATE(created_at) BETWEEN ? AND ?
+               AND $VALID
+             GROUP BY ym"
+        );
+        $cStmt->bind_param('ss', $dateFrom, $dateTo);
+        $cStmt->execute();
+        $cRes = $cStmt->get_result();
+        while ($row = $cRes->fetch_assoc()) {
+            if (isset($monthSlots[$row['ym']])) $monthSlots[$row['ym']] = (float)$row['rev'];
+        }
+        $cStmt->close();
+        $chartData = array_values($monthSlots);
+    }
+
+} else {
+    // ── today / 7days / 30days — daily grouping ───────────────
+    $days = match($selectedRange) {
+        'today'   => 1,
+        '7days'   => 7,
+        '30days'  => 30,
+        default   => 7,
+    };
+    $daySlots = [];
+    for ($i = $days - 1; $i >= 0; $i--) {
+        $key           = date('Y-m-d', strtotime("-$i days"));
+        $daySlots[$key] = 0.0;
+        $chartLabels[]  = $days === 1 ? 'Today' : date('M d', strtotime("-$i days"));
+    }
+    $dStmt = $conn->prepare(
+        "SELECT DATE(created_at) AS d, COALESCE(SUM(total_amt),0) AS rev
+         FROM orders
+         WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL " . ($days - 1) . " DAY)
+           AND $VALID
+         GROUP BY d"
+    );
+    $dStmt->execute();
+    $dRes = $dStmt->get_result();
+    while ($row = $dRes->fetch_assoc()) {
+        if (isset($daySlots[$row['d']])) $daySlots[$row['d']] = (float)$row['rev'];
+    }
+    $dStmt->close();
+    $chartData = array_values($daySlots);
 }
 
 // ── Inventory ─────────────────────────────────────────────────
@@ -602,7 +717,23 @@ $chartDataJson   = json_encode($chartData);
         <!-- ── Sales Chart ───────────────────────────────── -->
         <div class="card mb-3">
           <div class="card-header">
-            <h3 class="card-title"><i class="fas fa-chart-bar mr-2"></i>Sales Overview &mdash; Last 7 Days</h3>
+            <h3 class="card-title"><i class="fas fa-chart-bar mr-2"></i>Sales Overview &mdash; <?php
+              $chartTitleMap = [
+                'today'    => 'Today',
+                '7days'    => 'Last 7 Days',
+                '30days'   => 'Last 30 Days',
+                '3months'  => 'Last 3 Months',
+                '12months' => 'Last 12 Months',
+                'mtd'      => 'Month to Date',
+                'ytd'      => 'Year to Date',
+                'alltime'  => 'Last 12 Months',
+              ];
+              if ($selectedRange === 'custom' && $dateFrom && $dateTo) {
+                  echo date('M d, Y', strtotime($dateFrom)) . ' – ' . date('M d, Y', strtotime($dateTo));
+              } else {
+                  echo $chartTitleMap[$selectedRange] ?? 'All Time';
+              }
+            ?></h3>
           </div>
           <div class="card-body">
             <canvas id="salesChart" height="80"></canvas>
@@ -815,7 +946,7 @@ $(function () {
     data: {
       labels: <?= $chartLabelsJson ?>,
       datasets: [{
-        label: 'Revenue',
+        label: 'Revenue (₱)',
         data: <?= $chartDataJson ?>,
         backgroundColor: 'rgba(233,30,140,0.55)',
         borderColor: 'rgba(233,30,140,1)',
@@ -825,21 +956,23 @@ $(function () {
     },
     options: {
       responsive: true,
-      legend: { display: false },
-      tooltips: {
-        callbacks: {
-          label: function(item) {
-            return '₱' + parseFloat(item.yLabel).toLocaleString('en', {minimumFractionDigits:2});
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              return '₱' + parseFloat(ctx.parsed.y).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2});
+            }
           }
         }
       },
       scales: {
-        yAxes: [{
+        y: {
+          beginAtZero: true,
           ticks: {
-            beginAtZero: true,
             callback: function(val) { return '₱' + val.toLocaleString(); }
           }
-        }]
+        }
       }
     }
   });
