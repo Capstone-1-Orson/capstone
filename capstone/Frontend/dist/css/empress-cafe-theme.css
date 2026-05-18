@@ -1,0 +1,846 @@
+/* ============================================================
+   EMPRESS CAFE THEME
+   Light Mode : White + Pink
+   Dark Mode  : Black + Pink
+   ============================================================ */
+
+/* ── Google Font ──────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=DM+Sans:wght@300;400;500&display=swap');
+
+/* ── CSS Variables ────────────────────────────────────────── */
+:root {
+  --pink:        #e91e8c;
+  --pink-light:  #f472b6;
+  --pink-soft:   #fce7f3;
+  --pink-dark:   #c2185b;
+  --pink-glow:   rgba(233, 30, 140, 0.25);
+
+  /* Light palette */
+  --bg-light:           #ffffff;
+  --bg-light-secondary: #fdf4f9;
+  --bg-light-card:      #ffffff;
+  --text-light-primary: #1a1a2e;
+  --text-light-muted:   #6b7280;
+  --border-light:       #fce7f3;
+
+  /* Dark palette */
+  --bg-dark:           #0a0a0a;
+  --bg-dark-secondary: #111111;
+  --bg-dark-card:      #1a1a1a;
+  --text-dark-primary: #f5f5f5;
+  --text-dark-muted:   #9ca3af;
+  --border-dark:       #2a2a2a;
+}
+
+/* ── Base Typography ──────────────────────────────────────── */
+body,
+.content-wrapper,
+.main-footer {
+  font-family: 'DM Sans', sans-serif !important;
+}
+
+h1, h2, h3, h4, h5,
+.card-title,
+.brand-text,
+.info-box-number {
+  font-family: 'Playfair Display', serif !important;
+}
+
+/* ============================================================
+   LIGHT MODE  (default — no .dark-mode class on body)
+   ============================================================ */
+
+body:not(.dark-mode) {
+  background-color: var(--bg-light-secondary) !important;
+  color: var(--text-light-primary) !important;
+}
+
+/* Navbar */
+body:not(.dark-mode) .main-header.navbar {
+  background-color: var(--bg-light) !important;
+  border-bottom: 2px solid var(--pink-soft) !important;
+  box-shadow: 0 2px 12px var(--pink-glow) !important;
+}
+body:not(.dark-mode) .main-header.navbar .nav-link,
+body:not(.dark-mode) .main-header.navbar .navbar-text {
+  color: var(--text-light-primary) !important;
+}
+body:not(.dark-mode) .main-header.navbar .nav-link:hover {
+  color: var(--pink) !important;
+}
+
+/* Sidebar */
+body:not(.dark-mode) .main-sidebar,
+body:not(.dark-mode) .main-sidebar .sidebar {
+  background-color: #fff0f8 !important;
+  border-right: 2px solid var(--pink-soft) !important;
+}
+body:not(.dark-mode) .brand-link {
+  background-color: var(--pink) !important;
+  border-bottom: 1px solid var(--pink-dark) !important;
+}
+body:not(.dark-mode) .brand-text {
+  color: #fff !important;
+  letter-spacing: 0.05em;
+}
+body:not(.dark-mode) .sidebar .nav-sidebar .nav-link {
+  color: var(--text-light-primary) !important;
+  border-radius: 8px;
+  margin: 2px 8px;
+  transition: all 0.25s ease;
+}
+body:not(.dark-mode) .sidebar .nav-sidebar .nav-link:hover {
+  background-color: var(--pink-soft) !important;
+  color: var(--pink) !important;
+}
+body:not(.dark-mode) .sidebar .nav-sidebar .nav-link.active {
+  background: linear-gradient(135deg, var(--pink), var(--pink-dark)) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 12px var(--pink-glow);
+}
+body:not(.dark-mode) .sidebar .nav-sidebar .nav-icon {
+  color: var(--pink) !important;
+}
+body:not(.dark-mode) .sidebar .nav-sidebar .nav-link.active .nav-icon {
+  color: #fff !important;
+}
+body:not(.dark-mode) .user-panel {
+  border-bottom: 1px solid var(--pink-soft) !important;
+}
+body:not(.dark-mode) .user-panel .info a {
+  color: var(--text-light-primary) !important;
+}
+
+/* Content wrapper */
+body:not(.dark-mode) .content-wrapper {
+  background-color: var(--bg-light-secondary) !important;
+}
+
+/* Cards */
+body:not(.dark-mode) .card {
+  background-color: var(--bg-light-card) !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 2px 16px rgba(233, 30, 140, 0.08) !important;
+  color: var(--text-light-primary) !important;
+}
+body:not(.dark-mode) .card-header {
+  background-color: var(--pink-soft) !important;
+  border-bottom: 1px solid var(--border-light) !important;
+  border-radius: 12px 12px 0 0 !important;
+}
+body:not(.dark-mode) .card-title {
+  color: var(--pink-dark) !important;
+}
+body:not(.dark-mode) .card-footer {
+  background-color: var(--pink-soft) !important;
+  border-top: 1px solid var(--border-light) !important;
+}
+body:not(.dark-mode) .card-footer a {
+  color: var(--pink) !important;
+  font-weight: 500;
+}
+
+/* Info boxes */
+body:not(.dark-mode) .info-box {
+  background: #fff !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 2px 12px var(--pink-glow) !important;
+  color: var(--text-light-primary) !important;
+}
+body:not(.dark-mode) .info-box-text {
+  color: var(--text-light-muted) !important;
+}
+body:not(.dark-mode) .info-box-number {
+  color: var(--text-light-primary) !important;
+}
+
+/* Tables */
+body:not(.dark-mode) .table {
+  color: var(--text-light-primary) !important;
+}
+body:not(.dark-mode) .table thead th {
+  background-color: var(--pink-soft) !important;
+  color: var(--pink-dark) !important;
+  border-bottom: 2px solid var(--pink-light) !important;
+  font-family: 'DM Sans', sans-serif !important;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+body:not(.dark-mode) .table tbody tr:hover {
+  background-color: var(--pink-soft) !important;
+}
+body:not(.dark-mode) .table td,
+body:not(.dark-mode) .table th {
+  border-color: var(--border-light) !important;
+}
+body:not(.dark-mode) .table-striped tbody tr:nth-of-type(odd) {
+  background-color: rgba(252, 231, 243, 0.4) !important;
+}
+
+/* Buttons */
+body:not(.dark-mode) .btn-primary,
+body:not(.dark-mode) .btn-success {
+  background: linear-gradient(135deg, var(--pink), var(--pink-dark)) !important;
+  border-color: var(--pink-dark) !important;
+  color: #fff !important;
+  border-radius: 8px !important;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+body:not(.dark-mode) .btn-primary:hover,
+body:not(.dark-mode) .btn-success:hover {
+  box-shadow: 0 4px 14px var(--pink-glow) !important;
+  transform: translateY(-1px);
+}
+body:not(.dark-mode) .btn-secondary,
+body:not(.dark-mode) .btn-default {
+  background: #fff !important;
+  border: 1px solid var(--pink-light) !important;
+  color: var(--pink) !important;
+  border-radius: 8px !important;
+}
+body:not(.dark-mode) .btn-secondary:hover,
+body:not(.dark-mode) .btn-default:hover {
+  background: var(--pink-soft) !important;
+}
+
+/* Badges */
+body:not(.dark-mode) .badge-success {
+  background-color: #10b981 !important;
+}
+body:not(.dark-mode) .badge-warning {
+  background-color: #f59e0b !important;
+}
+body:not(.dark-mode) .badge-danger {
+  background-color: #ef4444 !important;
+}
+body:not(.dark-mode) .badge-info {
+  background-color: var(--pink) !important;
+}
+
+/* Breadcrumb */
+body:not(.dark-mode) .breadcrumb {
+  background-color: transparent !important;
+}
+body:not(.dark-mode) .breadcrumb-item a {
+  color: var(--pink) !important;
+}
+body:not(.dark-mode) .breadcrumb-item.active {
+  color: var(--text-light-muted) !important;
+}
+
+/* Content header */
+body:not(.dark-mode) .content-header h1 {
+  color: var(--pink-dark) !important;
+}
+
+/* Modals */
+body:not(.dark-mode) .modal-content {
+  background-color: #fff !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 14px !important;
+  color: var(--text-light-primary) !important;
+}
+body:not(.dark-mode) .modal-header {
+  background-color: var(--pink-soft) !important;
+  border-bottom: 1px solid var(--border-light) !important;
+  border-radius: 14px 14px 0 0 !important;
+}
+body:not(.dark-mode) .modal-title {
+  color: var(--pink-dark) !important;
+  font-family: 'Playfair Display', serif !important;
+}
+body:not(.dark-mode) .modal-footer {
+  background-color: var(--pink-soft) !important;
+  border-top: 1px solid var(--border-light) !important;
+  border-radius: 0 0 14px 14px !important;
+}
+
+/* Forms */
+body:not(.dark-mode) .form-control {
+  background-color: #fff !important;
+  border: 1px solid var(--pink-light) !important;
+  color: var(--text-light-primary) !important;
+  border-radius: 8px !important;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+body:not(.dark-mode) .form-control:focus {
+  border-color: var(--pink) !important;
+  box-shadow: 0 0 0 3px var(--pink-glow) !important;
+}
+body:not(.dark-mode) .form-control::placeholder {
+  color: var(--text-light-muted) !important;
+}
+body:not(.dark-mode) label {
+  color: var(--text-light-primary) !important;
+  font-weight: 500;
+}
+
+/* DataTables */
+body:not(.dark-mode) .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+body:not(.dark-mode) .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+  background: linear-gradient(135deg, var(--pink), var(--pink-dark)) !important;
+  border-color: var(--pink-dark) !important;
+  color: #fff !important;
+  border-radius: 6px !important;
+}
+body:not(.dark-mode) .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+  background: var(--pink-soft) !important;
+  color: var(--pink) !important;
+  border-color: var(--pink-light) !important;
+  border-radius: 6px !important;
+}
+body:not(.dark-mode) .dataTables_wrapper .dataTables_length select,
+body:not(.dark-mode) .dataTables_wrapper .dataTables_filter input {
+  border: 1px solid var(--pink-light) !important;
+  border-radius: 8px !important;
+  color: var(--text-light-primary) !important;
+  background: #fff !important;
+}
+/* Light mode table row backgrounds */
+body:not(.dark-mode) table.dataTable tbody tr {
+  background-color: #fff !important;
+}
+body:not(.dark-mode) table.dataTable.stripe tbody tr.odd,
+body:not(.dark-mode) table.dataTable.display tbody tr.odd {
+  background-color: rgba(252, 231, 243, 0.35) !important;
+}
+body:not(.dark-mode) table.dataTable tbody tr:hover,
+body:not(.dark-mode) table.dataTable tbody tr:hover td {
+  background-color: var(--pink-soft) !important;
+}
+
+/* Footer */
+body:not(.dark-mode) .main-footer {
+  background-color: var(--bg-light) !important;
+  border-top: 2px solid var(--pink-soft) !important;
+  color: var(--text-light-muted) !important;
+}
+
+/* Scrollbar */
+body:not(.dark-mode) ::-webkit-scrollbar-track { background: var(--bg-light-secondary); }
+body:not(.dark-mode) ::-webkit-scrollbar-thumb { background: var(--pink-light); border-radius: 4px; }
+body:not(.dark-mode) ::-webkit-scrollbar-thumb:hover { background: var(--pink); }
+
+/* Progress bars */
+body:not(.dark-mode) .progress-bar {
+  background: linear-gradient(90deg, var(--pink-light), var(--pink)) !important;
+}
+
+/* Dark mode toggle glow in light mode */
+body:not(.dark-mode) #darkModeToggle i {
+  color: var(--pink) !important;
+}
+
+/* ============================================================
+   DARK MODE  (.dark-mode class on body)
+   ============================================================ */
+
+body.dark-mode {
+  background-color: var(--bg-dark) !important;
+  color: var(--text-dark-primary) !important;
+}
+
+/* Navbar */
+body.dark-mode .main-header.navbar {
+  background-color: #111111 !important;
+  border-bottom: 1px solid #2a1a22 !important;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.5) !important;
+}
+body.dark-mode .main-header.navbar .nav-link {
+  color: var(--text-dark-primary) !important;
+}
+body.dark-mode .main-header.navbar .nav-link:hover {
+  color: var(--pink) !important;
+}
+
+/* Sidebar */
+body.dark-mode .main-sidebar,
+body.dark-mode .main-sidebar .sidebar {
+  background-color: #0d0d0d !important;
+  border-right: 1px solid #1f1f1f !important;
+}
+body.dark-mode .brand-link {
+  background-color: #0d0d0d !important;
+  border-bottom: 1px solid var(--pink-dark) !important;
+}
+body.dark-mode .brand-text {
+  color: var(--pink) !important;
+  letter-spacing: 0.08em;
+}
+body.dark-mode .sidebar .nav-sidebar .nav-link {
+  color: #cccccc !important;
+  border-radius: 8px;
+  margin: 2px 8px;
+  transition: all 0.25s ease;
+}
+body.dark-mode .sidebar .nav-sidebar .nav-link:hover {
+  background-color: #1e0e18 !important;
+  color: var(--pink-light) !important;
+}
+body.dark-mode .sidebar .nav-sidebar .nav-link.active {
+  background: linear-gradient(135deg, var(--pink-dark), var(--pink)) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 14px rgba(233, 30, 140, 0.35) !important;
+}
+body.dark-mode .sidebar .nav-sidebar .nav-icon {
+  color: var(--pink) !important;
+}
+body.dark-mode .sidebar .nav-sidebar .nav-link.active .nav-icon {
+  color: #fff !important;
+}
+body.dark-mode .user-panel {
+  border-bottom: 1px solid #2a1a22 !important;
+}
+body.dark-mode .user-panel .info a {
+  color: var(--text-dark-primary) !important;
+}
+
+/* Content wrapper */
+body.dark-mode .content-wrapper {
+  background-color: var(--bg-dark) !important;
+}
+
+/* Cards */
+body.dark-mode .card {
+  background-color: var(--bg-dark-card) !important;
+  border: 1px solid #2a1a22 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4) !important;
+  color: var(--text-dark-primary) !important;
+}
+body.dark-mode .card-header {
+  background-color: #1f0f18 !important;
+  border-bottom: 1px solid #3a1a28 !important;
+  border-radius: 12px 12px 0 0 !important;
+}
+body.dark-mode .card-title {
+  color: var(--pink-light) !important;
+}
+body.dark-mode .card-footer {
+  background-color: #1a0f15 !important;
+  border-top: 1px solid #2a1a22 !important;
+}
+body.dark-mode .card-footer a {
+  color: var(--pink-light) !important;
+  font-weight: 500;
+}
+body.dark-mode .card-body {
+  color: var(--text-dark-primary) !important;
+}
+
+/* Info boxes */
+body.dark-mode .info-box {
+  background: #1a1a1a !important;
+  border: 1px solid #2a1a22 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3) !important;
+  color: var(--text-dark-primary) !important;
+}
+body.dark-mode .info-box-text {
+  color: var(--text-dark-muted) !important;
+}
+body.dark-mode .info-box-number {
+  color: var(--text-dark-primary) !important;
+}
+
+/* Tables */
+body.dark-mode .table {
+  color: var(--text-dark-primary) !important;
+}
+body.dark-mode .table thead th {
+  background-color: #1f0f18 !important;
+  color: var(--pink-light) !important;
+  border-bottom: 2px solid #3a1a28 !important;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+body.dark-mode .table tbody tr,
+body.dark-mode .table tbody td {
+  background-color: #111111 !important;
+  color: var(--text-dark-primary) !important;
+}
+body.dark-mode .table tbody tr:hover,
+body.dark-mode .table tbody tr:hover td {
+  background-color: #2a0f1e !important;
+}
+body.dark-mode .table td,
+body.dark-mode .table th {
+  border-color: #2a1a22 !important;
+}
+/* Override Bootstrap/DataTables striped rows — must be dark not white */
+body.dark-mode .table-striped tbody tr:nth-of-type(odd),
+body.dark-mode .table-striped tbody tr:nth-of-type(odd) td {
+  background-color: #1a1a1a !important;
+}
+body.dark-mode .table-striped tbody tr:nth-of-type(even),
+body.dark-mode .table-striped tbody tr:nth-of-type(even) td {
+  background-color: #111111 !important;
+}
+/* DataTables row backgrounds (overrides AdminLTE defaults) */
+body.dark-mode table.dataTable tbody tr {
+  background-color: #111111 !important;
+}
+body.dark-mode table.dataTable.stripe tbody tr.odd,
+body.dark-mode table.dataTable.display tbody tr.odd {
+  background-color: #1a1a1a !important;
+}
+body.dark-mode table.dataTable tbody tr.odd td,
+body.dark-mode table.dataTable tbody tr.even td {
+  background-color: inherit !important;
+}
+body.dark-mode table.dataTable tbody tr:hover,
+body.dark-mode table.dataTable tbody tr:hover td {
+  background-color: #2a0f1e !important;
+}
+
+/* Buttons */
+body.dark-mode .btn-primary,
+body.dark-mode .btn-success {
+  background: linear-gradient(135deg, var(--pink), var(--pink-dark)) !important;
+  border-color: var(--pink-dark) !important;
+  color: #fff !important;
+  border-radius: 8px !important;
+  font-weight: 500;
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+body.dark-mode .btn-primary:hover,
+body.dark-mode .btn-success:hover {
+  box-shadow: 0 4px 18px rgba(233, 30, 140, 0.45) !important;
+  transform: translateY(-1px);
+}
+body.dark-mode .btn-secondary,
+body.dark-mode .btn-default {
+  background: #1a1a1a !important;
+  border: 1px solid #3a2a32 !important;
+  color: var(--pink-light) !important;
+  border-radius: 8px !important;
+}
+body.dark-mode .btn-secondary:hover,
+body.dark-mode .btn-default:hover {
+  background: #2a1a22 !important;
+  border-color: var(--pink) !important;
+}
+
+/* Badges */
+body.dark-mode .badge-success {
+  background-color: #059669 !important;
+}
+body.dark-mode .badge-warning {
+  background-color: #d97706 !important;
+}
+body.dark-mode .badge-danger {
+  background-color: #dc2626 !important;
+}
+body.dark-mode .badge-info {
+  background-color: var(--pink-dark) !important;
+}
+
+/* Breadcrumb */
+body.dark-mode .breadcrumb {
+  background-color: transparent !important;
+}
+body.dark-mode .breadcrumb-item a {
+  color: var(--pink-light) !important;
+}
+body.dark-mode .breadcrumb-item.active {
+  color: var(--text-dark-muted) !important;
+}
+
+/* Content header */
+body.dark-mode .content-header h1 {
+  color: var(--pink-light) !important;
+}
+
+/* Modals */
+body.dark-mode .modal-content {
+  background-color: #1a1a1a !important;
+  border: 1px solid #3a1a28 !important;
+  border-radius: 14px !important;
+  color: var(--text-dark-primary) !important;
+}
+body.dark-mode .modal-header {
+  background-color: #1f0f18 !important;
+  border-bottom: 1px solid #3a1a28 !important;
+  border-radius: 14px 14px 0 0 !important;
+}
+body.dark-mode .modal-title {
+  color: var(--pink-light) !important;
+  font-family: 'Playfair Display', serif !important;
+}
+body.dark-mode .modal-footer {
+  background-color: #1a0f15 !important;
+  border-top: 1px solid #3a1a28 !important;
+  border-radius: 0 0 14px 14px !important;
+}
+body.dark-mode .modal-body {
+  color: var(--text-dark-primary) !important;
+}
+body.dark-mode .close {
+  color: var(--text-dark-primary) !important;
+}
+
+/* Forms */
+body.dark-mode .form-control {
+  background-color: #0d0d0d !important;
+  border: 1px solid #3a2a32 !important;
+  color: var(--text-dark-primary) !important;
+  border-radius: 8px !important;
+}
+body.dark-mode .form-control:focus {
+  border-color: var(--pink) !important;
+  box-shadow: 0 0 0 3px rgba(233, 30, 140, 0.2) !important;
+  background-color: #0d0d0d !important;
+}
+body.dark-mode .form-control::placeholder {
+  color: var(--text-dark-muted) !important;
+}
+body.dark-mode label {
+  color: var(--text-dark-primary) !important;
+  font-weight: 400;
+}
+body.dark-mode select.form-control option {
+  background-color: #1a1a1a !important;
+  color: var(--text-dark-primary) !important;
+}
+
+/* DataTables */
+body.dark-mode .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+body.dark-mode .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+  background: linear-gradient(135deg, var(--pink-dark), var(--pink)) !important;
+  border-color: var(--pink) !important;
+  color: #fff !important;
+  border-radius: 6px !important;
+}
+body.dark-mode .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+  background: #2a1a22 !important;
+  color: var(--pink-light) !important;
+  border-color: var(--pink) !important;
+  border-radius: 6px !important;
+}
+body.dark-mode .dataTables_wrapper .dataTables_paginate .paginate_button {
+  color: var(--text-dark-primary) !important;
+}
+body.dark-mode .dataTables_wrapper .dataTables_length,
+body.dark-mode .dataTables_wrapper .dataTables_filter,
+body.dark-mode .dataTables_wrapper .dataTables_info,
+body.dark-mode .dataTables_wrapper .dataTables_processing {
+  color: var(--text-dark-muted) !important;
+}
+body.dark-mode .dataTables_wrapper .dataTables_length select,
+body.dark-mode .dataTables_wrapper .dataTables_filter input {
+  background-color: #0d0d0d !important;
+  border: 1px solid #3a2a32 !important;
+  color: var(--text-dark-primary) !important;
+  border-radius: 8px !important;
+}
+
+/* ── DataTables Buttons (Copy, CSV, Excel, PDF, Print, Column visibility) ── */
+/* DARK MODE */
+body.dark-mode .dt-buttons .btn,
+body.dark-mode .dt-buttons .dt-button,
+body.dark-mode .dt-button,
+body.dark-mode div.dt-buttons > a.dt-button,
+body.dark-mode div.dt-buttons > button.dt-button,
+body.dark-mode div.dt-buttons > div.dt-button-split > a.dt-button {
+  background: #1a1a1a !important;
+  background-image: none !important;
+  border: 1px solid #3a2a32 !important;
+  color: var(--pink-light) !important;
+  border-radius: 8px !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+  transition: background 0.2s, color 0.2s;
+}
+body.dark-mode .dt-buttons .btn:hover,
+body.dark-mode .dt-buttons .dt-button:hover,
+body.dark-mode .dt-button:hover {
+  background: #2a0f1e !important;
+  background-image: none !important;
+  border-color: var(--pink) !important;
+  color: #fff !important;
+}
+body.dark-mode .dt-buttons .dt-button.active,
+body.dark-mode .dt-button.active {
+  background: linear-gradient(135deg, var(--pink-dark), var(--pink)) !important;
+  border-color: var(--pink) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+/* Column visibility dropdown — dark mode */
+body.dark-mode div.dt-button-collection,
+body.dark-mode .dt-button-collection {
+  background-color: #1a1a1a !important;
+  border: 1px solid #3a2a32 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+  padding: 6px !important;
+}
+body.dark-mode div.dt-button-collection .dt-button,
+body.dark-mode .dt-button-collection a.dt-button,
+body.dark-mode .dt-button-collection button.dt-button {
+  background: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  border-radius: 6px !important;
+  color: var(--text-dark-primary) !important;
+  text-shadow: none !important;
+  padding: 6px 12px !important;
+  margin: 2px 0 !important;
+  display: block !important;
+  width: 100% !important;
+  text-align: left !important;
+}
+body.dark-mode div.dt-button-collection .dt-button:hover,
+body.dark-mode .dt-button-collection .dt-button:hover {
+  background: #2a0f1e !important;
+  color: var(--pink-light) !important;
+}
+body.dark-mode div.dt-button-collection .dt-button.active,
+body.dark-mode .dt-button-collection .dt-button.active {
+  background: linear-gradient(135deg, var(--pink-dark), var(--pink)) !important;
+  color: #fff !important;
+}
+
+/* LIGHT MODE — DataTables Buttons */
+body:not(.dark-mode) .dt-buttons .btn,
+body:not(.dark-mode) .dt-buttons .dt-button,
+body:not(.dark-mode) .dt-button,
+body:not(.dark-mode) div.dt-buttons > a.dt-button,
+body:not(.dark-mode) div.dt-buttons > button.dt-button {
+  background: #fff !important;
+  background-image: none !important;
+  border: 1px solid var(--pink-light) !important;
+  color: var(--pink) !important;
+  border-radius: 8px !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+body:not(.dark-mode) .dt-buttons .btn:hover,
+body:not(.dark-mode) .dt-buttons .dt-button:hover,
+body:not(.dark-mode) .dt-button:hover {
+  background: var(--pink-soft) !important;
+  background-image: none !important;
+  border-color: var(--pink) !important;
+  color: var(--pink-dark) !important;
+}
+body:not(.dark-mode) .dt-buttons .dt-button.active,
+body:not(.dark-mode) .dt-button.active {
+  background: linear-gradient(135deg, var(--pink), var(--pink-dark)) !important;
+  border-color: var(--pink-dark) !important;
+  color: #fff !important;
+}
+/* Column visibility dropdown — light mode */
+body:not(.dark-mode) div.dt-button-collection,
+body:not(.dark-mode) .dt-button-collection {
+  background-color: #fff !important;
+  border: 1px solid var(--border-light) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 24px var(--pink-glow) !important;
+  padding: 6px !important;
+}
+body:not(.dark-mode) div.dt-button-collection .dt-button,
+body:not(.dark-mode) .dt-button-collection a.dt-button,
+body:not(.dark-mode) .dt-button-collection button.dt-button {
+  background: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  border-radius: 6px !important;
+  color: var(--text-light-primary) !important;
+  text-shadow: none !important;
+  padding: 6px 12px !important;
+  margin: 2px 0 !important;
+  display: block !important;
+  width: 100% !important;
+  text-align: left !important;
+}
+body:not(.dark-mode) div.dt-button-collection .dt-button:hover,
+body:not(.dark-mode) .dt-button-collection .dt-button:hover {
+  background: var(--pink-soft) !important;
+  color: var(--pink) !important;
+}
+body:not(.dark-mode) div.dt-button-collection .dt-button.active,
+body:not(.dark-mode) .dt-button-collection .dt-button.active {
+  background: linear-gradient(135deg, var(--pink), var(--pink-dark)) !important;
+  color: #fff !important;
+}
+
+/* Footer */
+body.dark-mode .main-footer {
+  background-color: #0d0d0d !important;
+  border-top: 1px solid #2a1a22 !important;
+  color: var(--text-dark-muted) !important;
+}
+
+/* Scrollbar */
+body.dark-mode ::-webkit-scrollbar { width: 6px; }
+body.dark-mode ::-webkit-scrollbar-track { background: #0d0d0d; }
+body.dark-mode ::-webkit-scrollbar-thumb { background: #3a1a28; border-radius: 4px; }
+body.dark-mode ::-webkit-scrollbar-thumb:hover { background: var(--pink); }
+
+/* Progress bars */
+body.dark-mode .progress {
+  background-color: #2a2a2a !important;
+}
+body.dark-mode .progress-bar {
+  background: linear-gradient(90deg, var(--pink-dark), var(--pink)) !important;
+}
+
+/* dark mode toggle glow */
+body.dark-mode #darkModeToggle i {
+  color: var(--pink-light) !important;
+}
+body.dark-mode #darkModeToggle.clicked {
+  box-shadow: 0 0 20px rgba(233, 30, 140, 0.5) !important;
+}
+
+/* ── Shared polish for both modes ─────────────────────────── */
+
+/* Smooth transitions everywhere */
+body,
+.main-header.navbar,
+.main-sidebar,
+.content-wrapper,
+.card,
+.info-box,
+.modal-content,
+.form-control,
+.btn,
+.nav-link,
+.table,
+.main-footer {
+  transition:
+    background-color 0.4s ease,
+    color 0.4s ease,
+    border-color 0.4s ease,
+    box-shadow 0.4s ease !important;
+}
+
+/* Info box icon containers keep vivid colours */
+.info-box-icon {
+  border-radius: 0 !important;
+}
+
+/* Card radius uniformity */
+.card {
+  overflow: hidden;
+}
+
+/* Active nav-link indicator stripe */
+.sidebar .nav-link.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: rgba(255,255,255,0.7);
+  border-radius: 0 3px 3px 0;
+}
+.sidebar .nav-link {
+  position: relative;
+}
