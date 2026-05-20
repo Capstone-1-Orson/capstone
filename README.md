@@ -1,1 +1,23 @@
-# capstone
+# OPERLYTICS — Empress' Café Admin System
+
+## Introduction
+
+In any café, smooth daily operations depend on more than just good food and service. Behind every order taken, every ingredient restocked, and every staff member scheduled, there is a need for a reliable system that keeps everything organized and visible. OPERLYTICS was built to meet that need for Empress' Café. It is a web-based administration and point-of-sale management system that gives café administrators a clear, real-time picture of the entire operation — from the moment an order is placed to the tracking of monthly revenue trends. Developed using PHP, MySQL, and AdminLTE, the system centralizes every critical function of the café into a single, secure dashboard that only authorized administrators can access.
+
+## Purpose
+
+The primary purpose of OPERLYTICS is to eliminate the guesswork from café management. Instead of relying on manual tallies or disconnected spreadsheets, administrators can open the dashboard and immediately see how the café is performing at any given moment. Daily customer counts, total revenue, the number of orders placed today, and the current size of the staff are all displayed as live figures that update automatically through a technology called Server-Sent Events, which allows the server to push new data to the browser without requiring the page to be refreshed. Beyond the numbers, the system also alerts administrators to problems before they become serious — a scrolling ticker at the top of the screen highlights any ingredients that have already expired or are approaching their expiry date within the next thirty days, giving the team time to act.
+
+## Core Features
+
+OPERLYTICS is organized into several modules, each responsible for a distinct area of café management. The inventory module allows administrators to maintain a complete list of ingredients, tracking not only how much of each item is in stock but also when it is expected to expire and at what quantity level it should be flagged as running low. The menu management module gives administrators control over what Empress' Café offers to its customers, allowing them to add new items, update prices, upload photos, and toggle the availability of any dish or drink at any time. The staff management module keeps a record of all employees, supports role assignment between administrators and regular staff, and ensures that every form submission is protected against unauthorized tampering through security tokens.
+
+Sales and reporting are handled by two dedicated modules. The sales and revenue module maintains a detailed ledger of every completed transaction, broken down to the individual item level, while the reports module presents this data in a filterable, real-time view that can be narrowed by day, week, month, or any custom date range the administrator chooses. When a transaction needs to be reversed, the void and refund module handles the process cleanly — whether the reversal is a full void, a complete refund, or only a partial one — and ensures that reversed transactions are automatically removed from all revenue figures across the entire system. A suppliers module rounds out the operational side by maintaining a directory of the café's ingredient suppliers along with their contact information. Finally, the settings module gives administrators the ability to generate a full backup of the database with a single click and to review a running log of recent actions taken within the system.
+
+## Security and Reliability
+
+Security was a foundational concern in the design of OPERLYTICS. Every page in the admin panel checks that the currently logged-in user holds the administrator role before displaying any content, and anyone who does not meet that requirement is immediately redirected to a lock screen. Real-time data endpoints are similarly protected, returning an access-denied response to any request that arrives without a valid session. Forms that modify sensitive records, such as staff accounts, are shielded by tokens that prevent cross-site request forgery attacks. All data displayed to users is sanitized to block script injection, and database queries that involve user input are written as prepared statements to prevent SQL injection.
+
+## Conclusion
+
+OPERLYTICS represents a complete solution for the administrative needs of Empress' Café. By bringing inventory tracking, menu management, sales reporting, staff oversight, and financial controls together under one roof, it allows the people running the café to spend less time chasing information and more time focused on delivering a great experience to their customers. The system is built to be fast, secure, and always current — a dependable backbone for everything that happens behind the counter.
