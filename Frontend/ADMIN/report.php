@@ -33,7 +33,26 @@ if (isset($_GET['sse'])) {
                                 'total_amt'=>(float)$row['total_amt'],'created_at'=>$row['created_at']];
     }
 
-    // Recent orders for table (last 50)
+    // Recent orders for table — respect the same date range as the page
+    $sse_drpPresets = ['today'=>0,'7days'=>7,'30days'=>30,'3months'=>90,'12months'=>365,'mtd'=>-1,'ytd'=>-1,'alltime'=>-1,'custom'=>-1];
+    $sse_range = (isset($_GET['range']) && array_key_exists($_GET['range'], $sse_drpPresets)) ? $_GET['range'] : 'alltime';
+    if ($sse_range === 'today') {
+        $sse_dfO = "DATE(o.created_at)=CURDATE()";
+    } elseif ($sse_range === 'custom') {
+        $sse_from = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_from']??'') ? $_GET['date_from'] : date('Y-m-d', strtotime('-7 days'));
+        $sse_to   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_to']??'')   ? $_GET['date_to']   : date('Y-m-d');
+        $sse_dfO  = "DATE(o.created_at) BETWEEN '$sse_from' AND '$sse_to'";
+    } elseif ($sse_range === 'mtd') {
+        $sse_dfO = "YEAR(o.created_at)=YEAR(CURDATE()) AND MONTH(o.created_at)=MONTH(CURDATE())";
+    } elseif ($sse_range === 'ytd') {
+        $sse_dfO = "YEAR(o.created_at)=YEAR(CURDATE())";
+    } elseif ($sse_range === 'alltime') {
+        $sse_dfO = "1=1";
+    } else {
+        $sse_days = (int)$sse_drpPresets[$sse_range];
+        $sse_dfO  = "o.created_at >= DATE_SUB(CURDATE(), INTERVAL $sse_days DAY)";
+    }
+
     $recent = [];
     $hasOI  = $conn->query("SHOW TABLES LIKE 'order_items'")->num_rows > 0;
     if ($hasOI) {
@@ -43,11 +62,26 @@ if (isset($_GET['sse'])) {
                     COALESCE(o.discount_type,'') AS discount_type,
                     COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
                     GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
-                    SUM(oi.qty) AS total_qty
+                    SUM(oi.qty) AS total_qty,
+                    GROUP_CONCAT(
+                        CONCAT(
+                            m.name,'|',oi.qty,'|',
+                            COALESCE(oi.addons,''),'|',
+                            CASE
+                                WHEN oi.removed_ingredient_names IS NOT NULL
+                                     AND oi.removed_ingredient_names != '[]'
+                                     AND oi.removed_ingredient_names != ''
+                                THEN oi.removed_ingredient_names
+                                ELSE ''
+                            END
+                        )
+                        ORDER BY m.name SEPARATOR ';;'
+                    ) AS item_details
              FROM orders o
              LEFT JOIN user u ON u.id = o.user_id
              JOIN order_items oi ON oi.order_id = o.id
              JOIN menu m ON m.id = oi.menu_id
+             WHERE $sse_dfO
              GROUP BY o.id ORDER BY o.created_at DESC LIMIT 50"
         );
         if ($r) while ($row=$r->fetch_assoc()) $recent[] = $row;
@@ -143,132 +177,17 @@ if ($hasOrderItems) {
     }
 }
 
-// ── Sales Chart — dynamic, respects date range ────────────────
-// Use monthly grouping for wide ranges, daily for narrow ones
+// ── Sales Chart (last 7 days) ─────────────────────────────────
 $chartLabels = [];
 $chartData   = [];
-
-if (in_array($selectedRange, ['3months','12months','mtd','ytd','alltime'])) {
-    // ── Monthly grouping ──────────────────────────────────────
-    if ($selectedRange === '3months') {
-        $monthCount = 3;
-    } elseif ($selectedRange === '12months') {
-        $monthCount = 12;
-    } elseif ($selectedRange === 'mtd') {
-        $monthCount = 1;
-    } elseif ($selectedRange === 'ytd') {
-        $monthCount = (int)date('n'); // months elapsed this year
-    } else {
-        // alltime — show last 12 months as a sensible default
-        $monthCount = 12;
-    }
-    $monthSlots = [];
-    for ($i = $monthCount - 1; $i >= 0; $i--) {
-        $key              = date('Y-m', strtotime("-$i months"));
-        $monthSlots[$key] = 0.0;
-        $chartLabels[]    = date('M Y', strtotime("-$i months"));
-    }
-    $mStmt = $conn->prepare(
-        "SELECT DATE_FORMAT(created_at,'%Y-%m') AS ym,
-                COALESCE(SUM(total_amt),0) AS rev
-         FROM orders
-         WHERE created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL " . ($monthCount - 1) . " MONTH),'%Y-%m-01')
-           AND $VALID
-         GROUP BY ym"
-    );
-    $mStmt->execute();
-    $mRes = $mStmt->get_result();
-    while ($row = $mRes->fetch_assoc()) {
-        if (isset($monthSlots[$row['ym']])) {
-            $monthSlots[$row['ym']] = (float)$row['rev'];
-        }
-    }
-    $mStmt->close();
-    $chartData = array_values($monthSlots);
-
-} elseif ($selectedRange === 'custom' && $dateFrom && $dateTo) {
-    // ── Custom range — daily if ≤ 60 days, monthly otherwise ──
-    $diffDays = (int)((strtotime($dateTo) - strtotime($dateFrom)) / 86400) + 1;
-    if ($diffDays <= 60) {
-        $daySlots = [];
-        for ($i = 0; $i < $diffDays; $i++) {
-            $key           = date('Y-m-d', strtotime($dateFrom) + $i * 86400);
-            $daySlots[$key] = 0.0;
-            $chartLabels[]  = date('M d', strtotime($dateFrom) + $i * 86400);
-        }
-        $cStmt = $conn->prepare(
-            "SELECT DATE(created_at) AS d, COALESCE(SUM(total_amt),0) AS rev
-             FROM orders
-             WHERE DATE(created_at) BETWEEN ? AND ?
-               AND $VALID
-             GROUP BY d"
-        );
-        $cStmt->bind_param('ss', $dateFrom, $dateTo);
-        $cStmt->execute();
-        $cRes = $cStmt->get_result();
-        while ($row = $cRes->fetch_assoc()) {
-            if (isset($daySlots[$row['d']])) $daySlots[$row['d']] = (float)$row['rev'];
-        }
-        $cStmt->close();
-        $chartData = array_values($daySlots);
-    } else {
-        // Monthly grouping for long custom ranges
-        $start = new DateTime($dateFrom);
-        $end   = new DateTime($dateTo);
-        $start->modify('first day of this month');
-        $monthSlots = [];
-        $cur = clone $start;
-        while ($cur <= $end) {
-            $key              = $cur->format('Y-m');
-            $monthSlots[$key] = 0.0;
-            $chartLabels[]    = $cur->format('M Y');
-            $cur->modify('+1 month');
-        }
-        $cStmt = $conn->prepare(
-            "SELECT DATE_FORMAT(created_at,'%Y-%m') AS ym, COALESCE(SUM(total_amt),0) AS rev
-             FROM orders
-             WHERE DATE(created_at) BETWEEN ? AND ?
-               AND $VALID
-             GROUP BY ym"
-        );
-        $cStmt->bind_param('ss', $dateFrom, $dateTo);
-        $cStmt->execute();
-        $cRes = $cStmt->get_result();
-        while ($row = $cRes->fetch_assoc()) {
-            if (isset($monthSlots[$row['ym']])) $monthSlots[$row['ym']] = (float)$row['rev'];
-        }
-        $cStmt->close();
-        $chartData = array_values($monthSlots);
-    }
-
-} else {
-    // ── today / 7days / 30days — daily grouping ───────────────
-    $days = match($selectedRange) {
-        'today'   => 1,
-        '7days'   => 7,
-        '30days'  => 30,
-        default   => 7,
-    };
-    $daySlots = [];
-    for ($i = $days - 1; $i >= 0; $i--) {
-        $key           = date('Y-m-d', strtotime("-$i days"));
-        $daySlots[$key] = 0.0;
-        $chartLabels[]  = $days === 1 ? 'Today' : date('M d', strtotime("-$i days"));
-    }
-    $dStmt = $conn->prepare(
-        "SELECT DATE(created_at) AS d, COALESCE(SUM(total_amt),0) AS rev
-         FROM orders
-         WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL " . ($days - 1) . " DAY)
-           AND $VALID
-         GROUP BY d"
-    );
-    $dStmt->execute();
-    $dRes = $dStmt->get_result();
-    while ($row = $dRes->fetch_assoc()) {
-        if (isset($daySlots[$row['d']])) $daySlots[$row['d']] = (float)$row['rev'];
-    }
-    $dStmt->close();
-    $chartData = array_values($daySlots);
+for ($i = 6; $i >= 0; $i--) {
+    $date = date('Y-m-d', strtotime("-$i days"));
+    $chartLabels[] = date('M d', strtotime("-$i days"));
+    $stmt = $conn->prepare("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at) = ? AND $VALID");
+    $stmt->bind_param('s', $date);
+    $stmt->execute();
+    $chartData[] = (float)$stmt->get_result()->fetch_assoc()['rev'];
+    $stmt->close();
 }
 
 // ── Inventory ─────────────────────────────────────────────────
@@ -314,6 +233,7 @@ if ($hasOrderItems) {
          JOIN menu m ON m.id = oi.menu_id
          WHERE $dfO
          GROUP BY o.id ORDER BY o.created_at DESC LIMIT 500"
+
     );
     if ($res5) while ($row = $res5->fetch_assoc()) $orderRows[] = $row;
 } else {
@@ -341,6 +261,63 @@ if ($hasOrderItems) {
          GROUP BY m.category ORDER BY revenue DESC"
     );
     if ($res6) while ($row = $res6->fetch_assoc()) $catSales[] = $row;
+}
+
+// ── Top Selling Items (for table + real-time polling) ─────────
+$topItems   = [];
+$tableItems = [];
+if ($hasOrderItems) {
+    $r4 = $conn->query(
+        "SELECT m.name, m.category, m.price,
+                SUM(oi.qty) AS qty_sold,
+                SUM(oi.qty * oi.unit_price) AS revenue
+         FROM order_items oi
+         JOIN menu m ON m.id = oi.menu_id
+         JOIN orders o ON o.id = oi.order_id
+         WHERE $VALID AND $dfO
+         GROUP BY oi.menu_id
+         ORDER BY qty_sold DESC
+         LIMIT 10"
+    );
+    if ($r4) while ($row = $r4->fetch_assoc()) {
+        $topItems[]   = $row;
+        $tableItems[] = $row;
+    }
+}
+
+// ── AJAX: real-time inventory endpoint ───────────────────────
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'inventory') {
+    $invRows = [];
+    $rInv = $conn->query("SELECT name, unit, stock_qty, low_stock_threshold FROM ingredients ORDER BY name");
+    if ($rInv) while ($row = $rInv->fetch_assoc()) $invRows[] = $row;
+    $conn->close();
+    header('Content-Type: application/json');
+    echo json_encode(['rows' => $invRows]);
+    exit();
+}
+
+// ── AJAX: real-time top items endpoint ───────────────────────
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'topitems') {
+    $ajaxItems = [];
+    if ($hasOrderItems) {
+        $rAjax = $conn->query(
+            "SELECT m.name, m.category, m.price,
+                    SUM(oi.qty) AS qty_sold,
+                    SUM(oi.qty * oi.unit_price) AS revenue
+             FROM order_items oi
+             JOIN menu m ON m.id = oi.menu_id
+             JOIN orders o ON o.id = oi.order_id
+             WHERE $VALID AND $dfO
+             GROUP BY oi.menu_id
+             ORDER BY qty_sold DESC
+             LIMIT 10"
+        );
+        if ($rAjax) while ($row = $rAjax->fetch_assoc()) $ajaxItems[] = $row;
+    }
+    $conn->close();
+    header('Content-Type: application/json');
+    echo json_encode(['items' => $ajaxItems]);
+    exit();
 }
 
 $conn->close();
@@ -387,7 +364,23 @@ $chartDataJson   = json_encode($chartData);
       border-color: #dee2e6 !important;
     }
 
-    /* ══════════════════════════════════════════════════════
+    /* Order Report — Items Ordered, Add-ons, Removed Ingredients wrap */
+    #orderReportTable td.dt-wrap,
+    #orderReportTable th.dt-wrap {
+      white-space: normal !important;
+      overflow-wrap: break-word !important;
+      word-break: normal !important;
+      overflow: visible !important;
+      text-overflow: unset !important;
+      vertical-align: top;
+      line-height: 1.55;
+      max-width: 220px;
+      min-width: 130px;
+      padding-top: 8px;
+      font-size: 12px;
+    }
+
+
        GLOBAL FIXES — icon animations removed + mobile scrollbar
        ══════════════════════════════════════════════════════ */
 
@@ -441,6 +434,28 @@ $chartDataJson   = json_encode($chartData);
     .table td.desc-col {
       max-width: 280px;
     }
+
+    /* Items Ordered (col 6), Add-ons (col 7), Removed (col 8) — wrap, align top */
+    #example2 td:nth-child(6),
+    #example2 td:nth-child(7),
+    #example2 td:nth-child(8) {
+      white-space: normal !important;
+      overflow-wrap: break-word !important;
+      word-break: normal !important;
+      overflow: visible !important;
+      text-overflow: unset !important;
+      vertical-align: top;
+      line-height: 1.55;
+    }
+    #example2 td:nth-child(6) { max-width: 220px; min-width: 130px; }
+    #example2 td:nth-child(7),
+    #example2 td:nth-child(8) { max-width: 220px; min-width: 130px; font-size: 12px; }
+
+    /* All other #example2 cells — align top too for consistency in tall rows */
+    #example2 td { vertical-align: middle; }
+    #example2 td:nth-child(6),
+    #example2 td:nth-child(7),
+    #example2 td:nth-child(8) { vertical-align: top; padding-top: 8px; }
 
     /* 3. Pagination scrolls on small screens */
     .dataTables_wrapper .dataTables_paginate {
@@ -717,23 +732,7 @@ $chartDataJson   = json_encode($chartData);
         <!-- ── Sales Chart ───────────────────────────────── -->
         <div class="card mb-3">
           <div class="card-header">
-            <h3 class="card-title"><i class="fas fa-chart-bar mr-2"></i>Sales Overview &mdash; <?php
-              $chartTitleMap = [
-                'today'    => 'Today',
-                '7days'    => 'Last 7 Days',
-                '30days'   => 'Last 30 Days',
-                '3months'  => 'Last 3 Months',
-                '12months' => 'Last 12 Months',
-                'mtd'      => 'Month to Date',
-                'ytd'      => 'Year to Date',
-                'alltime'  => 'Last 12 Months',
-              ];
-              if ($selectedRange === 'custom' && $dateFrom && $dateTo) {
-                  echo date('M d, Y', strtotime($dateFrom)) . ' – ' . date('M d, Y', strtotime($dateTo));
-              } else {
-                  echo $chartTitleMap[$selectedRange] ?? 'All Time';
-              }
-            ?></h3>
+            <h3 class="card-title"><i class="fas fa-chart-bar mr-2"></i>Sales Overview &mdash; Last 7 Days</h3>
           </div>
           <div class="card-body">
             <canvas id="salesChart" height="80"></canvas>
@@ -757,52 +756,20 @@ $chartDataJson   = json_encode($chartData);
             </div>
           </div>
         </div>
-        <?php endif; ?>
-
-        <!-- ── Inventory Report ──────────────────────────── -->
+        <?php endif; ?>  
+        
+        
+        <!-- ── Order Report ──────────────────────────────────── -->
         <div class="card mb-3">
-          <div class="card-header">
-            <h3 class="card-title"><i class="fas fa-boxes mr-2"></i>Inventory Report</h3>
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <h3 class="card-title">
+              <i class="fas fa-receipt mr-2"></i>Order Report
+              <span class="order-rt-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;vertical-align:middle;margin-left:6px;" title="Live — connected"></span>
+            </h3>
+            <small class="text-muted" id="orderReportLastUpdated" style="font-size:11px;"></small>
           </div>
           <div class="card-body">
-            <table id="example1" class="table table-bordered table-striped">
-              <thead>
-                <tr>
-                  <th>Ingredient</th>
-                  <th>Unit</th>
-                  <th>Stock Qty</th>
-                  <th>Low Stock Threshold</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                <?php foreach ($inventoryRows as $inv):
-                  $qty = (float)$inv['stock_qty'];
-                  $thr = (float)$inv['low_stock_threshold'];
-                  if ($qty <= 0)        $badge = '<span class="badge badge-danger">Out of Stock</span>';
-                  elseif ($qty <= $thr) $badge = '<span class="badge badge-warning">Low Stock</span>';
-                  else                  $badge = '<span class="badge badge-success">In Stock</span>';
-                ?>
-                <tr>
-                  <td><?= htmlspecialchars($inv['name']) ?></td>
-                  <td><?= htmlspecialchars($inv['unit']) ?></td>
-                  <td><?= number_format($qty, 0) ?></td>
-                  <td><?= number_format($thr, 0) ?></td>
-                  <td><?= $badge ?></td>
-                </tr>
-                <?php endforeach; ?>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- ── Order Report ──────────────────────────────── -->
-        <div class="card mb-3">
-          <div class="card-header">
-            <h3 class="card-title"><i class="fas fa-receipt mr-2"></i>Order Report&nbsp;<span class="rt-live-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;vertical-align:middle;margin-left:4px;" title="Live"></span></h3>
-          </div>
-          <div class="card-body">
-            <table id="example2" class="table table-bordered table-striped">
+            <table id="orderReportTable" class="table table-bordered table-striped table-hover">
               <thead>
                 <tr>
                   <th>Order ID</th>
@@ -810,81 +777,183 @@ $chartDataJson   = json_encode($chartData);
                   <th>Number</th>
                   <th>Status</th>
                   <th>Cashier</th>
-                  <th>Items Ordered</th>
-                  <th>Add-ons</th>
-                  <th>Removed Ingredients</th>
+                  <th class="dt-wrap">Items Ordered</th>
+                  <th class="dt-wrap">Add-ons</th>
+                  <th class="dt-wrap">Removed Ingredients</th>
                   <th>Total Qty</th>
                   <th>Discount</th>
                   <th>Total (&#8369;)</th>
                 </tr>
               </thead>
-              <tbody id="orderReportTbody" data-rt-container="reportOrders">
-                <?php foreach ($orderRows as $ord):
-                  $st = $ord['status'] ?? 'Done';
-                  if ($st === 'voided')          { $badge = '<span class="badge badge-danger">Voided</span>';          $rowClass = 'table-danger'; }
-                  elseif ($st === 'refunded')     { $badge = '<span class="badge badge-info">Refunded</span>';          $rowClass = 'table-info'; }
-                  elseif ($st === 'partial_refund'){ $badge = '<span class="badge badge-warning">Partial Refund</span>';$rowClass = 'table-warning'; }
-                  else                            { $badge = '<span class="badge badge-success">'.htmlspecialchars($st).'</span>'; $rowClass = ''; }
+              <tbody id="orderReportTbody">
+                <?php if (!empty($orderRows)): ?>
+                  <?php foreach ($orderRows as $ord): ?>
+                  <?php
+                    // Status badge
+                    $st = strtolower($ord['status'] ?? '');
+                    if ($st === 'completed' || $st === 'paid')      $badge = '<span class="badge badge-success">'.htmlspecialchars($ord['status']).'</span>';
+                    elseif ($st === 'voided')                       $badge = '<span class="badge badge-danger">Voided</span>';
+                    elseif ($st === 'refunded')                     $badge = '<span class="badge badge-warning">Refunded</span>';
+                    elseif ($st === 'partial_refund')               $badge = '<span class="badge badge-info">Partial Refund</span>';
+                    elseif ($st === 'pending')                      $badge = '<span class="badge badge-secondary">Pending</span>';
+                    else                                            $badge = '<span class="badge badge-secondary">'.htmlspecialchars($ord['status']).'</span>';
 
-                  // Parse item_details: "name|qty|addons|removed_json;;..."
-                  $allAddons   = [];
-                  $allRemoved  = [];
-                  if (!empty($ord['item_details'])) {
-                      foreach (explode(';;', $ord['item_details']) as $seg) {
-                          $parts    = explode('|', $seg, 4);
-                          $itemName = $parts[0] ?? '';
-                          $addons   = trim($parts[2] ?? '');
-                          $rawRem   = trim($parts[3] ?? '');
-                          // Decode JSON array of names e.g. ["Cheese Powder","Onion"]
-                          $removed  = '';
-                          if ($rawRem !== '' && $rawRem !== '[]') {
-                              $arr = json_decode($rawRem, true);
-                              if (is_array($arr) && count($arr) > 0) {
-                                  $removed = implode(', ', array_filter($arr));
-                              } elseif (!is_array($arr) && $rawRem !== '') {
-                                  $removed = $rawRem; // plain string fallback
-                              }
-                          }
-                          if ($addons)  $allAddons[]  = htmlspecialchars($itemName) . ': ' . htmlspecialchars($addons);
-                          if ($removed) $allRemoved[] = htmlspecialchars($itemName) . ': No ' . htmlspecialchars($removed);
-                      }
-                  }
-                  $addonsCell  = !empty($allAddons)  ? implode('<br>', $allAddons)  : '<span class="text-muted">—</span>';
-                  $removedCell = !empty($allRemoved) ? implode('<br>', $allRemoved) : '<span class="text-muted">—</span>';
-                ?>
-                <tr class="<?= $rowClass ?>" data-order-id="<?= (int)$ord['order_id'] ?>">
-                  <td><strong>#<?= (int)$ord['order_id'] ?></strong></td>
-                  <td><?= htmlspecialchars($ord['created_at']) ?></td>
-                  <td><?= htmlspecialchars($ord['table_no']) ?></td>
-                  <td><?= $badge ?></td>
-                  <td><?= htmlspecialchars($ord['cashier_name']) ?></td>
-                  <td><?= htmlspecialchars($ord['items']) ?></td>
-                  <td style="font-size:12px;"><?= $addonsCell ?></td>
-                  <td style="font-size:12px;"><?= $removedCell ?></td>
-                  <td><?= (int)$ord['total_qty'] ?></td>
-                  <td>
-                    <?php if ((float)$ord['discount_amt'] > 0): ?>
-                      <span class="badge badge-success" style="font-size:11px;">
-                        <?= $ord['discount_type'] === 'senior' ? 'Senior 20%' : ($ord['discount_type'] === 'pwd' ? 'PWD 20%' : 'Discount') ?>
-                      </span><br>
-                      <span class="text-danger font-weight-bold">-&#8369;<?= number_format((float)$ord['discount_amt'], 2) ?></span>
-                    <?php else: ?>
-                      <span class="text-muted">—</span>
-                    <?php endif; ?>
-                  </td>
-                  <td><?php if (in_array($st, ['voided','refunded','partial_refund'])): ?>
-                    <s class="text-muted">&#8369;<?= number_format((float)$ord['total_amt'], 2) ?></s>
-                  <?php else: ?>
-                    &#8369;<?= number_format((float)$ord['total_amt'], 2) ?>
-                  <?php endif; ?></td>
-                </tr>
-                <?php endforeach; ?>
+                    // Parse item_details: name|qty|addons|removed ;; name|qty|addons|removed
+                    $allItems   = [];
+                    $allAddons  = [];
+                    $allRemoved = [];
+                    if (!empty($ord['item_details'])) {
+                        foreach (explode(';;', $ord['item_details']) as $detail) {
+                            $parts = explode('|', $detail, 4);
+                            $iName = trim($parts[0] ?? '');
+                            $iQty  = trim($parts[1] ?? '');
+                            $iAdd  = trim($parts[2] ?? '');
+                            $iRem  = trim($parts[3] ?? '');
+                            if ($iName !== '') {
+                                $allItems[] = htmlspecialchars($iQty ? "$iName x$iQty" : $iName);
+                            }
+                            if ($iAdd !== '') {
+                                $decoded = json_decode($iAdd, true);
+                                if (is_array($decoded)) foreach ($decoded as $a) $allAddons[] = htmlspecialchars($a);
+                                elseif ($iAdd !== '[]') $allAddons[] = htmlspecialchars($iAdd);
+                            }
+                            if ($iRem !== '') {
+                                $decoded = json_decode($iRem, true);
+                                if (is_array($decoded)) foreach ($decoded as $r) $allRemoved[] = htmlspecialchars($r);
+                                elseif ($iRem !== '[]') $allRemoved[] = htmlspecialchars($iRem);
+                            }
+                        }
+                    }
+                    $itemsHtml   = !empty($allItems)   ? implode('<br>', $allItems)   : '—';
+                    $addonsHtml  = !empty($allAddons)  ? '<span style="font-size:12px;">'.implode('<br>', $allAddons).'</span>'  : '<span class="text-muted">—</span>';
+                    $removedHtml = !empty($allRemoved) ? '<span style="font-size:12px;">'.implode('<br>', $allRemoved).'</span>' : '<span class="text-muted">—</span>';
+
+                    // Discount
+                    $discAmt  = (float)($ord['discount_amt'] ?? 0);
+                    $discType = $ord['discount_type'] ?? '';
+                    if ($discAmt > 0) {
+                        $discLabel = $discType ? htmlspecialchars(ucfirst($discType)) : 'Discount';
+                        $discount  = '<span class="text-danger">-&#8369;'.number_format($discAmt,2).'<br><small>'.$discLabel.'</small></span>';
+                    } else {
+                        $discount = '<span class="text-muted">—</span>';
+                    }
+                  ?>
+                  <tr>
+                    <td><strong>#<?= (int)$ord['order_id'] ?></strong></td>
+                    <td><?= htmlspecialchars(date('M d, Y h:i A', strtotime($ord['created_at']))) ?></td>
+                    <td><?= htmlspecialchars($ord['table_no'] ?? '—') ?></td>
+                    <td><?= $badge ?></td>
+                    <td><?= htmlspecialchars($ord['cashier_name'] ?? 'N/A') ?></td>
+                    <td class="dt-wrap"><?= $itemsHtml ?></td>
+                    <td class="dt-wrap"><?= $addonsHtml ?></td>
+                    <td class="dt-wrap"><?= $removedHtml ?></td>
+                    <td><?= (int)($ord['total_qty'] ?? 0) ?></td>
+                    <td><?= $discount ?></td>
+                    <td><strong>&#8369;<?= number_format((float)$ord['total_amt'], 2) ?></strong></td>
+                  </tr>
+                  <?php endforeach; ?>
+                <?php else: ?>
+                  <tr><td colspan="11" class="text-center text-muted">No order data found.</td></tr>
+                <?php endif; ?>
               </tbody>
             </table>
           </div>
         </div>
 
-      </div>
+        <!-- ── Top Selling Items ─────────────────────────────── -->
+        <div class="card mb-3">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <h3 class="card-title">
+              <i class="fas fa-star mr-2"></i>Top Selling Items
+              <span class="top-items-live-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;vertical-align:middle;margin-left:6px;" title="Live — updating"></span>
+            </h3>
+            <small class="text-muted" id="topItemsLastUpdated" style="font-size:11px;"></small>
+          </div>
+          <div class="card-body">
+            <table id="topItemsTable" class="table table-bordered table-striped">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Item</th>
+                  <th>Category</th>
+                  <th>Unit Price (&#8369;)</th>
+                  <th>Qty Sold</th>
+                  <th>Revenue (&#8369;)</th>
+                </tr>
+              </thead>
+              <tbody id="topItemsTbody">
+                <?php if (!empty($tableItems)): ?>
+                  <?php foreach ($tableItems as $tiIdx => $ti): ?>
+                  <tr data-item-name="<?= htmlspecialchars($ti['name'], ENT_QUOTES) ?>" data-item-qty="<?= (int)$ti['qty_sold'] ?>">
+                    <td><?php
+                      $rank = $tiIdx + 1;
+                      if ($rank === 1)      echo '<span class="badge" style="background:#f4c542;color:#333;">🥇 1</span>';
+                      elseif ($rank === 2)  echo '<span class="badge" style="background:#b0b8c1;color:#fff;">🥈 2</span>';
+                      elseif ($rank === 3)  echo '<span class="badge" style="background:#cd7f32;color:#fff;">🥉 3</span>';
+                      else                 echo '<span class="badge badge-secondary">'.$rank.'</span>';
+                    ?></td>
+                    <td><?= htmlspecialchars($ti['name']) ?></td>
+                    <td><?= htmlspecialchars($ti['category']) ?></td>
+                    <td><?= number_format((float)$ti['price'], 2) ?></td>
+                    <td class="qty-cell"><strong><?= (int)$ti['qty_sold'] ?></strong></td>
+                    <td>&#8369;<?= number_format((float)$ti['revenue'], 2) ?></td>
+                  </tr>
+                  <?php endforeach; ?>
+                <?php else: ?>
+                  <tr><td colspan="6" class="text-center text-muted">No sales data yet.</td></tr>
+                <?php endif; ?>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── Inventory Report ──────────────────────────── -->
+        <div class="card mb-3">
+          <div class="card-header d-flex align-items-center justify-content-between">
+            <h3 class="card-title">
+              <i class="fas fa-boxes mr-2"></i>Inventory Report
+              <span class="inv-rt-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;vertical-align:middle;margin-left:6px;" title="Live — updating every 30s"></span>
+            </h3>
+            <small class="text-muted" id="inventoryReportLastUpdated" style="font-size:11px;"></small>
+          </div>
+          <div class="card-body">
+            <table id="inventoryReportTable" class="table table-bordered table-striped table-hover">
+                <thead>
+                  <tr>
+                    <th>Ingredient</th>
+                    <th>Unit</th>
+                    <th>Stock Qty</th>
+                    <th>Low Stock Threshold</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php if (!empty($inventoryRows)): ?>
+                    <?php foreach ($inventoryRows as $inv): ?>
+                    <?php
+                      $stock     = (float)$inv['stock_qty'];
+                      $threshold = (float)$inv['low_stock_threshold'];
+                      if ($stock <= 0)             { $statusBadge = '<span class="badge badge-danger">Out of Stock</span>';  $rowCls2 = 'table-danger';  }
+                      elseif ($stock <= $threshold) { $statusBadge = '<span class="badge badge-warning">Low Stock</span>';   $rowCls2 = 'table-warning'; }
+                      else                          { $statusBadge = '<span class="badge badge-success">In Stock</span>';    $rowCls2 = ''; }
+                    ?>
+                    <tr class="<?= $rowCls2 ?>">
+                      <td><?= htmlspecialchars($inv['name']) ?></td>
+                      <td><?= htmlspecialchars($inv['unit']) ?></td>
+                      <td><?= number_format($stock, 2) ?></td>
+                      <td><?= number_format($threshold, 2) ?></td>
+                      <td><?= $statusBadge ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                  <?php else: ?>
+                    <tr><td colspan="5" class="text-center text-muted">No inventory data found.</td></tr>
+                  <?php endif; ?>
+                </tbody>
+              </table>
+          </div>
+        </div>
+
+      </div><!-- /.container-fluid -->
     </section>
   </div><!-- /.content-wrapper -->
 </div><!-- ./wrapper -->
@@ -910,32 +979,32 @@ $chartDataJson   = json_encode($chartData);
 
 <script>
 // ── DataTables ────────────────────────────────────────────────
-$(function () {
-  $("#example1").DataTable({
-    responsive: true, lengthChange: false, autoWidth: false,
-    order: [[2, "asc"]],
-    buttons: [
-      { extend:'copy',  title:'Inventory Report' },
-      { extend:'csv',   title:'Inventory_Report' },
-      { extend:'excel', title:'Inventory_Report' },
-      { extend:'pdf',   title:'Inventory_Report' },
-      { extend:'print', title:'Inventory Report' },
-      'colvis'
-    ]
-  }).buttons().container().appendTo('#example1_wrapper .col-md-6:eq(0)');
 
-  $("#example2").DataTable({
-    responsive: true, lengthChange: false, autoWidth: false,
-    order: [[0, "desc"]],
-    buttons: [
-      { extend:'copy',  title:'Order Report' },
-      { extend:'csv',   title:'Order_Report' },
-      { extend:'excel', title:'Order_Report' },
-      { extend:'pdf',   title:'Order_Report' },
-      { extend:'print', title:'Order Report' },
-      'colvis'
+// ── Order Report DataTable ────────────────────────────────────
+$(function () {
+  $('#orderReportTable').DataTable({
+    responsive: true,
+    lengthChange: true,
+    autoWidth: false,
+    pageLength: 10,
+    order: [[0, 'desc']],
+    buttons: ['copy', 'csv', 'excel', 'pdf', 'print', 'colvis'],
+    columnDefs: [
+      { targets: [5, 6, 7], className: 'dt-wrap' }
     ]
-  }).buttons().container().appendTo('#example2_wrapper .col-md-6:eq(0)');
+  }).buttons().container().appendTo('#orderReportTable_wrapper .col-md-6:eq(0)');
+});
+
+// ── Inventory Report DataTable ────────────────────────────────
+$(function () {
+  $('#inventoryReportTable').DataTable({
+    responsive: true,
+    lengthChange: true,
+    autoWidth: false,
+    pageLength: 10,
+    order: [[0, 'asc']],
+    buttons: ['copy', 'csv', 'excel', 'pdf', 'print', 'colvis']
+  }).buttons().container().appendTo('#inventoryReportTable_wrapper .col-md-6:eq(0)');
 });
 
 // ── Sales Chart ───────────────────────────────────────────────
@@ -946,7 +1015,7 @@ $(function () {
     data: {
       labels: <?= $chartLabelsJson ?>,
       datasets: [{
-        label: 'Revenue (₱)',
+        label: 'Revenue',
         data: <?= $chartDataJson ?>,
         backgroundColor: 'rgba(233,30,140,0.55)',
         borderColor: 'rgba(233,30,140,1)',
@@ -956,23 +1025,21 @@ $(function () {
     },
     options: {
       responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: function(ctx) {
-              return '₱' + parseFloat(ctx.parsed.y).toLocaleString('en', {minimumFractionDigits:2, maximumFractionDigits:2});
-            }
+      legend: { display: false },
+      tooltips: {
+        callbacks: {
+          label: function(item) {
+            return '₱' + parseFloat(item.yLabel).toLocaleString('en', {minimumFractionDigits:2});
           }
         }
       },
       scales: {
-        y: {
-          beginAtZero: true,
+        yAxes: [{
           ticks: {
+            beginAtZero: true,
             callback: function(val) { return '₱' + val.toLocaleString(); }
           }
-        }
+        }]
       }
     }
   });
@@ -1133,7 +1200,7 @@ $(function () {
 /* ── empress-realtime: report.php ── */
 (function(){
   'use strict';
-  var SSE_URL = 'report.php?sse=1';
+  var SSE_URL = 'report.php?sse=1&range=<?= urlencode($selectedRange) ?><?= $selectedRange==='custom' ? '&date_from='.urlencode($dateFrom).'&date_to='.urlencode($dateTo) : '' ?>';
   var _lastId = null;
 
   function peso(v){ return '₱'+parseFloat(v).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -1145,7 +1212,7 @@ $(function () {
   }
 
   function setDot(ok){
-    document.querySelectorAll('.rt-live-dot').forEach(function(d){
+    document.querySelectorAll('.rt-live-dot, .order-rt-dot, .inv-rt-dot').forEach(function(d){
       d.style.background = ok ? '#22c55e' : '#ef4444';
       d.title = ok ? 'Live — connected' : 'Live — reconnecting…';
     });
@@ -1178,45 +1245,140 @@ $(function () {
     }catch(e){}
   }
 
-  function updateOrderTable(orders){
-    var tbody=document.getElementById('orderReportTbody');
-    if(!tbody||!orders||!orders.length) return;
-    var prevIds=Array.from(tbody.querySelectorAll('tr[data-order-id]')).map(function(r){ return r.getAttribute('data-order-id'); });
-    var newIds =orders.map(function(o){ return String(o.order_id); });
-    if(JSON.stringify(prevIds)===JSON.stringify(newIds)) return;
+  function esc(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
 
-    var html=orders.map(function(o){
-      var st=o.status||'done';
+  function updateOrderTable(orders){
+    if(!orders||!orders.length) return;
+    var tbody=document.getElementById('orderReportTbody');
+    if(!tbody) return;
+
+    // Collect current IDs to detect new rows
+    var prevIds={};
+    tbody.querySelectorAll('tr[data-order-id]').forEach(function(r){ prevIds[r.getAttribute('data-order-id')]=true; });
+    var newIds=orders.map(function(o){ return String(o.order_id); });
+    // Bail if nothing changed
+    var curIds=Array.from(tbody.querySelectorAll('tr[data-order-id]')).map(function(r){ return r.getAttribute('data-order-id'); });
+    if(JSON.stringify(curIds)===JSON.stringify(newIds)) return;
+
+    // Build row data arrays for DataTables
+    var dt = $.fn.DataTable.isDataTable('#orderReportTable') ? $('#orderReportTable').DataTable() : null;
+    if(dt){ dt.clear(); }
+
+    var newOrderIds=[];
+    orders.forEach(function(o){
+      var st=o.status||'';
       var badge='', rowCls='';
-      if(st==='voided')         { badge='<span class="badge badge-danger">Voided</span>';          rowCls='table-danger'; }
-      else if(st==='refunded')  { badge='<span class="badge badge-info">Refunded</span>';           rowCls='table-info';   }
-      else if(st==='partial_refund'){ badge='<span class="badge badge-warning">Partial Refund</span>'; rowCls='table-warning';}
-      else                      { badge='<span class="badge badge-success">Done</span>';            rowCls=''; }
-      var isNew=prevIds.indexOf(String(o.order_id))===-1;
+      if(st==='voided')              { badge='<span class="badge badge-danger">Voided</span>';               rowCls='table-danger'; }
+      else if(st==='refunded')       { badge='<span class="badge badge-warning">Refunded</span>';            rowCls='table-warning'; }
+      else if(st==='partial_refund') { badge='<span class="badge badge-info">Partial Refund</span>';         rowCls=''; }
+      else if(st==='pending')        { badge='<span class="badge badge-secondary">Pending</span>';           rowCls=''; }
+      else if(st==='completed'||st==='paid'){ badge='<span class="badge badge-success">'+esc(o.status)+'</span>'; rowCls=''; }
+      else                           { badge='<span class="badge badge-secondary">'+esc(st)+'</span>';       rowCls=''; }
+
+      var isNew=!prevIds[String(o.order_id)];
+      if(isNew) newOrderIds.push(String(o.order_id));
+
       var discount='<span class="text-muted">—</span>';
       if(parseFloat(o.discount_amt)>0){
         var dtype=o.discount_type==='senior'?'Senior 20%':(o.discount_type==='pwd'?'PWD 20%':'Discount');
         discount='<span class="badge badge-success" style="font-size:11px;">'+dtype+'</span><br>'
                 +'<span class="text-danger font-weight-bold">-₱'+parseFloat(o.discount_amt).toLocaleString('en',{minimumFractionDigits:2})+'</span>';
       }
-      var totalCell=rowCls?('<s class="text-muted">₱'+parseFloat(o.total_amt).toFixed(2)+'</s>'):'₱'+parseFloat(o.total_amt).toLocaleString('en',{minimumFractionDigits:2});
-      return '<tr class="'+rowCls+'" data-order-id="'+o.order_id+'"'+(isNew?' data-rt-new="1"':'')+'>'
-        +'<td><strong>#'+o.order_id+'</strong></td>'
-        +'<td>'+o.created_at+'</td>'
-        +'<td>'+o.table_no+'</td>'
-        +'<td>'+badge+'</td>'
-        +'<td>'+o.cashier_name+'</td>'
-        +'<td>'+(o.items||'—')+'</td>'
-        +'<td><span class="text-muted">—</span></td>'
-        +'<td><span class="text-muted">—</span></td>'
-        +'<td>'+(o.total_qty||0)+'</td>'
-        +'<td>'+discount+'</td>'
-        +'<td>'+totalCell+'</td>'
-        +'</tr>';
-    }).join('');
-    tbody.innerHTML=html;
-    tbody.querySelectorAll('tr[data-rt-new="1"]').forEach(function(tr){ flash(tr,'rgba(233,30,140,.18)'); });
+      var totalCell=rowCls&&rowCls==='table-danger'
+        ?'<s class="text-muted">₱'+parseFloat(o.total_amt).toFixed(2)+'</s>'
+        :'<strong>₱'+parseFloat(o.total_amt).toLocaleString('en',{minimumFractionDigits:2})+'</strong>';
+
+      var allAddons=[], allRemoved=[];
+      if(o.item_details){
+        o.item_details.split(';;').forEach(function(seg){
+          if(!seg) return;
+          var parts=seg.split('|');
+          var iName=parts[0]||'';
+          var addons=(parts[2]||'').trim();
+          var rawRem=(parts[3]||'').trim();
+          var removed='';
+          if(rawRem&&rawRem!=='[]'){
+            try{
+              var arr=JSON.parse(rawRem);
+              if(Array.isArray(arr)&&arr.length) removed=arr.filter(Boolean).join(', ');
+              else if(typeof arr==='string') removed=arr;
+            }catch(e){ removed=rawRem; }
+          }
+          if(addons)  allAddons.push(esc(iName)+': '+esc(addons));
+          if(removed) allRemoved.push(esc(iName)+': No '+esc(removed));
+        });
+      }
+      var addonsCell  = allAddons.length  ? '<span style="font-size:12px;">'+allAddons.join('<br>')+'</span>'  : '<span class="text-muted">—</span>';
+      var removedCell = allRemoved.length ? '<span style="font-size:12px;">'+allRemoved.join('<br>')+'</span>' : '<span class="text-muted">—</span>';
+      var itemsCell   = o.items ? esc(o.items) : '—';
+
+      if(dt){
+        var rowNode = dt.row.add([
+          '<strong>#'+o.order_id+'</strong>',
+          esc(o.created_at),
+          esc(o.table_no||'—'),
+          badge,
+          esc(o.cashier_name||'N/A'),
+          itemsCell,
+          addonsCell,
+          removedCell,
+          (o.total_qty||0),
+          discount,
+          totalCell
+        ]).node();
+        $(rowNode).attr('data-order-id', o.order_id).addClass(rowCls);
+        if(isNew) $(rowNode).attr('data-rt-new','1');
+      }
+    });
+
+    if(dt){
+      dt.draw(false);
+      // Flash new rows after draw
+      if(newOrderIds.length){
+        setTimeout(function(){
+          newOrderIds.forEach(function(id){
+            var row=tbody.querySelector('tr[data-order-id="'+id+'"]');
+            if(row) flash(row,'rgba(233,30,140,.25)');
+          });
+        },80);
+      }
+    }
   }
+
+  /* ── Inventory real-time polling (every 30s) ── */
+  function pollInventory(){
+    var params=new URLSearchParams(window.location.search);
+    params.set('ajax','inventory');
+    fetch(window.location.pathname+'?'+params.toString(),{cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if(!data.rows||!data.rows.length) return;
+        var dt2=$.fn.DataTable.isDataTable('#inventoryReportTable')?$('#inventoryReportTable').DataTable():null;
+        if(!dt2) return;
+        dt2.clear();
+        data.rows.forEach(function(inv){
+          var stock=(parseFloat(inv.stock_qty)||0), thr=(parseFloat(inv.low_stock_threshold)||0);
+          var badge='', rowCls='';
+          if(stock<=0)         { badge='<span class="badge badge-danger">Out of Stock</span>';  rowCls='table-danger';  }
+          else if(stock<=thr)  { badge='<span class="badge badge-warning">Low Stock</span>';    rowCls='table-warning'; }
+          else                 { badge='<span class="badge badge-success">In Stock</span>';     rowCls=''; }
+          var rowNode=dt2.row.add([
+            esc(inv.name), esc(inv.unit),
+            parseFloat(stock).toFixed(2),
+            parseFloat(thr).toFixed(2),
+            badge
+          ]).node();
+          $(rowNode).addClass(rowCls);
+        });
+        dt2.draw(false);
+        var tsEl2=document.getElementById('inventoryReportLastUpdated');
+        if(tsEl2){ var now2=new Date(); tsEl2.textContent='Updated '+now2.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}); }
+      })
+      .catch(function(){});
+  }
+  setInterval(pollInventory, 30000);
 
   function connect(){
     if(!window.EventSource) return;
@@ -1225,6 +1387,8 @@ $(function () {
       try{
         var d=JSON.parse(e.data);
         setDot(true);
+        var tsEl=document.getElementById('orderReportLastUpdated');
+        if(tsEl){ var now=new Date(); tsEl.textContent='Updated '+now.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}); }
         if(_lastId===null){ _lastId=d.latestOrderId; updateOrderTable(d.recentOrders); return; }
         if(d.latestOrderId>_lastId){ _lastId=d.latestOrderId; showToast(d); }
         updateOrderTable(d.recentOrders);
@@ -1240,6 +1404,160 @@ $(function () {
 })();
 </script>
 <!-- ══ END real-time ═══════════════════════════════════════════════════ -->
+
+<!-- ══ TOP SELLING ITEMS — DataTable init + Real-Time Polling ════════ -->
+<script>
+// Initialize DataTable for Top Selling Items
+$(function(){
+  $('#topItemsTable').DataTable({
+    responsive: true, lengthChange: false, autoWidth: false,
+    order: [[4, 'desc']],
+    buttons: ['copy','csv','excel','pdf','print','colvis']
+  }).buttons().container().appendTo('#topItemsTable_wrapper .col-md-6:eq(0)');
+});
+</script>
+<script>
+(function(){
+  'use strict';
+
+  var POLL_INTERVAL = 30000; // refresh every 30 seconds
+
+  function buildUrl() {
+    var params = new URLSearchParams(window.location.search);
+    params.set('ajax', 'topitems');
+    return window.location.pathname + '?' + params.toString();
+  }
+
+  function setDot(ok) {
+    var dot = document.querySelector('.top-items-live-dot');
+    if (!dot) return;
+    dot.style.background = ok ? '#22c55e' : '#ef4444';
+    dot.title = ok ? 'Live — connected' : 'Live — reconnecting…';
+  }
+
+  function fmtNum(n, decimals) {
+    return parseFloat(n || 0).toLocaleString('en', {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
+  }
+
+  function rankBadge(rank) {
+    if (rank === 1) return '<span class="badge" style="background:#f4c542;color:#333;">🥇 1</span>';
+    if (rank === 2) return '<span class="badge" style="background:#b0b8c1;color:#fff;">🥈 2</span>';
+    if (rank === 3) return '<span class="badge" style="background:#cd7f32;color:#fff;">🥉 3</span>';
+    return '<span class="badge badge-secondary">' + rank + '</span>';
+  }
+
+  function flashRow(tr, color) {
+    tr.style.transition = 'none';
+    tr.style.backgroundColor = color;
+    setTimeout(function(){
+      tr.style.transition = 'background-color 1.6s ease';
+      tr.style.backgroundColor = '';
+    }, 80);
+  }
+
+  function flashCell(td, color) {
+    td.style.transition = 'none';
+    td.style.backgroundColor = color;
+    setTimeout(function(){
+      td.style.transition = 'background-color 1.6s ease';
+      td.style.backgroundColor = '';
+    }, 80);
+  }
+
+  function renderRows(items) {
+    var tbody = document.getElementById('topItemsTbody');
+    var tsEl  = document.getElementById('topItemsLastUpdated');
+    if (!tbody) return;
+
+    if (!items || !items.length) {
+      if ($.fn.DataTable.isDataTable('#topItemsTable')) {
+        $('#topItemsTable').DataTable().destroy();
+      }
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No sales data yet.</td></tr>';
+      return;
+    }
+
+    // Snapshot prev state from DOM before destroy
+    var prevQtyMap  = {};
+    var prevRankMap = {};
+    tbody.querySelectorAll('tr[data-item-name]').forEach(function(tr, idx){
+      var name = tr.getAttribute('data-item-name');
+      prevQtyMap[name]  = parseInt(tr.getAttribute('data-item-qty') || '0', 10);
+      prevRankMap[name] = idx;
+    });
+
+    // Destroy DataTables so we can safely rewrite tbody
+    if ($.fn.DataTable.isDataTable('#topItemsTable')) {
+      $('#topItemsTable').DataTable().destroy();
+    }
+
+    // Build new rows
+    var html = items.map(function(it, idx){
+      var qty     = parseInt(it.qty_sold, 10);
+      var escaped = it.name.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return '<tr data-item-name="' + escaped + '" data-item-qty="' + qty + '">'
+        + '<td>' + rankBadge(idx + 1) + '</td>'
+        + '<td>' + escaped + '</td>'
+        + '<td>' + (it.category || '—') + '</td>'
+        + '<td>' + fmtNum(it.price, 2) + '</td>'
+        + '<td class="qty-cell"><strong>' + qty + '</strong></td>'
+        + '<td>₱' + fmtNum(it.revenue, 2) + '</td>'
+        + '</tr>';
+    }).join('');
+
+    tbody.innerHTML = html;
+
+    // Apply highlights after DOM is updated
+    tbody.querySelectorAll('tr[data-item-name]').forEach(function(tr, idx){
+      var name   = tr.getAttribute('data-item-name');
+      var qty    = parseInt(tr.getAttribute('data-item-qty'), 10);
+      var wasNew = !(name in prevQtyMap);
+      var qtyUp  = !wasNew && qty > (prevQtyMap[name] || 0);
+      var rankChg = !wasNew && prevRankMap[name] !== idx;
+
+      if (wasNew) {
+        flashRow(tr, 'rgba(233,30,140,.18)');
+      } else if (qtyUp) {
+        flashRow(tr, 'rgba(40,167,69,.10)');
+        var qtyTd = tr.querySelector('.qty-cell');
+        if (qtyTd) flashCell(qtyTd, 'rgba(40,167,69,.45)');
+      } else if (rankChg) {
+        flashRow(tr, 'rgba(255,193,7,.25)');
+      }
+    });
+
+    // Reinitialize DataTables
+    $('#topItemsTable').DataTable({
+      responsive: true, lengthChange: false, autoWidth: false,
+      order: [[4, 'desc']],
+      buttons: ['copy','csv','excel','pdf','print','colvis']
+    }).buttons().container().appendTo('#topItemsTable_wrapper .col-md-6:eq(0)');
+
+    if (tsEl) {
+      var now = new Date();
+      tsEl.textContent = 'Updated ' + now.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
+    }
+  }
+
+  function poll() {
+    fetch(buildUrl(), {cache: 'no-store'})
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        setDot(true);
+        renderRows(data.items || []);
+      })
+      .catch(function(){
+        setDot(false);
+      });
+  }
+
+  // Start polling after DOM + DataTables are ready
+  $(function(){
+    setInterval(poll, POLL_INTERVAL);
+  });
+})();
+</script>
+<!-- ══ END top items real-time ════════════════════════════════════════ -->
 
 </body>
 </html>

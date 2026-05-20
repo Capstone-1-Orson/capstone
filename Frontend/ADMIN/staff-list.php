@@ -10,6 +10,90 @@ if (empty($_SESSION['csrf_token'])) {
   $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
+// ── Real-time AJAX: add staff and return JSON result ──────────────
+if (isset($_GET['rt_add_staff']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+  include('../../Backend/conn.php');
+
+  // CSRF check
+  if (empty($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+    http_response_code(403);
+    echo json_encode(['success' => false, 'message' => 'Invalid CSRF token.']);
+    exit();
+  }
+
+  $firstname = trim($_POST['firstname'] ?? '');
+  $lastname  = trim($_POST['lastname']  ?? '');
+  $email     = trim($_POST['email']     ?? '');
+  $password  = $_POST['password']       ?? '';
+  $contact   = trim($_POST['contact']   ?? '');
+  $address   = trim($_POST['address']   ?? '');
+  $position  = 'staff';
+
+  // Basic validation
+  if (!$firstname || !$lastname || !$email || !$password || !$contact || !$address) {
+    echo json_encode(['success' => false, 'message' => 'All fields are required.']);
+    exit();
+  }
+
+  // Email pattern: gmail or yahoo only
+  if (!preg_match('/^[a-zA-Z0-9._%+\-]+@(gmail|yahoo)\.(com|com\.ph)$/', $email)) {
+    echo json_encode(['success' => false, 'message' => 'Only Gmail or Yahoo email addresses are allowed.']);
+    exit();
+  }
+
+  // Check duplicate email
+  $stmt = $conn->prepare("SELECT id FROM user WHERE email = ?");
+  $stmt->bind_param('s', $email);
+  $stmt->execute();
+  $stmt->store_result();
+  if ($stmt->num_rows > 0) {
+    echo json_encode(['success' => false, 'message' => 'Email address is already in use.']);
+    exit();
+  }
+  $stmt->close();
+
+  // Handle image upload
+  $imagePath = '';
+  if (!empty($_FILES['image']['name'])) {
+    $allowed   = ['jpg','jpeg','png','gif','webp'];
+    $ext       = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, $allowed)) {
+      echo json_encode(['success' => false, 'message' => 'Invalid image type.']);
+      exit();
+    }
+    $uploadDir = '../../uploads/staff/';
+    if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+    $filename  = uniqid('staff_', true) . '.' . $ext;
+    $dest      = $uploadDir . $filename;
+    if (!move_uploaded_file($_FILES['image']['tmp_name'], $dest)) {
+      echo json_encode(['success' => false, 'message' => 'Image upload failed.']);
+      exit();
+    }
+    $imagePath = 'uploads/staff/' . $filename;
+  }
+
+  $hashed = password_hash($password, PASSWORD_DEFAULT);
+  $stmt = $conn->prepare("INSERT INTO user (firstname, lastname, email, password, contact, address, position, image, email_verified) VALUES (?,?,?,?,?,?,?,?,0)");
+  $stmt->bind_param('ssssssss', $firstname, $lastname, $email, $hashed, $contact, $address, $position, $imagePath);
+
+  if ($stmt->execute()) {
+    $newId = $stmt->insert_id;
+    $stmt->close();
+    // Re-generate CSRF token
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    echo json_encode([
+      'success'      => true,
+      'message'      => 'Staff member added successfully.',
+      'new_id'       => $newId,
+      'new_csrf'     => $_SESSION['csrf_token'],
+    ]);
+  } else {
+    echo json_encode(['success' => false, 'message' => 'Database error: ' . $stmt->error]);
+  }
+  header('Content-Type: application/json');
+  exit();
+}
+
 // ── Real-time AJAX: return staff rows as JSON ──────────────────────
 if (isset($_GET['rt_staff'])) {
   include('../../Backend/conn.php');
@@ -428,9 +512,24 @@ if (isset($_GET['rt_staff'])) {
             <h5 class="modal-title">Add New Staff Member</h5>
             <button type="button" class="close" data-dismiss="modal">&times;</button>
           </div>
-          <form action="../../Backend/process.php" method="POST" enctype="multipart/form-data">
-            <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
+          <form id="addUserForm" action="../../Backend/process.php" method="POST" enctype="multipart/form-data" onsubmit="return submitAddStaff(event)">
+            <input type="hidden" name="csrf_token" id="addUserCsrf" value="<?= $_SESSION['csrf_token'] ?>">
             <div class="modal-body">
+              <!-- Upload progress bar -->
+              <div id="addStaffProgress" style="display:none;margin-bottom:12px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+                  <span id="addStaffProgressLabel" style="font-size:.82rem;font-weight:600;"></span>
+                  <span id="addStaffProgressPct" style="font-size:.78rem;margin-left:auto;color:#e91e8c;font-weight:700;"></span>
+                </div>
+                <div style="background:rgba(0,0,0,.12);border-radius:6px;height:6px;overflow:hidden;">
+                  <div id="addStaffProgressBar" style="height:100%;width:0%;background:linear-gradient(90deg,#e91e8c,#9c27b0);border-radius:6px;transition:width .2s;"></div>
+                </div>
+              </div>
+              <!-- Alert area -->
+              <div id="addStaffAlert" style="display:none;" class="alert alert-dismissible fade show" role="alert">
+                <span id="addStaffAlertMsg"></span>
+                <button type="button" class="close" onclick="document.getElementById('addStaffAlert').style.display='none'">&times;</button>
+              </div>
 
               <div class="form-group text-center">
                 <label>Profile Photo</label><br>
@@ -493,8 +592,10 @@ if (isset($_GET['rt_staff'])) {
 
             </div>
             <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-              <button type="submit" name="save_user" class="btn btn-primary">Save Staff</button>
+              <button type="button" class="btn btn-secondary" data-dismiss="modal" id="addUserCloseBtn">Close</button>
+              <button type="submit" id="addUserSaveBtn" class="btn btn-primary">
+                <span id="addUserSaveBtnIcon"><i class="fas fa-user-plus mr-1"></i></span>Save Staff
+              </button>
             </div>
           </form>
         </div>
@@ -804,6 +905,110 @@ if (isset($_GET['rt_staff'])) {
         reader.readAsDataURL(input.files[0]);
       }
     }
+
+    /* ── Real-time Add Staff (AJAX + XHR upload progress) ──────────── */
+    function submitAddStaff(e) {
+      e.preventDefault();
+
+      var form      = document.getElementById('addUserForm');
+      var saveBtn   = document.getElementById('addUserSaveBtn');
+      var closeBtn  = document.getElementById('addUserCloseBtn');
+      var alertBox  = document.getElementById('addStaffAlert');
+      var alertMsg  = document.getElementById('addStaffAlertMsg');
+      var progress  = document.getElementById('addStaffProgress');
+      var progBar   = document.getElementById('addStaffProgressBar');
+      var progPct   = document.getElementById('addStaffProgressPct');
+      var progLabel = document.getElementById('addStaffProgressLabel');
+
+      // Reset alert
+      alertBox.style.display = 'none';
+      alertBox.className     = 'alert alert-dismissible fade show';
+
+      // Disable inputs while uploading
+      saveBtn.disabled  = true;
+      closeBtn.disabled = true;
+      saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Uploading…';
+
+      // Show progress bar
+      progBar.style.width   = '0%';
+      progPct.textContent   = '0%';
+      progLabel.textContent = 'Uploading…';
+      progress.style.display = 'block';
+
+      var fd = new FormData(form);
+      var xhr = new XMLHttpRequest();
+
+      xhr.open('POST', window.location.pathname + '?rt_add_staff=1', true);
+      xhr.withCredentials = true;
+
+      // Upload progress
+      xhr.upload.onprogress = function (ev) {
+        if (ev.lengthComputable) {
+          var pct = Math.round((ev.loaded / ev.total) * 100);
+          progBar.style.width = pct + '%';
+          progPct.textContent = pct + '%';
+          progLabel.textContent = pct < 100 ? 'Uploading…' : 'Processing…';
+        }
+      };
+
+      xhr.onload = function () {
+        saveBtn.disabled  = false;
+        closeBtn.disabled = false;
+
+        var resp;
+        try { resp = JSON.parse(xhr.responseText); } catch(ex) { resp = { success: false, message: 'Unexpected server error.' }; }
+
+        if (xhr.status === 200 && resp.success) {
+          // Finish progress bar
+          progBar.style.width = '100%';
+          progPct.textContent = '100%';
+          progLabel.textContent = 'Done!';
+
+          // Update CSRF token in page
+          if (resp.new_csrf) {
+            document.getElementById('addUserCsrf').value = resp.new_csrf;
+            // Also update all other CSRF hidden inputs & data-csrf buttons
+            document.querySelectorAll('input[name="csrf_token"]').forEach(function(el){ el.value = resp.new_csrf; });
+            document.querySelectorAll('[data-csrf]').forEach(function(el){ el.setAttribute('data-csrf', resp.new_csrf); });
+          }
+
+          // Show success, reset form, close modal after short delay
+          saveBtn.innerHTML = '<i class="fas fa-check mr-1"></i>Added!';
+          setTimeout(function () {
+            progress.style.display = 'none';
+            progBar.style.width    = '0%';
+            saveBtn.innerHTML = '<span id="addUserSaveBtnIcon"><i class="fas fa-user-plus mr-1"></i></span>Save Staff';
+            form.reset();
+            document.getElementById('add_image_preview').src = '../dist/img/blank.jpg';
+            $('#addUserModal').modal('hide');
+            // Immediately poll for new staff row
+            clearTimeout(window._staffPollTimer);
+            window._staffPollTimer = setTimeout(window._staffPoll || function(){}, 300);
+          }, 900);
+
+        } else {
+          // Show error inside modal
+          progress.style.display = 'none';
+          alertMsg.textContent   = resp.message || 'An error occurred.';
+          alertBox.classList.add('alert-danger');
+          alertBox.style.display = 'block';
+          saveBtn.innerHTML = '<span id="addUserSaveBtnIcon"><i class="fas fa-user-plus mr-1"></i></span>Save Staff';
+        }
+      };
+
+      xhr.onerror = function () {
+        saveBtn.disabled  = false;
+        closeBtn.disabled = false;
+        progress.style.display = 'none';
+        alertMsg.textContent   = 'Network error — please try again.';
+        alertBox.classList.add('alert-danger');
+        alertBox.style.display = 'block';
+        saveBtn.innerHTML = '<span id="addUserSaveBtnIcon"><i class="fas fa-user-plus mr-1"></i></span>Save Staff';
+      };
+
+      xhr.send(fd);
+      return false;
+    }
   </script>
 
 <!-- ══ NEW ORDER REAL-TIME NOTIFICATION (SSE) ══════════════════════ -->
@@ -911,6 +1116,7 @@ if (isset($_GET['rt_staff'])) {
   var CSRF      = <?= json_encode($_SESSION['csrf_token']) ?>;
   var _snapshot = null;  // JSON string of last staff array for diff
   var _timer    = null;
+  window._staffPollTimer = null;
 
   /* ── helpers ───────────────────────────────────────────────────── */
   function setStatus(ok, label) {
@@ -1059,10 +1265,12 @@ if (isset($_GET['rt_staff'])) {
       })
       .finally(function () {
         _timer = setTimeout(poll, POLL_MS);
+        window._staffPollTimer = _timer;
       });
   }
 
   /* ── start after DOM ready ─────────────────────────────────────── */
+  window._staffPoll = poll; // expose for external callers (e.g. real-time add)
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', poll);
   } else {

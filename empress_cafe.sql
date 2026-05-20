@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: May 03, 2026 at 06:45 AM
+-- Generation Time: May 20, 2026 at 06:38 AM
 -- Server version: 10.4.32-MariaDB
--- PHP Version: 8.2.12
+-- PHP Version: 8.0.30
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -56,7 +56,7 @@ INSERT INTO `ingredients` (`id`, `name`, `unit`, `stock_qty`, `low_stock_thresho
 (11, 'Coffee Beans', 'g', 5000.000, 500.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (12, 'Fresh Milk', 'ml', 4760.000, 500.000, NULL, '2026-03-27 11:08:19', '2026-04-03 12:14:29'),
 (13, 'Soya Milk', 'ml', 2000.000, 300.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
-(14, 'Ever Whip', 'g', 1560.000, 200.000, NULL, '2026-03-27 11:08:19', '2026-05-03 09:54:14'),
+(14, 'Ever Whip', 'g', 1260.000, 200.000, NULL, '2026-03-27 11:08:19', '2026-05-20 12:36:52'),
 (15, 'Whip Cream Powder', 'g', 2000.000, 200.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (16, 'Frappe Base', 'g', 3000.000, 300.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (17, 'Cream Cheese Powder', 'g', 1000.000, 150.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
@@ -77,7 +77,7 @@ INSERT INTO `ingredients` (`id`, `name`, `unit`, `stock_qty`, `low_stock_thresho
 (32, 'Powdered Sugar', 'g', 2000.000, 200.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (33, 'Thai Tea', 'g', 1000.000, 100.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (34, 'Strawberry Syrup', 'ml', 2000.000, 200.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
-(35, 'Strawberry Puree', 'ml', 1610.000, 200.000, NULL, '2026-03-27 11:08:19', '2026-05-02 20:47:43'),
+(35, 'Strawberry Puree', 'ml', 1280.000, 200.000, NULL, '2026-03-27 11:08:19', '2026-05-20 12:25:50'),
 (36, 'Blueberry Puree', 'ml', 2000.000, 200.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (37, 'Brown Sugar', 'g', 0.000, 200.000, NULL, '2026-03-27 11:08:19', '2026-04-08 10:47:50'),
 (38, 'Bread', 'pcs', 200.000, 50.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
@@ -88,10 +88,10 @@ INSERT INTO `ingredients` (`id`, `name`, `unit`, `stock_qty`, `low_stock_thresho
 (43, 'Tomato', 'g', 500.000, 50.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (44, 'Mayonnaise', 'ml', 1000.000, 100.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (45, 'Tuna', 'g', 2000.000, 200.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
-(46, 'Frozen Fries', 'g', 950.000, 500.000, NULL, '2026-03-27 11:08:19', '2026-05-03 10:01:51'),
-(47, 'Cheese Powder', 'g', 440.000, 50.000, NULL, '2026-03-27 11:08:19', '2026-05-03 09:54:51'),
+(46, 'Frozen Fries', 'g', 4400.000, 500.000, NULL, '2026-03-27 11:08:19', '2026-05-17 16:34:19'),
+(47, 'Cheese Powder', 'g', 400.000, 50.000, NULL, '2026-03-27 11:08:19', '2026-05-17 16:34:19'),
 (48, 'BBQ Powder', 'g', 5.000, 50.000, NULL, '2026-03-27 11:08:19', '2026-04-10 04:58:52'),
-(49, 'Sour Cream Powder', 'g', 340.000, 50.000, NULL, '2026-03-27 11:08:19', '2026-05-03 09:47:55'),
+(49, 'Sour Cream Powder', 'g', 280.000, 50.000, NULL, '2026-03-27 11:08:19', '2026-05-17 16:34:19'),
 (50, 'Donut Mix', 'g', 3000.000, 300.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (51, 'Cookie Dough', 'g', 3000.000, 300.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (52, 'Garlic', 'g', 500.000, 50.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
@@ -107,9 +107,9 @@ INSERT INTO `ingredients` (`id`, `name`, `unit`, `stock_qty`, `low_stock_thresho
 (62, 'Pasta Noodles', 'g', 3000.000, 300.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (63, 'All Purpose Cream', 'ml', 2000.000, 200.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (64, 'Butter', 'g', 1000.000, 100.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
-(65, 'Croffle Dough', 'g', 93100.000, 500.000, NULL, '2026-03-27 11:08:19', '2026-05-03 09:54:14'),
+(65, 'Croffle Dough', 'g', 84400.000, 500.000, NULL, '2026-03-27 11:08:19', '2026-05-20 12:36:52'),
 (66, 'Nutella', 'g', 2000.000, 200.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
-(67, 'Biscoff Spread', 'g', 1720.000, 200.000, NULL, '2026-03-27 11:08:19', '2026-05-02 20:54:45'),
+(67, 'Biscoff Spread', 'g', 1545.000, 200.000, NULL, '2026-03-27 11:08:19', '2026-05-20 12:37:24'),
 (68, 'Oreo', 'g', 1000.000, 100.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (69, 'Graham', 'g', 500.000, 50.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
 (70, 'Marshmallow', 'g', 500.000, 50.000, NULL, '2026-03-27 11:08:19', '2026-03-27 11:08:19'),
@@ -1241,7 +1241,50 @@ INSERT INTO `orders` (`id`, `table_no`, `user_id`, `status`, `total_amt`, `disco
 (74, '01', 5, 'refunded', 130.00, 0.00, '', '2026-05-03 09:47:37'),
 (75, '01', 5, 'refunded', 148.00, 37.00, 'pwd', '2026-05-03 09:53:49'),
 (76, '01', 5, 'voided', 145.00, 0.00, '', '2026-05-03 09:54:39'),
-(77, '01', 4, 'Done', 116.00, 29.00, 'senior', '2026-05-03 10:01:51');
+(77, '01', 4, 'Done', 116.00, 29.00, 'senior', '2026-05-03 10:01:51'),
+(78, '01', 5, 'refunded', 116.00, 29.00, 'senior', '2026-05-09 19:11:04'),
+(79, '01', 5, 'voided', 485.00, 0.00, '', '2026-05-09 19:12:51'),
+(80, '01', 5, 'Done', 170.00, 0.00, '', '2026-05-12 13:01:54'),
+(81, '01', 5, 'Done', 260.00, 0.00, '', '2026-05-12 13:02:12'),
+(82, '01', 5, 'Done', 170.00, 0.00, '', '2026-05-12 13:02:52'),
+(83, '01', 5, 'Done', 130.00, 0.00, '', '2026-05-12 13:03:16'),
+(84, '01', 5, 'Done', 170.00, 0.00, '', '2026-05-12 13:29:36'),
+(85, '01', 5, 'Done', 550.00, 0.00, '', '2026-05-12 13:36:29'),
+(86, '01', 5, 'Done', 130.00, 0.00, '', '2026-05-12 13:38:03'),
+(87, '01', 5, 'Done', 170.00, 0.00, '', '2026-05-12 13:48:14'),
+(88, '01', 5, 'voided', 130.00, 0.00, '', '2026-05-12 13:49:09'),
+(89, '01', 5, 'Done', 550.00, 0.00, '', '2026-05-12 14:13:47'),
+(90, '01', 5, 'Done', 470.00, 0.00, '', '2026-05-13 11:16:02'),
+(91, '01', 5, 'Done', 170.00, 0.00, '', '2026-05-13 11:56:18'),
+(92, '01', 5, 'Done', 170.00, 0.00, '', '2026-05-14 14:40:09'),
+(93, '01', 5, 'Done', 170.00, 0.00, '', '2026-05-14 14:40:40'),
+(94, '01', 5, 'Done', 470.00, 0.00, '', '2026-05-14 14:45:11'),
+(95, '01', 5, 'Done', 170.00, 0.00, '', '2026-05-14 14:45:48'),
+(96, '01', 5, 'Done', 550.00, 0.00, '', '2026-05-14 14:46:55'),
+(97, '01', 5, 'Done', 400.00, 0.00, '', '2026-05-14 14:48:07'),
+(98, '01', 5, 'Done', 130.00, 0.00, '', '2026-05-14 14:48:38'),
+(99, '01', 5, 'Done', 170.00, 0.00, '', '2026-05-14 14:52:50'),
+(100, '01', 5, 'Done', 470.00, 0.00, '', '2026-05-14 14:57:42'),
+(101, '01', 5, 'Done', 130.00, 0.00, '', '2026-05-14 14:59:25'),
+(102, '01', 5, 'Done', 170.00, 0.00, '', '2026-05-14 15:00:04'),
+(103, '01', 5, 'Done', 470.00, 0.00, '', '2026-05-15 14:28:16'),
+(104, '01', 5, 'Done', 170.00, 0.00, '', '2026-05-15 14:47:56'),
+(105, '01', 5, 'Done', 470.00, 0.00, '', '2026-05-15 14:56:03'),
+(106, '01', 5, 'Done', 550.00, 0.00, '', '2026-05-15 15:01:00'),
+(107, '01', 5, 'Done', 170.00, 0.00, '', '2026-05-15 15:02:50'),
+(108, '01', 5, 'Done', 550.00, 0.00, '', '2026-05-15 15:04:06'),
+(109, '01', 5, 'Done', 470.00, 0.00, '', '2026-05-15 15:16:57'),
+(110, '01', 5, 'Done', 550.00, 0.00, '', '2026-05-17 16:19:57'),
+(111, '01', 5, 'Done', 400.00, 0.00, '', '2026-05-17 16:20:23'),
+(112, '01', 5, 'Done', 400.00, 0.00, '', '2026-05-17 16:21:31'),
+(113, '01', 5, 'Done', 550.00, 0.00, '', '2026-05-17 16:22:03'),
+(114, '12', 5, 'Done', 530.00, 0.00, '', '2026-05-17 16:29:03'),
+(115, '01', 5, 'Done', 300.00, 0.00, '', '2026-05-17 16:30:39'),
+(116, '01', 5, 'Done', 260.00, 0.00, '', '2026-05-17 16:34:19'),
+(117, '01', 5, 'Done', 170.00, 0.00, '', '2026-05-20 12:25:50'),
+(118, '01', 5, 'Done', 550.00, 0.00, '', '2026-05-20 12:29:40'),
+(119, '01', 5, 'Done', 176.00, 44.00, 'senior', '2026-05-20 12:36:52'),
+(120, '01', 5, 'Done', 170.00, 0.00, '', '2026-05-20 12:37:24');
 
 -- --------------------------------------------------------
 
@@ -1347,7 +1390,53 @@ INSERT INTO `order_items` (`id`, `order_id`, `menu_id`, `qty`, `unit_price`, `re
 (80, 74, 166, 1, 130.00, '[]', '[]', '', ''),
 (81, 75, 183, 1, 185.00, '[35]', '[\"Strawberry Puree\"]', 'Extra Drizzle (+₱15)', ''),
 (82, 76, 164, 1, 145.00, '[46]', '[\"Frozen Fries\"]', 'Extra Dip (+₱15)', ''),
-(83, 77, 166, 1, 145.00, '[49]', '[\"Sour Cream Powder\"]', 'Extra Dip (+₱15)', '');
+(83, 77, 166, 1, 145.00, '[49]', '[\"Sour Cream Powder\"]', 'Extra Dip (+₱15)', ''),
+(84, 78, 166, 1, 145.00, '[49]', '[\"Sour Cream Powder\"]', 'Extra Dip (+₱15)', ''),
+(85, 79, 185, 1, 485.00, '[]', '[]', 'Extra Drizzle (+₱15)', ''),
+(86, 80, 183, 1, 170.00, '[]', '[]', '', ''),
+(87, 81, 166, 2, 130.00, '[]', '[]', '', ''),
+(88, 82, 183, 1, 170.00, '[]', '[]', '', ''),
+(89, 83, 164, 1, 130.00, '[]', '[]', '', ''),
+(90, 84, 183, 1, 170.00, '[]', '[]', '', ''),
+(91, 85, 184, 1, 550.00, '[]', '[]', '', ''),
+(92, 86, 164, 1, 130.00, '[]', '[]', '', ''),
+(93, 87, 183, 1, 170.00, '[]', '[]', '', ''),
+(94, 88, 166, 1, 130.00, '[]', '[]', '', ''),
+(95, 89, 184, 1, 550.00, '[]', '[]', '', ''),
+(96, 90, 185, 1, 470.00, '[]', '[]', '', ''),
+(97, 91, 182, 1, 170.00, '[]', '[]', '', ''),
+(98, 92, 183, 1, 170.00, '[]', '[]', '', ''),
+(99, 93, 183, 1, 170.00, '[]', '[]', '', ''),
+(100, 94, 185, 1, 470.00, '[]', '[]', '', ''),
+(101, 95, 183, 1, 170.00, '[]', '[]', '', ''),
+(102, 96, 184, 1, 550.00, '[]', '[]', '', ''),
+(103, 97, 186, 1, 400.00, '[]', '[]', '', ''),
+(104, 98, 164, 1, 130.00, '[]', '[]', '', ''),
+(105, 99, 182, 1, 170.00, '[]', '[]', '', ''),
+(106, 100, 185, 1, 470.00, '[]', '[]', '', ''),
+(107, 101, 166, 1, 130.00, '[]', '[]', '', ''),
+(108, 102, 182, 1, 170.00, '[]', '[]', '', ''),
+(109, 103, 185, 1, 470.00, '[]', '[]', '', ''),
+(110, 104, 183, 1, 170.00, '[]', '[]', '', ''),
+(111, 105, 185, 1, 470.00, '[]', '[]', '', ''),
+(112, 106, 184, 1, 550.00, '[]', '[]', '', ''),
+(113, 107, 183, 1, 170.00, '[]', '[]', '', ''),
+(114, 108, 184, 1, 550.00, '[]', '[]', '', ''),
+(115, 109, 185, 1, 470.00, '[]', '[]', '', ''),
+(116, 110, 184, 1, 550.00, '[]', '[]', '', ''),
+(117, 111, 186, 1, 400.00, '[]', '[]', '', ''),
+(118, 112, 186, 1, 400.00, '[]', '[]', '', ''),
+(119, 113, 184, 1, 550.00, '[]', '[]', '', ''),
+(120, 114, 186, 1, 400.00, '[]', '[]', '', ''),
+(121, 114, 166, 1, 130.00, '[]', '[]', '', ''),
+(122, 115, 183, 1, 170.00, '[]', '[]', '', ''),
+(123, 115, 166, 1, 130.00, '[]', '[]', '', ''),
+(124, 116, 166, 1, 130.00, '[]', '[]', '', ''),
+(125, 116, 164, 1, 130.00, '[]', '[]', '', ''),
+(126, 117, 183, 1, 170.00, '[]', '[]', '', ''),
+(127, 118, 184, 1, 550.00, '[]', '[]', '', ''),
+(128, 119, 182, 1, 220.00, '[]', '[]', 'Extra Drizzle (+₱15), Fresh Berries (+₱35)', ''),
+(129, 120, 182, 1, 170.00, '[65,14]', '[\"Croffle Dough\",\"Ever Whip\"]', '', '');
 
 -- --------------------------------------------------------
 
@@ -1377,7 +1466,10 @@ INSERT INTO `order_refunds` (`id`, `order_id`, `action`, `refund_amt`, `reason`,
 (4, 33, 'refund', 215.00, '', '[{\"menu_id\":183,\"qty\":1,\"removed_ingredient_ids\":[35]}]', 'staff', '2026-04-25 10:58:14'),
 (5, 74, 'refund', 130.00, '', '[{\"menu_id\":166,\"qty\":1,\"removed_ingredient_ids\":[]}]', 'staff', '2026-05-03 09:47:55'),
 (6, 75, 'refund', 148.00, '', '[{\"menu_id\":183,\"qty\":1,\"removed_ingredient_ids\":[35]}]', 'Sean Peniero', '2026-05-03 09:54:14'),
-(7, 76, 'void', 145.00, '', '[{\"menu_id\":164,\"qty\":1,\"removed_ingredient_ids\":[46]}]', 'Sean Peniero', '2026-05-03 09:54:51');
+(7, 76, 'void', 145.00, '', '[{\"menu_id\":164,\"qty\":1,\"removed_ingredient_ids\":[46]}]', 'Sean Peniero', '2026-05-03 09:54:51'),
+(8, 78, 'refund', 116.00, '', '[{\"menu_id\":166,\"qty\":1,\"removed_ingredient_ids\":[49]}]', 'Sean Peniero', '2026-05-09 19:12:25'),
+(9, 79, 'void', 485.00, '', '[{\"menu_id\":185,\"qty\":1,\"removed_ingredient_ids\":[]}]', 'Sean Peniero', '2026-05-09 19:13:50'),
+(10, 88, 'void', 130.00, '', '[{\"menu_id\":166,\"qty\":1,\"removed_ingredient_ids\":[]}]', 'Sean Peniero', '2026-05-12 14:10:08');
 
 -- --------------------------------------------------------
 
@@ -1422,7 +1514,7 @@ CREATE TABLE `suppliers` (
 --
 
 INSERT INTO `suppliers` (`id`, `name`, `category`, `contact_person`, `phone`, `email`, `address`, `notes`, `status`, `created_at`, `updated_at`) VALUES
-(1, 'Sean Peniero', 'Dairy', 'Sean Peniero', 'nelmapeniero@gmail.com', 'seanpeniero99@gmail.com', 'brgy. omambong', '', 'Inactive', '2026-05-02 13:44:27', '2026-05-02 13:44:27');
+(1, 'Sean Peniero', 'Dairy', 'Sean Peniero', '09630374759', 'seanpeniero99@gmail.com', 'brgy. Omambong', 'happy', 'Inactive', '2026-05-02 13:44:27', '2026-05-17 09:46:40');
 
 -- --------------------------------------------------------
 
@@ -1440,17 +1532,20 @@ CREATE TABLE `user` (
   `contact` varchar(20) DEFAULT NULL,
   `address` text DEFAULT NULL,
   `image` varchar(255) DEFAULT '',
-  `totp_secret` varchar(32) DEFAULT NULL
+  `notify_email` varchar(255) DEFAULT NULL,
+  `email_verified` tinyint(1) NOT NULL DEFAULT 0,
+  `verify_token` varchar(64) DEFAULT NULL,
+  `token_expiry` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `user`
 --
 
-INSERT INTO `user` (`id`, `firstname`, `lastname`, `email`, `password`, `position`, `contact`, `address`, `image`, `totp_secret`) VALUES
-(1, '', '', 'admin', '$2y$10$KNTescTlNCQezdG/KK6Xcu.1HYW2xJiDLidG0sgmpE9eGYWsoHI7C', 'admin', '', '', '', NULL),
-(4, 'micheal', 'sablon', 'mic@gmail.com', '$2y$10$2MMFTU8wR4U90JPMQn2Do.EbzoOCaPHtkG3ampSwz6.CAZ6dJnbH6', 'staff', '09123456788', 'villa', 'Frontend/ADMIN/uploads/staff/staff_1775631999_22302282.jpg', NULL),
-(5, 'Sean', 'Peniero', 'shongarena05@gmail.com', '$2y$10$kPn4EQPZQ7nXS7adE2TZ..mlIfEwVi8e1eXxOiy0Qgx7O/Vflez0u', 'staff', '09630374759', 'Leon', 'Frontend/ADMIN/uploads/staff/staff_1775796015_5b73ef60.jpg', '');
+INSERT INTO `user` (`id`, `firstname`, `lastname`, `email`, `password`, `position`, `contact`, `address`, `image`, `notify_email`, `email_verified`, `verify_token`, `token_expiry`) VALUES
+(1, '', '', 'admin', '$2y$10$KNTescTlNCQezdG/KK6Xcu.1HYW2xJiDLidG0sgmpE9eGYWsoHI7C', 'admin', '', '', '', 'dummyacctest099@gmail.com', 0, NULL, NULL),
+(4, 'micheal', 'sablon', 'mic@gmail.com', '$2y$10$2MMFTU8wR4U90JPMQn2Do.EbzoOCaPHtkG3ampSwz6.CAZ6dJnbH6', 'staff', '09123456788', 'villa', 'Frontend/ADMIN/uploads/staff/staff_1775631999_22302282.jpg', NULL, 0, NULL, NULL),
+(5, 'Sean', 'Peniero', 'shongarena05@gmail.com', '$2y$10$kPn4EQPZQ7nXS7adE2TZ..mlIfEwVi8e1eXxOiy0Qgx7O/Vflez0u', 'staff', '09630374759', 'Leon', 'Frontend/ADMIN/uploads/staff/staff_1775796015_5b73ef60.jpg', NULL, 1, NULL, NULL);
 
 --
 -- Indexes for dumped tables
@@ -1526,37 +1621,37 @@ ALTER TABLE `user`
 -- AUTO_INCREMENT for table `ingredients`
 --
 ALTER TABLE `ingredients`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=104;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=107;
 
 --
 -- AUTO_INCREMENT for table `menu`
 --
 ALTER TABLE `menu`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=187;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=190;
 
 --
 -- AUTO_INCREMENT for table `menu_ingredients`
 --
 ALTER TABLE `menu_ingredients`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=837;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=844;
 
 --
 -- AUTO_INCREMENT for table `orders`
 --
 ALTER TABLE `orders`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=78;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=121;
 
 --
 -- AUTO_INCREMENT for table `order_items`
 --
 ALTER TABLE `order_items`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=84;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=130;
 
 --
 -- AUTO_INCREMENT for table `order_refunds`
 --
 ALTER TABLE `order_refunds`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
 -- AUTO_INCREMENT for table `sale_report`
@@ -1568,13 +1663,13 @@ ALTER TABLE `sale_report`
 -- AUTO_INCREMENT for table `suppliers`
 --
 ALTER TABLE `suppliers`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
 -- AUTO_INCREMENT for table `user`
 --
 ALTER TABLE `user`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
 -- Constraints for dumped tables

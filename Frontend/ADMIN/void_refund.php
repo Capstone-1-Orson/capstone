@@ -2,6 +2,12 @@
 session_name('ADMIN_SESSION');
 session_start();
 if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
+    if (isset($_GET['rt'])) {
+        header('Content-Type: application/json');
+        http_response_code(403);
+        echo json_encode(['error' => 'Unauthorized']);
+        exit();
+    }
     header("Location: ../../lockscreen.html");
     exit();
 }
@@ -15,6 +21,71 @@ function tableExists($conn, $table) {
 }
 $hasOrderItems   = tableExists($conn, 'order_items');
 $hasOrderRefunds = tableExists($conn, 'order_refunds');
+
+// ══ REAL-TIME JSON API (?rt=1) ═════════════════════════════════
+if (isset($_GET['rt'])) {
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+
+    $vc = $rc = $pc = 0; $tv = $tr = 0.0;
+
+    $r = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS amt FROM orders WHERE status='voided'");
+    if ($r && $row = $r->fetch_assoc()) { $vc = (int)$row['cnt']; $tv = (float)$row['amt']; }
+
+    $r = $conn->query("SELECT COUNT(*) AS cnt FROM orders WHERE status IN ('refunded','partial_refund')");
+    if ($r && $row = $r->fetch_assoc()) $rc = (int)$row['cnt'];
+
+    if ($hasOrderRefunds) {
+        $r = $conn->query("SELECT COALESCE(SUM(refund_amt),0) AS amt FROM order_refunds");
+        if ($r && $row = $r->fetch_assoc()) $tr = (float)$row['amt'];
+    }
+
+    $r = $conn->query("SELECT COUNT(*) AS cnt FROM orders WHERE status NOT IN ('voided','refunded','partial_refund')");
+    if ($r && $row = $r->fetch_assoc()) $pc = (int)$row['cnt'];
+
+    $latestId = 0;
+    $r = $conn->query("SELECT MAX(id) AS mid FROM orders WHERE status NOT IN ('voided','refunded','partial_refund')");
+    if ($r && $row = $r->fetch_assoc()) $latestId = (int)($row['mid'] ?? 0);
+
+    // New active orders since client's last known id
+    $newOrders = [];
+    $since = isset($_GET['since']) ? (int)$_GET['since'] : 0;
+    if ($since > 0) {
+        if ($hasOrderItems) {
+            $stmt = $conn->prepare(
+                "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
+                        COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
+                        GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items
+                 FROM orders o
+                 LEFT JOIN user u ON u.id = o.user_id
+                 JOIN order_items oi ON oi.order_id = o.id
+                 JOIN menu m ON m.id = oi.menu_id
+                 WHERE o.status NOT IN ('voided','refunded','partial_refund') AND o.id > ?
+                 GROUP BY o.id ORDER BY o.id DESC LIMIT 20"
+            );
+            if ($stmt) { $stmt->bind_param('i', $since); $stmt->execute(); $res = $stmt->get_result(); while ($row = $res->fetch_assoc()) $newOrders[] = $row; $stmt->close(); }
+        } else {
+            $stmt = $conn->prepare(
+                "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
+                        COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name, '—' AS items
+                 FROM orders o LEFT JOIN user u ON u.id = o.user_id
+                 WHERE o.status NOT IN ('voided','refunded','partial_refund') AND o.id > ?
+                 ORDER BY o.id DESC LIMIT 20"
+            );
+            if ($stmt) { $stmt->bind_param('i', $since); $stmt->execute(); $res = $stmt->get_result(); while ($row = $res->fetch_assoc()) $newOrders[] = $row; $stmt->close(); }
+        }
+    }
+
+    // Orders recently voided/refunded (to remove from active table)
+    $removedIds = [];
+    $r = $conn->query("SELECT id FROM orders WHERE status IN ('voided','refunded','partial_refund') AND updated_at >= NOW() - INTERVAL 30 SECOND");
+    if ($r) while ($row = $r->fetch_assoc()) $removedIds[] = (int)$row['id'];
+
+    $conn->close();
+    echo json_encode(['voidedCount'=>$vc,'refundedCount'=>$rc,'pendingCount'=>$pc,'totalVoided'=>$tv,'totalRefunded'=>$tr,'latestOrderId'=>$latestId,'newOrders'=>$newOrders,'removedIds'=>$removedIds]);
+    exit();
+}
+// ══ END REAL-TIME API ══════════════════════════════════════════
 
 // ── Summary stats ──────────────────────────────────────────────
 $totalVoided = 0;
@@ -1038,6 +1109,226 @@ $(function () {
 })();
 </script>
 <!-- ══ END real-time notification ════════════════════════════════════ -->
+
+<!-- ══ REAL-TIME TABLE & STAT UPDATES (polling) ══════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  /* ── Config ── */
+  var POLL_MS   = 8000;   // poll every 8 s
+  var POLL_URL  = 'void_refund.php?rt=1'; // self-contained endpoint
+
+  /* ── Snapshot of counts when page loaded ── */
+  var _snap = {
+    voidedCount:    parseInt('<?= $voidedCount ?>', 10)   || 0,
+    refundedCount:  parseInt('<?= $refundedCount ?>', 10) || 0,
+    totalVoided:    parseFloat('<?= $totalVoided ?>') || 0,
+    totalRefunded:  parseFloat('<?= $totalRefunded ?>') || 0,
+    pendingCount:   parseInt('<?= count($pendingOrders) ?>', 10) || 0,
+    latestOrderId:  <?= !empty($pendingOrders) ? (int)$pendingOrders[0]['id'] : 0 ?>
+  };
+
+  /* ── Live-dot indicator in page title area ── */
+  var _dot = (function () {
+    var el = document.createElement('span');
+    el.id  = 'vrLiveDot';
+    el.title = 'Live updates active';
+    el.style.cssText = [
+      'display:inline-block','width:8px','height:8px',
+      'border-radius:50%','background:#22c55e',
+      'margin-left:8px','vertical-align:middle',
+      'box-shadow:0 0 0 0 rgba(34,197,94,.55)',
+      'animation:rtPulse 1.8s infinite'
+    ].join(';');
+    /* append after the page <h1> */
+    var h1 = document.querySelector('.content-header h1');
+    if (h1) h1.appendChild(el);
+    return el;
+  }());
+
+  function setDot(ok) {
+    _dot.style.background = ok ? '#22c55e' : '#ef4444';
+    _dot.title = ok ? 'Live — connected' : 'Live — reconnecting…';
+  }
+
+  /* ── Stat card elements ── */
+  function $stat(idx) {
+    return document.querySelectorAll('.vr-stat .stat-num')[idx];
+  }
+
+  function animateNum(el, newText) {
+    if (!el || el.textContent === newText) return;
+    el.style.transition = 'opacity .25s';
+    el.style.opacity = '0';
+    setTimeout(function () {
+      el.textContent = newText;
+      el.style.opacity = '1';
+    }, 250);
+  }
+
+  /* ── Tab badge elements ── */
+  function tabBadge(tabId) {
+    var a = document.querySelector('[href="#' + tabId + '"]');
+    return a ? a.querySelector('.badge') : null;
+  }
+
+  /* ── Flash a row highlight ── */
+  function flashRow(tr) {
+    tr.style.transition = 'background .1s';
+    tr.style.background = 'rgba(233,30,140,.18)';
+    setTimeout(function () { tr.style.background = ''; }, 1400);
+  }
+
+  /* ── Add a new row to the Active Orders DataTable ── */
+  function injectActiveRow(o) {
+    var dt = $('#tbl-active').DataTable();
+    /* Build status badge */
+    var statusBadge = '<span class="badge-done"><i class="fas fa-check mr-1"></i>' +
+      (o.status.charAt(0).toUpperCase() + o.status.slice(1)) + '</span>';
+    /* Build action buttons */
+    var items  = (o.items || '—').replace(/'/g, "\\'");
+    var actions = '<div class="d-flex gap-1" style="gap:6px;">' +
+      '<button class="btn-void" onclick="openVoidModal(' + o.id + ',\'' +
+        o.table_no + '\',' + o.total_amt + ',\'' + items + '\')">' +
+        '<i class="fas fa-ban mr-1"></i>Void</button>' +
+      '<button class="btn-refund" onclick="openRefundModal(' + o.id + ',\'' +
+        o.table_no + '\',' + o.total_amt + ',\'' + items + '\')">' +
+        '<i class="fas fa-rotate-left mr-1"></i>Refund</button></div>';
+
+    /* Date format from PHP: "M d, Y g:i A" */
+    var d = new Date(o.created_at.replace(' ', 'T'));
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var dateStr = months[d.getMonth()] + ' ' + String(d.getDate()).padStart(2,'0') + ', ' +
+      d.getFullYear() + ' ' + d.toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit',hour12:true});
+
+    var totalFmt = '₱' + parseFloat(o.total_amt).toLocaleString('en',{minimumFractionDigits:2});
+    var itemsShort = (o.items || '—').length > 45 ? o.items.substring(0,45) + '…' : (o.items || '—');
+
+    var row = dt.row.add([
+      '<strong>#' + o.id + '</strong>',
+      '<small class="text-muted">' + dateStr + '</small>',
+      '<span class="badge badge-secondary">#' + o.table_no + '</span>',
+      o.cashier_name || '—',
+      '<span title="' + (o.items||'') + '">' + itemsShort + '</span>',
+      statusBadge,
+      '<strong>' + totalFmt + '</strong>',
+      actions
+    ]).draw(false).node();
+
+    $(row).find('td').css({'white-space':'nowrap','overflow':'hidden','text-overflow':'ellipsis','max-width':'260px'});
+    flashRow(row);
+  }
+
+  /* ── Remove a row from Active Orders by order id ── */
+  function removeActiveRow(orderId) {
+    var dt  = $('#tbl-active').DataTable();
+    var str = '#' + orderId;
+    dt.rows(function(i, data) {
+      return typeof data[0] === 'string' && data[0].indexOf('>' + str + '<') !== -1;
+    }).remove().draw(false);
+  }
+
+  /* ── Show a small inline alert banner ── */
+  var _bannerTimer;
+  function showBanner(msg, color) {
+    var el = document.getElementById('vrRtBanner');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'vrRtBanner';
+      el.style.cssText = [
+        'position:fixed','top:70px','left:50%','transform:translateX(-50%)',
+        'z-index:99998','border-radius:10px','padding:9px 20px',
+        'font-size:.85rem','font-weight:700','color:#fff',
+        'box-shadow:0 4px 18px rgba(0,0,0,.22)',
+        'opacity:0','transition:opacity .3s','pointer-events:none'
+      ].join(';');
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.background = color || '#333';
+    el.style.opacity = '1';
+    clearTimeout(_bannerTimer);
+    _bannerTimer = setTimeout(function () { el.style.opacity = '0'; }, 4000);
+  }
+
+  /* ── Main poll ── */
+  function poll() {
+    fetch(POLL_URL + '&since=' + _snap.latestOrderId, { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        setDot(true);
+
+        /* ── Stat cards ── */
+        var vc = parseInt(d.voidedCount,   10) || 0;
+        var rc = parseInt(d.refundedCount, 10) || 0;
+        var tv = parseFloat(d.totalVoided)   || 0;
+        var tr = parseFloat(d.totalRefunded) || 0;
+        var pc = parseInt(d.pendingCount,  10) || 0;
+
+        if (vc !== _snap.voidedCount) {
+          animateNum($stat(0), String(vc));
+          var vb = tabBadge('pane-voided'); if (vb) vb.textContent = vc;
+        }
+        if (tv !== _snap.totalVoided) {
+          animateNum($stat(1), '₱' + tv.toLocaleString('en',{minimumFractionDigits:2}));
+        }
+        if (rc !== _snap.refundedCount) {
+          animateNum($stat(2), String(rc));
+          var rb = tabBadge('pane-refunded'); if (rb) rb.textContent = rc;
+        }
+        if (tr !== _snap.totalRefunded) {
+          animateNum($stat(3), '₱' + tr.toLocaleString('en',{minimumFractionDigits:2}));
+        }
+
+        /* ── Active Orders count badge ── */
+        if (pc !== _snap.pendingCount) {
+          var ab = tabBadge('pane-active'); if (ab) ab.textContent = pc;
+        }
+
+        /* ── New active orders injected into table ── */
+        var newOrders = d.newOrders || [];
+        newOrders.forEach(function (o) {
+          if (o.id > _snap.latestOrderId) {
+            injectActiveRow(o);
+          }
+        });
+
+        /* ── Orders that became voided/refunded — remove from Active tab ── */
+        var removed = d.removedIds || [];
+        removed.forEach(function (id) { removeActiveRow(id); });
+
+        /* ── Toasts for changes ── */
+        if (vc > _snap.voidedCount) {
+          showBanner('⚠️ ' + (vc - _snap.voidedCount) + ' order(s) voided', '#e74c3c');
+        }
+        if (rc > _snap.refundedCount) {
+          showBanner('↩️ ' + (rc - _snap.refundedCount) + ' order(s) refunded', '#3b82f6');
+        }
+        if (d.latestOrderId > _snap.latestOrderId) {
+          _snap.latestOrderId = d.latestOrderId;
+        }
+
+        /* ── Update snapshot ── */
+        _snap.voidedCount   = vc;
+        _snap.refundedCount = rc;
+        _snap.totalVoided   = tv;
+        _snap.totalRefunded = tr;
+        _snap.pendingCount  = pc;
+      })
+      .catch(function () { setDot(false); });
+  }
+
+  /* ── Start polling after page ready ── */
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { setInterval(poll, POLL_MS); });
+  } else {
+    setInterval(poll, POLL_MS);
+  }
+
+})();
+</script>
+<!-- ══ END real-time table updates ═══════════════════════════════════ -->
 
 </body>
 </html>

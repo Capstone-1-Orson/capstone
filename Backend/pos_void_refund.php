@@ -4,7 +4,7 @@
 // Both restore ingredient stock back to inventory.
 
 
-session_name('STAFF_SESSION');
+session_name('ADMIN_SESSION');
 session_start();
 header('Content-Type: application/json');
 

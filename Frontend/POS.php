@@ -13,6 +13,67 @@ if (!isset($conn) || $conn->connect_error) {
     die("Database connection failed: " . ($conn->connect_error ?? 'conn.php did not define $conn'));
 }
 
+// ══ REAL-TIME POLLING ENDPOINT (?rt=1) ════════════════════════
+// Returns current status of today's orders so the POS can live-update
+// history rows when admin voids/refunds an order without a page reload.
+if (isset($_GET['rt'])) {
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+
+    // Return id + status for all of today's orders
+    $rows = [];
+    $r = $conn->query(
+        "SELECT id, status, total_amt FROM orders
+         WHERE DATE(created_at) = CURDATE()
+         ORDER BY id DESC LIMIT 100"
+    );
+    if ($r) while ($row = $r->fetch_assoc()) {
+        $rows[] = ['id' => (int)$row['id'], 'status' => $row['status'], 'total_amt' => (float)$row['total_amt']];
+    }
+
+    // Also return today's valid revenue/order count so stat cards stay accurate
+    $rev = 0.0; $cnt = 0;
+    $r2 = $conn->query(
+        "SELECT COUNT(*) AS c, COALESCE(SUM(total_amt),0) AS r FROM orders
+         WHERE DATE(created_at)=CURDATE()
+         AND status NOT IN ('voided','refunded','partial_refund')"
+    );
+    if ($r2 && $row2 = $r2->fetch_assoc()) { $cnt=(int)$row2['c']; $rev=(float)$row2['r']; }
+
+    $conn->close();
+    echo json_encode(['orders' => $rows, 'today_revenue' => $rev, 'today_orders' => $cnt]);
+    exit();
+}
+// ══ END REAL-TIME ENDPOINT ════════════════════════════════════
+
+// ══ MENU REAL-TIME ENDPOINT (?menu_rt=1) ══════════════════════
+// Returns full menu availability so POS can live-update product
+// cards and menu panel when admin toggles items on/off.
+if (isset($_GET['menu_rt'])) {
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+
+    $items = [];
+    $r = $conn->query(
+        "SELECT id, name, price, category, image, is_available
+         FROM menu ORDER BY category, name"
+    );
+    if ($r) while ($row = $r->fetch_assoc()) {
+        $items[] = [
+            'id'           => (int)$row['id'],
+            'name'         => $row['name'],
+            'price'        => (float)$row['price'],
+            'category'     => $row['category'],
+            'image'        => $row['image'] ?? '',
+            'is_available' => (bool)$row['is_available'],
+        ];
+    }
+    $conn->close();
+    echo json_encode(['menu' => $items, 'ts' => time()]);
+    exit();
+}
+// ══ END MENU REAL-TIME ENDPOINT ═══════════════════════════════
+
 // ── Resolve cashier full name from DB (always re-fetch to reflect current logged-in user) ──
 $email_key = $_SESSION['user'] ?? '';
 $stmt = $conn->prepare("SELECT firstname, lastname, image FROM user WHERE email = ? LIMIT 1");
@@ -750,6 +811,68 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
 .menu-panel-cat{font-size:11px;color:var(--muted);margin-top:2px;}
 .menu-panel-price{font-size:15px;font-weight:800;color:var(--accent);margin-top:4px;}
 
+/* ── Real-time menu availability states ── */
+/* Product card — unavailable (greyed out, unclickable) */
+.product-card.unavailable{
+  opacity:.45;
+  filter:grayscale(.7);
+  pointer-events:none;
+  cursor:not-allowed;
+  border-color:var(--border)!important;
+  box-shadow:none!important;
+}
+.product-card.unavailable .card-add-btn{display:none;}
+.product-card.unavailable .card-img-w::after{
+  content:'Unavailable';
+  position:absolute;inset:0;
+  background:rgba(0,0,0,.52);
+  color:#fff;
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:0;
+  pointer-events:none;
+}
+/* Flash animation when a card changes state */
+@keyframes menuStateFlash{
+  0%,100%{box-shadow:0 0 0 0 transparent;}
+  25%{box-shadow:0 0 0 4px rgba(239,68,68,.5);}
+  75%{box-shadow:0 0 0 4px rgba(34,197,94,.4);}
+}
+.product-card.state-changed{animation:menuStateFlash .8s ease;}
+
+/* Menu panel card — unavailable */
+.menu-panel-card.unavailable{
+  opacity:.45;
+  filter:grayscale(.7);
+  pointer-events:none;
+}
+.menu-panel-card .avail-badge{
+  font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;
+  display:inline-flex;align-items:center;gap:4px;margin-top:5px;
+  white-space:nowrap;
+}
+.avail-badge.on{ background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.3);}
+.avail-badge.off{background:rgba(239,68,68,.10);color:var(--red);  border:1px solid rgba(239,68,68,.25);}
+
+/* Real-time menu sync indicator in panel header */
+.menu-rt-indicator{
+  display:flex;align-items:center;gap:6px;
+  font-size:11px;font-weight:600;color:var(--muted2);
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:20px;padding:4px 10px;
+  transition:color .3s,border-color .3s;
+}
+.menu-rt-indicator .rt-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--muted);
+  transition:background .3s;
+  flex-shrink:0;
+}
+.menu-rt-indicator.live .rt-dot{background:var(--green);animation:pulse 2s infinite;}
+.menu-rt-indicator.live{color:var(--green);border-color:rgba(34,197,94,.3);}
+.menu-rt-indicator.syncing .rt-dot{background:#eab308;animation:none;}
+.menu-rt-indicator.syncing{color:#eab308;border-color:rgba(234,179,8,.3);}
+
 /* History panel */
 .history-item{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 16px;margin-bottom:10px;transition:all var(--tr);}
 .history-item:hover{border-color:var(--border2);}
@@ -1297,37 +1420,19 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
   <div class="panel-header">
     <div class="panel-header-icon"><i class="fa-solid fa-utensils"></i></div>
     <div class="panel-title">Menu <span>Items</span></div>
-    <button class="panel-close" onclick="closePanel()"><i class="fa-solid fa-xmark"></i></button>
-  </div>
-  <div class="panel-body">
-    <?php foreach($cats_raw as $cat): ?>
-    <?php $items = array_filter($menu_items, fn($i) => $i['category'] === $cat); ?>
-    <?php if(count($items)): ?>
-    <div class="panel-section-title"><?= $cat_emoji[$cat] ?? '🍽️' ?> <?= htmlspecialchars($cat) ?> <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted2)">(<?= count($items) ?> items)</span></div>
-    <div class="menu-panel-grid" style="margin-bottom:24px;">
-      <?php foreach($items as $item): ?>
-      <div class="menu-panel-card" onclick="closePanel();setTimeout(()=>{activeCat='<?= addslashes($item['category']) ?>';renderCats();renderProducts();requestAnimationFrame(staggerCards);},200);" style="cursor:pointer;">
-        <div class="menu-panel-emoji" style="overflow:hidden;border-radius:12px;flex-shrink:0;">
-          <?php if (!empty($item['image'])): ?>
-            <img src="<?= htmlspecialchars($item['image']) ?>" alt="<?= htmlspecialchars($item['name']) ?>"
-                 style="width:100%;height:100%;object-fit:cover;border-radius:12px;"
-                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-            <span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:24px;"><?= $cat_emoji[$item['category']] ?? '🍽️' ?></span>
-          <?php else: ?>
-            <span style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:24px;"><?= $cat_emoji[$item['category']] ?? '🍽️' ?></span>
-          <?php endif; ?>
-        </div>
-        <div class="menu-panel-info">
-          <div class="menu-panel-name"><?= htmlspecialchars($item['name']) ?></div>
-          <div class="menu-panel-cat"><?= htmlspecialchars($item['category']) ?></div>
-          <?php if($item['description']): ?><div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><?= htmlspecialchars($item['description']) ?></div><?php endif; ?>
-          <div class="menu-panel-price">₱<?= number_format($item['price'], 2) ?></div>
-        </div>
-      </div>
-      <?php endforeach; ?>
+    <!-- Live sync indicator -->
+    <div class="menu-rt-indicator" id="menuRtIndicator" title="Real-time menu sync">
+      <span class="rt-dot"></span>
+      <span id="menuRtLabel">Connecting…</span>
     </div>
-    <?php endif; ?>
-    <?php endforeach; ?>
+    <button class="panel-close" onclick="closePanel()" style="margin-left:8px;"><i class="fa-solid fa-xmark"></i></button>
+  </div>
+  <div class="panel-body" id="menuPanelBody">
+    <!-- Populated by JS renderMenuPanel() -->
+    <div style="text-align:center;padding:60px 20px;color:var(--muted);">
+      <i class="fa-solid fa-spinner fa-spin" style="font-size:30px;margin-bottom:12px;display:block;"></i>
+      Loading menu…
+    </div>
   </div>
 </div>
 
@@ -3212,5 +3317,376 @@ function showToast(msg,color='var(--accent)',dur=2400){
 }
 </script>
 <script src="dist/js/empress-realtime.js" data-scope="pos"></script>
+
+<!-- ══ REAL-TIME VOID / REFUND WATCHER ══════════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  var POLL_MS = 10000; // check every 10 s
+
+  // Map of order id → last known status (seeded from DB_HISTORY on first poll)
+  var _knownStatus = {};
+  var _seeded = false;
+
+  function seed() {
+    if (_seeded) return;
+    _seeded = true;
+    // Seed from DB_HISTORY (PHP-injected)
+    if (typeof DB_HISTORY !== 'undefined') {
+      DB_HISTORY.forEach(function (o) {
+        _knownStatus[o.id] = o.status;
+      });
+    }
+    // Seed from live session orders
+    if (typeof orderHistory !== 'undefined') {
+      orderHistory.forEach(function (o) {
+        if (o.id) _knownStatus[o.id] = o.status || 'pending';
+      });
+    }
+  }
+
+  // Apply voided/refunded styling to a history row without re-rendering the whole list
+  function markRowDone(orderId, newStatus) {
+    var row = document.getElementById('hist-order-' + orderId);
+    if (!row) return;
+
+    // Already marked — skip
+    if (row.getAttribute('data-rt-status') === newStatus) return;
+    row.setAttribute('data-rt-status', newStatus);
+
+    var isVoided   = newStatus === 'voided';
+    var isRefunded = newStatus === 'refunded' || newStatus === 'partial_refund';
+    var label      = isVoided ? 'Voided' : 'Refunded';
+    var icon       = isVoided ? 'fa-ban' : 'fa-rotate-left';
+    var badgeClass = isVoided ? 'red' : 'blue';
+
+    // Icon area
+    var ic = row.querySelector('.history-ic');
+    if (ic) {
+      ic.style.background = 'var(--surface3)';
+      var ico = ic.querySelector('i');
+      if (ico) ico.style.color = 'var(--muted)';
+    }
+
+    // Add status badge next to order id (avoid duplicates)
+    var idEl = row.querySelector('.history-id');
+    if (idEl && !idEl.querySelector('.rt-status-badge')) {
+      var badge = document.createElement('span');
+      badge.className = 'badge-pill ' + badgeClass + ' rt-status-badge';
+      badge.style.fontSize = '9px';
+      badge.innerHTML = '<i class="fa-solid ' + icon + '" style="font-size:8px"></i> ' + label;
+      idEl.appendChild(badge);
+    }
+
+    // Strike-through the amount
+    var amtEl = row.querySelector('.history-amt');
+    if (amtEl && !amtEl.querySelector('s')) {
+      amtEl.style.color = 'var(--muted)';
+      var raw = amtEl.textContent.trim();
+      amtEl.innerHTML = '<s style="font-size:11px;">' + raw + '</s>';
+    }
+
+    // Remove any void/refund action buttons that were in the row
+    var actEl = row.querySelector('[style*="display:flex;gap:5px"]');
+    if (actEl) actEl.remove();
+
+    // Flash row to draw attention
+    row.style.transition = 'background .15s';
+    row.style.background = isVoided
+      ? 'rgba(239,68,68,.08)'
+      : 'rgba(59,130,246,.08)';
+    setTimeout(function () { row.style.background = ''; }, 1800);
+  }
+
+  // Update in-memory orderHistory status too
+  function syncMemoryStatus(orderId, newStatus) {
+    if (typeof orderHistory === 'undefined') return;
+    var oh = orderHistory.find(function (o) { return o.id === orderId; });
+    if (oh) oh.status = newStatus;
+    // Also sync DB_HISTORY if it exists
+    if (typeof DB_HISTORY !== 'undefined') {
+      var dh = DB_HISTORY.find(function (o) { return parseInt(o.id) === orderId; });
+      if (dh) dh.status = newStatus;
+    }
+  }
+
+  function poll() {
+    seed(); // ensure seeded before first real poll
+
+    fetch(window.location.pathname + '?rt=1', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (d) {
+        var changed = [];
+
+        (d.orders || []).forEach(function (o) {
+          var id        = o.id;
+          var newStatus = o.status;
+          var prev      = _knownStatus[id];
+
+          // Track all known orders
+          if (prev === undefined) {
+            _knownStatus[id] = newStatus;
+            return; // new order we haven't seen — just record it
+          }
+
+          // Detect a status change to voided / refunded
+          var wasGood = prev !== 'voided' && prev !== 'refunded' && prev !== 'partial_refund';
+          var isBad   = newStatus === 'voided' || newStatus === 'refunded' || newStatus === 'partial_refund';
+
+          if (wasGood && isBad) {
+            _knownStatus[id] = newStatus;
+            syncMemoryStatus(id, newStatus);
+            markRowDone(id, newStatus);
+            changed.push({ id: id, status: newStatus });
+          }
+        });
+
+        // If any changed, show a toast
+        if (changed.length) {
+          var voidCount   = changed.filter(function (c) { return c.status === 'voided'; }).length;
+          var refundCount = changed.filter(function (c) { return c.status !== 'voided'; }).length;
+          var msgs = [];
+          if (voidCount)   msgs.push(voidCount + ' order' + (voidCount > 1 ? 's' : '') + ' voided');
+          if (refundCount) msgs.push(refundCount + ' order' + (refundCount > 1 ? 's' : '') + ' refunded');
+          if (typeof showToast === 'function') {
+            showToast(
+              '<i class="fa-solid fa-triangle-exclamation me-1"></i> ' + msgs.join(' · '),
+              changed[0].status === 'voided' ? 'var(--red)' : 'var(--blue)',
+              6000
+            );
+          }
+          // Re-render history panel if it's open
+          var hp = document.getElementById('panel-history');
+          if (hp && hp.classList.contains('open') && typeof refreshHistoryPanel === 'function') {
+            refreshHistoryPanel();
+          }
+        }
+      })
+      .catch(function () { /* retry silently */ })
+      .finally(function () { setTimeout(poll, POLL_MS); });
+  }
+
+  // Start after DOM + initial JS is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { setTimeout(poll, 3000); });
+  } else {
+    setTimeout(poll, 3000);
+  }
+})();
+</script>
+<!-- ══ REAL-TIME MENU AVAILABILITY WATCHER ══════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  var POLL_MS = 15000; // poll every 15 s
+
+  // Local snapshot: id → { is_available, price, name, image, category }
+  var _menuSnapshot = {};
+  var _seeded = false;
+
+  // ── Seed initial state from the products array PHP injected ────
+  function seed() {
+    if (_seeded) return;
+    _seeded = true;
+    if (typeof products !== 'undefined') {
+      products.forEach(function (p) {
+        _menuSnapshot[p.id] = { is_available: true, price: p.price, name: p.name, image: p.image || '', category: p.cat };
+      });
+    }
+  }
+
+  // ── Set indicator state ────────────────────────────────────────
+  function setIndicator(state, text) {
+    var el  = document.getElementById('menuRtIndicator');
+    var lbl = document.getElementById('menuRtLabel');
+    if (!el || !lbl) return;
+    el.className = 'menu-rt-indicator ' + state;
+    lbl.textContent = text;
+  }
+
+  // ── Apply availability to a single product card in the main grid ──
+  function applyCardState(id, isAvail, changed) {
+    var card = document.querySelector('.product-card[data-id="' + id + '"]');
+    if (!card) return;
+    var wasUnavail = card.classList.contains('unavailable');
+    if (isAvail && wasUnavail) {
+      card.classList.remove('unavailable');
+      if (changed) { card.classList.add('state-changed'); setTimeout(function(){card.classList.remove('state-changed');},900); }
+    } else if (!isAvail && !wasUnavail) {
+      card.classList.add('unavailable');
+      if (changed) { card.classList.add('state-changed'); setTimeout(function(){card.classList.remove('state-changed');},900); }
+    }
+  }
+
+  // ── Rebuild the menu panel body ────────────────────────────────
+  function renderMenuPanel(allItems) {
+    var body = document.getElementById('menuPanelBody');
+    if (!body) return;
+
+    // Group by category
+    var cats = {};
+    allItems.forEach(function (item) {
+      if (!cats[item.category]) cats[item.category] = [];
+      cats[item.category].push(item);
+    });
+
+    var catOrder = Object.keys(cats).sort();
+    var html = '';
+    catOrder.forEach(function (cat) {
+      var items = cats[cat];
+      var emoji = (typeof CAT_ICON !== 'undefined' && CAT_ICON[cat]) ? CAT_ICON[cat] : '🍽️';
+      var avCount = items.filter(function(i){ return i.is_available; }).length;
+
+      html += '<div class="panel-section-title">' + emoji + ' ' + esc(cat) +
+        ' <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted2)">(' +
+        avCount + '/' + items.length + ' available)</span></div>';
+      html += '<div class="menu-panel-grid" style="margin-bottom:24px;">';
+
+      items.forEach(function (item) {
+        var isAv  = item.is_available;
+        var imgHtml = item.image
+          ? '<img src="' + item.image + '" alt="' + esc(item.name) + '" style="width:100%;height:100%;object-fit:cover;border-radius:12px;" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
+            '<span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:24px;">' + emoji + '</span>'
+          : '<span style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:24px;">' + emoji + '</span>';
+
+        var clickAttr = isAv
+          ? 'onclick="closePanel();setTimeout(()=>{activeCat=\'' + esc(cat) + '\';renderCats();renderProducts();requestAnimationFrame(staggerCards);},200);" style="cursor:pointer;"'
+          : 'style="cursor:not-allowed;"';
+
+        html += '<div class="menu-panel-card' + (isAv ? '' : ' unavailable') + '" data-menu-id="' + item.id + '" ' + clickAttr + '>' +
+          '<div class="menu-panel-emoji" style="overflow:hidden;border-radius:12px;flex-shrink:0;">' + imgHtml + '</div>' +
+          '<div class="menu-panel-info">' +
+            '<div class="menu-panel-name">' + esc(item.name) + '</div>' +
+            '<div class="menu-panel-cat">' + esc(item.category) + '</div>' +
+            '<div class="menu-panel-price">₱' + parseFloat(item.price).toLocaleString('en', {minimumFractionDigits:2}) + '</div>' +
+            '<div><span class="avail-badge ' + (isAv ? 'on' : 'off') + '">' +
+              '<i class="fa-solid ' + (isAv ? 'fa-circle-check' : 'fa-circle-xmark') + '" style="font-size:9px"></i> ' +
+              (isAv ? 'Available' : 'Unavailable') +
+            '</span></div>' +
+          '</div>' +
+        '</div>';
+      });
+
+      html += '</div>';
+    });
+
+    body.innerHTML = html;
+  }
+
+  // ── Tiny HTML escape helper ────────────────────────────────────
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
+  // ── Update the main POS product grid cards ────────────────────
+  function syncProductGrid(allItems, changedIds) {
+    allItems.forEach(function (item) {
+      var changed = changedIds.indexOf(item.id) !== -1;
+      applyCardState(item.id, item.is_available, changed);
+    });
+  }
+
+  // ── Update the in-memory products array so re-renders respect availability ──
+  function syncProductsArray(allItems) {
+    if (typeof products === 'undefined') return;
+    allItems.forEach(function (serverItem) {
+      var local = products.find(function (p) { return p.id === serverItem.id; });
+      if (local) {
+        local._available = serverItem.is_available; // custom flag (products[] only tracks available ones)
+      }
+    });
+  }
+
+  // ── Main poll ─────────────────────────────────────────────────
+  function poll() {
+    seed();
+    setIndicator('syncing', 'Syncing…');
+
+    fetch(window.location.pathname + '?menu_rt=1', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (d) {
+        var allItems   = d.menu || [];
+        var changedIds = [];
+        var toastMsgs  = [];
+
+        allItems.forEach(function (item) {
+          var prev = _menuSnapshot[item.id];
+          var prevAvail = prev ? prev.is_available : true; // assume available if unknown
+
+          // Detect availability change
+          if (prev !== undefined && prevAvail !== item.is_available) {
+            changedIds.push(item.id);
+            toastMsgs.push({
+              name:    item.name,
+              avail:   item.is_available,
+            });
+          }
+
+          _menuSnapshot[item.id] = {
+            is_available: item.is_available,
+            price:        item.price,
+            name:         item.name,
+            image:        item.image || '',
+            category:     item.category,
+          };
+        });
+
+        // Apply to product grid
+        syncProductGrid(allItems, changedIds);
+        syncProductsArray(allItems);
+
+        // Re-render menu panel if it's open
+        var menuPanel = document.getElementById('panel-menu');
+        if (menuPanel && menuPanel.classList.contains('open')) {
+          renderMenuPanel(allItems);
+        }
+
+        // Toast notifications for changed items
+        if (toastMsgs.length && typeof showToast === 'function') {
+          var nowAvail   = toastMsgs.filter(function(m){ return m.avail; });
+          var nowUnAvail = toastMsgs.filter(function(m){ return !m.avail; });
+          var parts = [];
+          if (nowAvail.length)   parts.push('<i class="fa-solid fa-circle-check" style="color:var(--green)"></i> ' + nowAvail.map(function(m){ return '<strong>' + esc(m.name) + '</strong>'; }).join(', ') + ' now available');
+          if (nowUnAvail.length) parts.push('<i class="fa-solid fa-circle-xmark" style="color:var(--red)"></i> ' + nowUnAvail.map(function(m){ return '<strong>' + esc(m.name) + '</strong>'; }).join(', ') + ' unavailable');
+          showToast(parts.join('<br>'), nowUnAvail.length ? 'var(--surface3)' : 'var(--green)', 5000);
+        }
+
+        setIndicator('live', 'Live');
+      })
+      .catch(function () {
+        setIndicator('', 'Offline');
+      })
+      .finally(function () {
+        setTimeout(poll, POLL_MS);
+      });
+  }
+
+  // ── openPanel hook: render menu panel with latest data on open ──
+  var _origOpenPanel = typeof openPanel === 'function' ? openPanel : null;
+  document.addEventListener('DOMContentLoaded', function () {
+    // Wrap openPanel to render menu panel when it opens
+    if (typeof openPanel === 'function') {
+      var _orig = openPanel;
+      window.openPanel = function (id, navBtn) {
+        _orig(id, navBtn);
+        if (id === 'panel-menu') {
+          var allItems = Object.keys(_menuSnapshot).map(function(k){
+            var s = _menuSnapshot[k];
+            return { id: parseInt(k), name: s.name, price: s.price, category: s.category, image: s.image, is_available: s.is_available };
+          });
+          if (allItems.length) renderMenuPanel(allItems);
+        }
+      };
+    }
+
+    // Start polling after 2 s
+    setTimeout(poll, 2000);
+  });
+
+})();
+</script>
+<!-- ══ END REAL-TIME MENU WATCHER ═══════════════════════════════ -->
 </body>
 </html>
