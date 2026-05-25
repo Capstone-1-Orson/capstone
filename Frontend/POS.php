@@ -1207,6 +1207,45 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
   transition: color 0.3s ease;
 }
 
+/* ── Fullscreen button ── */
+#fullscreenBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--tr);
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+#fullscreenBtn i {
+  font-size: 12px;
+  transition: transform 0.2s ease;
+}
+#fullscreenBtn:hover {
+  background: var(--accent-soft);
+  border-color: rgba(233,30,140,.35);
+  color: var(--accent);
+}
+#fullscreenBtn:hover i {
+  transform: scale(1.2);
+}
+#fullscreenBtn.is-fullscreen {
+  background: var(--accent-soft);
+  border-color: rgba(233,30,140,.35);
+  color: var(--accent);
+}
+/* Hide label on narrow screens */
+@media (max-width: 600px) {
+  #fullscreenBtn .fs-label { display: none; }
+}
+
 </style>
 </head>
 <body>
@@ -1265,6 +1304,10 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
   <div class="pos-topbar">
     <div class="pos-title">New <span>Order</span></div>
     <span id="liveClock"></span>
+    <button id="fullscreenBtn" onclick="toggleFullscreen()" title="Toggle fullscreen">
+      <i class="fa-solid fa-expand" id="fullscreenIco"></i>
+      <span class="fs-label">Fullscreen</span>
+    </button>
     <div class="pos-search">
       <i class="fa-solid fa-magnifying-glass si"></i>
       <input type="text" id="searchInput" placeholder="Search menu items…" autocomplete="off">
@@ -3263,6 +3306,48 @@ function updateMobileCartBadge() {
     el.textContent=new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
   }
   tick(); setInterval(tick,1000);
+})();
+
+// ── Fullscreen ────────────────────────────────────────────────
+function toggleFullscreen(){
+  const btn=document.getElementById('fullscreenBtn');
+  const ico=document.getElementById('fullscreenIco');
+  const lbl=btn.querySelector('.fs-label');
+  if(!document.fullscreenElement){
+    (document.documentElement.requestFullscreen||
+     document.documentElement.webkitRequestFullscreen||
+     document.documentElement.mozRequestFullScreen||
+     document.documentElement.msRequestFullscreen
+    ).call(document.documentElement).catch(()=>{});
+  } else {
+    (document.exitFullscreen||
+     document.webkitExitFullscreen||
+     document.mozCancelFullScreen||
+     document.msExitFullscreen
+    ).call(document).catch(()=>{});
+  }
+}
+(function(){
+  function onFsChange(){
+    const btn=document.getElementById('fullscreenBtn');
+    const ico=document.getElementById('fullscreenIco');
+    const lbl=btn&&btn.querySelector('.fs-label');
+    const isFs=!!document.fullscreenElement;
+    if(!btn) return;
+    if(isFs){
+      btn.classList.add('is-fullscreen');
+      if(ico) ico.className='fa-solid fa-compress';
+      if(lbl) lbl.textContent='Exit Full';
+    } else {
+      btn.classList.remove('is-fullscreen');
+      if(ico) ico.className='fa-solid fa-expand';
+      if(lbl) lbl.textContent='Fullscreen';
+    }
+  }
+  document.addEventListener('fullscreenchange',onFsChange);
+  document.addEventListener('webkitfullscreenchange',onFsChange);
+  document.addEventListener('mozfullscreenchange',onFsChange);
+  document.addEventListener('MSFullscreenChange',onFsChange);
 })();
 
 function initTheme(){

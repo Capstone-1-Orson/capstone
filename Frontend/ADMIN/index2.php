@@ -297,7 +297,7 @@ if ($r) while ($row = $r->fetch_assoc()) $expiredNames[] = $row['name'];
 
 // ── New menu items (last 5 added) ──────────────────────────────
 $newMenuItems = [];
-$r = $conn->query("SELECT name, price, description FROM menu ORDER BY id DESC LIMIT 4");
+$r = $conn->query("SELECT name, price, description, image FROM menu ORDER BY id DESC LIMIT 4");
 if ($r) while ($row = $r->fetch_assoc()) $newMenuItems[] = $row;
 
 // ── Staff list ────────────────────────────────────────────────
@@ -673,7 +673,7 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
           $admin_name  = htmlspecialchars(trim($admin_first . ' ' . $admin_last));
           $admin_photo = !empty($admin_image)
               ? '../../' . htmlspecialchars($admin_image)
-              : '../dist/img/avatar.png';
+              : "../dist/img/Empress' Cafe Boracay.jpg";
         ?>
         <div class="image"><img src="<?= $admin_photo ?>" class="img-circle elevation-2" alt="<?= $admin_name ?>"></div>
         <div class="info">
@@ -866,9 +866,7 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
                         $badgeColors = ['badge-warning','badge-info','badge-danger','badge-success'];
                         foreach ($newMenuItems as $mi => $item): ?>
                       <li class="item">
-                        <div class="product-img">
-                          <img src="../dist/img/default-150x150.png" alt="<?= htmlspecialchars($item['name']) ?>" class="img-size-50">
-                        </div>
+
                         <div class="product-info">
                           <a href="menu-management.php" class="product-title">
                             <?= htmlspecialchars($item['name']) ?>
