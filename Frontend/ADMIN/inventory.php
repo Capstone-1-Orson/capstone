@@ -1,70 +1,34 @@
 <?php
-session_name('ADMIN_SESSION');
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
-    header("Location:../../lockscreen.html");
-    exit();
+// Frontend/ADMIN/inventory.php  (OOP refactored)
+require_once '../../Frontend/Core/InventoryView.php';
+$view = new InventoryView();
+
+// Variable aliases so the HTML needs zero changes
+$total         = $view->total;
+$inStock       = $view->inStock;
+$lowStock      = $view->lowStock;
+$outStock      = $view->outStock;
+$expiringSoon  = $view->expiringSoon;
+$expired       = $view->expired;
+$items         = $view->items;
+$lowAlerts     = $view->lowAlerts;
+$expiryAlerts  = $view->expiryAlerts;
+$expiredItems  = $view->expiredItems;
+
+// Snake_case aliases for HTML compatibility
+$in_stock      = $inStock;
+$low_stock     = $lowStock;
+$out_stock     = $outStock;
+$expiring_soon = $expiringSoon;
+$low_alerts    = $lowAlerts;
+$expiry_alerts = $expiryAlerts;
+$expired_items = $expiredItems;
+
+/** Format a quantity: integer if whole, otherwise 2 decimal places. */
+function fmtQty(float|int|string $val): string {
+    $n = (float) $val;
+    return $n == (int) $n ? (string)(int)$n : number_format($n, 2);
 }
-
-
-// DB: operlytics | table: ingredients
-// columns: id, name, unit, stock_qty, low_stock_threshold, expiry_date, created_at, updated_at
-// Migration: ALTER TABLE ingredients ADD COLUMN expiry_date DATE NULL AFTER low_stock_threshold;
-require_once '../../Backend/conn.php';
-
-// Format quantity: trim trailing zeros, max 2 decimal places
-function fmtQty($val) {
-    return rtrim(rtrim(number_format((float)$val, 2, '.', ''), '0'), '.');
-}
-
-// ── Stats — single query instead of four separate ones ────────
-$stats_row = $conn->query(
-    "SELECT
-        COUNT(*) AS total,
-        SUM(stock_qty > low_stock_threshold) AS in_stock,
-        SUM(stock_qty > 0 AND stock_qty <= low_stock_threshold) AS low_stock,
-        SUM(stock_qty = 0) AS out_stock,
-        SUM(expiry_date IS NOT NULL AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) AND expiry_date >= CURDATE()) AS expiring_soon,
-        SUM(expiry_date IS NOT NULL AND expiry_date < CURDATE()) AS expired
-     FROM ingredients"
-)->fetch_assoc();
-
-$total         = (int)($stats_row['total']         ?? 0);
-$in_stock      = (int)($stats_row['in_stock']      ?? 0);
-$low_stock     = (int)($stats_row['low_stock']     ?? 0);
-$out_stock     = (int)($stats_row['out_stock']     ?? 0);
-$expiring_soon = (int)($stats_row['expiring_soon'] ?? 0);
-$expired       = (int)($stats_row['expired']       ?? 0);
-
-// ── Fetch all ingredients ─────────────────────────────────────
-$items = [];
-$res = $conn->query("SELECT * FROM ingredients ORDER BY name ASC");
-while ($row = $res->fetch_assoc()) {
-    $items[] = $row;
-}
-
-// ── Low stock alert list (stock <= threshold, not zero) ───────
-$low_alerts = [];
-$res2 = $conn->query("SELECT name, stock_qty, unit FROM ingredients WHERE stock_qty <= low_stock_threshold ORDER BY stock_qty ASC LIMIT 8");
-while ($row = $res2->fetch_assoc()) {
-    $low_alerts[] = $row;
-}
-
-// ── Expiring soon list (within 30 days, not yet expired) ──────
-$expiry_alerts = [];
-$res3 = $conn->query("SELECT name, stock_qty, unit, expiry_date, DATEDIFF(expiry_date, CURDATE()) AS days_left FROM ingredients WHERE expiry_date IS NOT NULL AND expiry_date >= CURDATE() AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) ORDER BY expiry_date ASC LIMIT 10");
-while ($row = $res3->fetch_assoc()) {
-    $expiry_alerts[] = $row;
-}
-
-// ── Already expired list ──────────────────────────────────────
-$expired_items = [];
-$res4 = $conn->query("SELECT name, stock_qty, unit, expiry_date FROM ingredients WHERE expiry_date IS NOT NULL AND expiry_date < CURDATE() ORDER BY expiry_date ASC");
-while ($row = $res4->fetch_assoc()) {
-    $expired_items[] = $row;
-}
-
-$conn->close();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -253,7 +217,7 @@ $conn->close();
         </a>
         <div class="sidebar">
             <div class="user-panel mt-3 pb-3 mb-3 d-flex">
-                <div class="image"><img src="../dist/img/Empress' Cafe Boracay.jpg" class="img-circle elevation-2" alt="User Image"></div>
+                <div class="image"><img src="../dist/img/avatar.png" class="img-circle elevation-2" alt="User Image"></div>
                 <div class="info">
                      <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user'] ?? 'Admin') ?></a>
                 </div>
@@ -306,7 +270,7 @@ $conn->close();
                         </a>
                     </li>
                     <li class="nav-item mt-auto">
-                        <a href="../../Backend/logout.php" class="nav-link">
+                        <a href="../../Backend/Controllers/LogoutController.php" class="nav-link">
                             <i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p>
                         </a>
                     </li>
@@ -604,7 +568,7 @@ $conn->close();
                         <button type="button" class="close" data-dismiss="modal">&times;</button>
                     </div>
 
-                    <form action="../../Backend/inventory_process.php" method="POST">
+                    <form action="../../Backend/Controllers/InventoryController.php" method="POST">
                         <div class="modal-body">
 
                             <div class="row">
@@ -686,7 +650,7 @@ $conn->close();
                     <button type="button" class="close" data-dismiss="modal">&times;</button>
                 </div>
 
-                <form action="../../Backend/inventory_process.php" method="POST">
+                <form action="../../Backend/Controllers/InventoryController.php" method="POST">
                     <input type="hidden" name="update_ingredient" value="1">
                     <input type="hidden" name="id" id="editIngId">
 
@@ -770,7 +734,7 @@ $conn->close();
                     <button type="button" class="close" data-dismiss="modal">&times;</button>
                 </div>
 
-                <form action="../../Backend/inventory_process.php" method="POST">
+                <form action="../../Backend/Controllers/InventoryController.php" method="POST">
                     <input type="hidden" name="bulk_restock" value="1">
 
                     <div class="modal-body">
@@ -955,7 +919,7 @@ $conn->close();
                     <h5 class="modal-title"><i class="fas fa-bell mr-2"></i>Set Low Stock Alert Thresholds</h5>
                     <button type="button" class="close" data-dismiss="modal">&times;</button>
                 </div>
-                <form action="../../Backend/inventory_process.php" method="POST">
+                <form action="../../Backend/Controllers/InventoryController.php" method="POST">
                     <input type="hidden" name="bulk_update_thresholds" value="1">
                     <div class="modal-body">
                         <p class="text-muted">Update the low stock threshold for each ingredient. An alert triggers when stock falls at or below this value.</p>
@@ -1071,7 +1035,7 @@ $conn->close();
          onmouseout="this.style.background='rgba(255,255,255,.07)';this.style.color='rgba(255,255,255,.65)'">
         Cancel
       </button>
-      <form id="deleteIngredientForm" action="../../Backend/inventory_process.php" method="POST" style="display:inline;">
+      <form id="deleteIngredientForm" action="../../Backend/Controllers/InventoryController.php" method="POST" style="display:inline;">
         <input type="hidden" name="action" value="delete">
         <input type="hidden" name="id" id="deleteIngredientId">
         <button type="submit" style="

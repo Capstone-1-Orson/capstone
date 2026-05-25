@@ -1,291 +1,34 @@
 <?php
-session_name('ADMIN_SESSION');
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
-    header("Location: ../../lockscreen.html");
-    exit();
-}
+// Frontend/ADMIN/sale_revenue.php  (OOP refactored)
+require_once '../../Frontend/Core/SalesRevenueView.php';
+$view = new SalesRevenueView();   // dispatches ?ajax=topitems early
 
-require_once '../../Backend/conn.php';
-
-// ── Helper ─────────────────────────────────────────────────────
-function tableExists($conn, $table) {
-    $r = $conn->query("SHOW TABLES LIKE '$table'");
-    return $r && $r->num_rows > 0;
-}
-$hasOrderItems = tableExists($conn, 'order_items');
-
-// ── Valid order filter (exclude voided / refunded) ─────────────
-$VALID = "status NOT IN ('voided','refunded','partial_refund')";
-$VALIDO = "o.status NOT IN ('voided','refunded','partial_refund')";
-
-// ── Date Range Filter ──────────────────────────────────────────
-$drpPresets = ['today'=>0,'7days'=>7,'30days'=>30,'3months'=>90,'12months'=>365,'mtd'=>-1,'ytd'=>-1,'alltime'=>-1,'custom'=>-1];
-$selectedRange = (isset($_GET['range']) && array_key_exists($_GET['range'], $drpPresets)) ? $_GET['range'] : 'alltime';
-
-$dateFrom = $dateTo = '';
-if ($selectedRange === 'today') {
-    $df = "DATE(created_at)=CURDATE()";
-    $dfO = "DATE(o.created_at)=CURDATE()";
-} elseif ($selectedRange === 'custom') {
-    $dateFrom = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_from']??'') ? $_GET['date_from'] : date('Y-m-d',strtotime('-7 days'));
-    $dateTo   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_to']??'')   ? $_GET['date_to']   : date('Y-m-d');
-    $df  = "DATE(created_at) BETWEEN '$dateFrom' AND '$dateTo'";
-    $dfO = "DATE(o.created_at) BETWEEN '$dateFrom' AND '$dateTo'";
-} elseif ($selectedRange === 'mtd') {
-    $df  = "YEAR(created_at)=YEAR(CURDATE()) AND MONTH(created_at)=MONTH(CURDATE())";
-    $dfO = "YEAR(o.created_at)=YEAR(CURDATE()) AND MONTH(o.created_at)=MONTH(CURDATE())";
-} elseif ($selectedRange === 'ytd') {
-    $df  = "YEAR(created_at)=YEAR(CURDATE())";
-    $dfO = "YEAR(o.created_at)=YEAR(CURDATE())";
-} elseif ($selectedRange === 'alltime') {
-    $df = $dfO = "1=1";
-} else {
-    $days = (int)$drpPresets[$selectedRange];
-    $df  = "created_at >= DATE_SUB(CURDATE(), INTERVAL $days DAY)";
-    $dfO = "o.created_at >= DATE_SUB(CURDATE(), INTERVAL $days DAY)";
-}
-
-// ── Summary Stats ──────────────────────────────────────────────
-$totalRevenue = 0.0;
-$totalOrders  = 0;
-$r = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE $VALID AND $df");
-if ($r && $row = $r->fetch_assoc()) {
-    $totalOrders  = (int)$row['cnt'];
-    $totalRevenue = (float)$row['rev'];
-}
-
-// Refund deduction
-$totalRefundAmt = 0.0;
-$rRef = $conn->query("SELECT COALESCE(SUM(refund_amt),0) AS amt FROM order_refunds WHERE $df");
-if ($rRef && $rowRef = $rRef->fetch_assoc()) $totalRefundAmt = (float)$rowRef['amt'];
-
-// Today's revenue (always today regardless of filter)
-$todayRevenue = 0.0;
-$r2 = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at)=CURDATE() AND $VALID");
-if ($r2 && $row2 = $r2->fetch_assoc()) $todayRevenue = (float)$row2['rev'];
-
-// This month's revenue (always this month regardless of filter)
-$monthRevenue = 0.0;
-$r3 = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE MONTH(created_at)=MONTH(CURDATE()) AND YEAR(created_at)=YEAR(CURDATE()) AND $VALID");
-if ($r3 && $row3 = $r3->fetch_assoc()) $monthRevenue = (float)$row3['rev'];
-
-// Average order value
-$avgOrder = $totalOrders > 0 ? $totalRevenue / $totalOrders : 0;
-
-// ── Monthly Sales Chart (last 6 months) — single query ────────
-$monthLabels = [];
-$monthData   = [];
-
-// Build the 6 month slots first so we always show all 6 even if revenue is 0
-$monthSlots = [];
-for ($i = 5; $i >= 0; $i--) {
-    $key           = date('Y-m', strtotime("-$i months"));
-    $monthSlots[$key] = 0.0;
-    $monthLabels[]    = date('M Y', strtotime("-$i months"));
-}
-
-$mStmt = $conn->prepare(
-    "SELECT DATE_FORMAT(created_at,'%Y-%m') AS ym,
-            COALESCE(SUM(total_amt),0) AS rev
-     FROM orders
-     WHERE created_at >= DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 5 MONTH),'%Y-%m-01')
-       AND $VALID
-     GROUP BY ym"
-);
-$mStmt->execute();
-$mRes = $mStmt->get_result();
-while ($row = $mRes->fetch_assoc()) {
-    if (isset($monthSlots[$row['ym']])) {
-        $monthSlots[$row['ym']] = (float)$row['rev'];
-    }
-}
-$mStmt->close();
-$monthData = array_values($monthSlots);
-
-// ── Revenue Forecasting — Linear Regression on 6-month data ───
-// Uses least-squares linear regression to project next 3 months
-function linearRegression(array $y): array {
-    $n = count($y);
-    if ($n < 2) return ['slope' => 0, 'intercept' => 0];
-    $sumX = 0; $sumY = 0; $sumXY = 0; $sumX2 = 0;
-    for ($i = 0; $i < $n; $i++) {
-        $sumX  += $i;
-        $sumY  += $y[$i];
-        $sumXY += $i * $y[$i];
-        $sumX2 += $i * $i;
-    }
-    $denom = $n * $sumX2 - $sumX * $sumX;
-    if ($denom == 0) return ['slope' => 0, 'intercept' => $sumY / $n];
-    $slope     = ($n * $sumXY - $sumX * $sumY) / $denom;
-    $intercept = ($sumY - $slope * $sumX) / $n;
-    return ['slope' => $slope, 'intercept' => $intercept];
-}
-
-$reg = linearRegression($monthData);
-$forecastData   = [];
-$forecastLabels = [];
-$n = count($monthData);
-for ($f = 1; $f <= 3; $f++) {
-    $forecastVal      = max(0, $reg['intercept'] + $reg['slope'] * ($n - 1 + $f));
-    $forecastData[]   = round($forecastVal, 2);
-    $forecastLabels[] = date('M Y', strtotime("+$f months"));
-}
-
-// Projected next-month revenue & growth rate
-$projNextMonth   = $forecastData[0];
-$lastMonthActual = end($monthData);
-$projGrowthPct   = $lastMonthActual > 0
-    ? (($projNextMonth - $lastMonthActual) / $lastMonthActual) * 100
-    : 0;
-
-$forecastDataJson   = json_encode($forecastData);
-$forecastLabelsJson = json_encode($forecastLabels);
-
-// ── Top Selling Items (for donut chart + sales table) ──────────
-$topItems   = [];
-$tableItems = [];
-if ($hasOrderItems) {
-    $r4 = $conn->query(
-        "SELECT m.name, m.category, m.price,
-                SUM(oi.qty) AS qty_sold,
-                SUM(oi.qty * oi.unit_price) AS revenue
-         FROM order_items oi
-         JOIN menu m ON m.id = oi.menu_id
-         JOIN orders o ON o.id = oi.order_id
-         WHERE $VALID AND $dfO
-         GROUP BY oi.menu_id
-         ORDER BY qty_sold DESC
-         LIMIT 10"
-    );
-    if ($r4) while ($row = $r4->fetch_assoc()) {
-        $topItems[]   = $row;
-        $tableItems[] = $row;
-    }
-}
-
-// ── Latest Orders ──────────────────────────────────────────────
-$latestOrders = [];
-if ($hasOrderItems) {
-    $r5 = $conn->query(
-        "SELECT o.id, o.created_at, o.table_no, o.total_amt,
-                COALESCE(o.discount_amt, 0) AS discount_amt,
-                COALESCE(o.discount_type, '') AS discount_type,
-                COALESCE(CONCAT(u.firstname,' ',u.lastname), 'N/A') AS cashier_name,
-                GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
-                GROUP_CONCAT(
-                    CONCAT(
-                        m.name,'|',oi.qty,'|',
-                        COALESCE(oi.addons,''),'|',
-                        CASE
-                            WHEN oi.removed_ingredient_names IS NOT NULL
-                                 AND oi.removed_ingredient_names != '[]'
-                                 AND oi.removed_ingredient_names != ''
-                            THEN oi.removed_ingredient_names
-                            WHEN oi.removed_ingredient_ids IS NOT NULL
-                                 AND oi.removed_ingredient_ids != '[]'
-                                 AND oi.removed_ingredient_ids != ''
-                            THEN (
-                                SELECT CONCAT('[',GROUP_CONCAT(JSON_QUOTE(i2.name) ORDER BY i2.name),']')
-                                FROM ingredients i2
-                                WHERE JSON_SEARCH(oi.removed_ingredient_ids, 'one', CAST(i2.id AS CHAR)) IS NOT NULL
-                            )
-                            ELSE ''
-                        END
-                    )
-                    ORDER BY m.name SEPARATOR ';;'
-                ) AS item_details
-         FROM orders o
-         LEFT JOIN user u ON u.id = o.user_id
-         JOIN order_items oi ON oi.order_id = o.id
-         JOIN menu m ON m.id = oi.menu_id
-         WHERE $VALID AND $dfO
-         GROUP BY o.id
-         ORDER BY o.created_at DESC LIMIT 10"
-    );
-    if ($r5) while ($row = $r5->fetch_assoc()) $latestOrders[] = $row;
-} else {
-    $r5 = $conn->query("SELECT o.id, o.created_at, o.table_no, o.total_amt, COALESCE(o.discount_amt,0) AS discount_amt, COALESCE(o.discount_type,'') AS discount_type, COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name, '—' AS items, '' AS item_details FROM orders o LEFT JOIN user u ON u.id = o.user_id WHERE $VALID AND $dfO ORDER BY o.created_at DESC LIMIT 10");
-    if ($r5) while ($row = $r5->fetch_assoc()) $latestOrders[] = $row;
-}
-
-// ── Daily Revenue – last 7 days — single query ─────────────────
-$dayLabels = [];
-$dayData   = [];
-
-// Build 7-day slots so missing days show as 0
-$daySlots = [];
-for ($i = 6; $i >= 0; $i--) {
-    $key           = date('Y-m-d', strtotime("-$i days"));
-    $daySlots[$key] = 0.0;
-    $dayLabels[]    = date('M d', strtotime("-$i days"));
-}
-
-$dStmt = $conn->prepare(
-    "SELECT DATE(created_at) AS d, COALESCE(SUM(total_amt),0) AS rev
-     FROM orders
-     WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
-       AND $VALID
-     GROUP BY d"
-);
-$dStmt->execute();
-$dRes = $dStmt->get_result();
-while ($row = $dRes->fetch_assoc()) {
-    if (isset($daySlots[$row['d']])) {
-        $daySlots[$row['d']] = (float)$row['rev'];
-    }
-}
-$dStmt->close();
-$dayData = array_values($daySlots);
-
-// ── Category Revenue (valid orders only) ──────────────────────
-$catRevenue = [];
-if ($hasOrderItems) {
-    $r6 = $conn->query(
-        "SELECT m.category, SUM(oi.qty * oi.unit_price) AS revenue
-         FROM order_items oi
-         JOIN menu m ON m.id = oi.menu_id
-         JOIN orders o ON o.id = oi.order_id
-         WHERE $VALID AND $dfO
-         GROUP BY m.category ORDER BY revenue DESC LIMIT 5"
-    );
-    if ($r6) while ($row = $r6->fetch_assoc()) $catRevenue[] = $row;
-}
-$maxCatRev = !empty($catRevenue) ? (float)$catRevenue[0]['revenue'] : 1;
-
-// ── AJAX: real-time top items endpoint ────────────────────────
-if (isset($_GET['ajax']) && $_GET['ajax'] === 'topitems') {
-    $ajaxItems = [];
-    if ($hasOrderItems) {
-        $rAjax = $conn->query(
-            "SELECT m.name, m.category, m.price,
-                    SUM(oi.qty) AS qty_sold,
-                    SUM(oi.qty * oi.unit_price) AS revenue
-             FROM order_items oi
-             JOIN menu m ON m.id = oi.menu_id
-             JOIN orders o ON o.id = oi.order_id
-             WHERE $VALID AND $dfO
-             GROUP BY oi.menu_id
-             ORDER BY qty_sold DESC
-             LIMIT 10"
-        );
-        if ($rAjax) while ($row = $rAjax->fetch_assoc()) $ajaxItems[] = $row;
-    }
-    $conn->close();
-    header('Content-Type: application/json');
-    echo json_encode(['items' => $ajaxItems]);
-    exit();
-}
-
-$conn->close();
-
-// JSON for charts
-$monthLabelsJson = json_encode($monthLabels);
-$monthDataJson   = json_encode($monthData);
-$dayLabelsJson   = json_encode($dayLabels);
-$dayDataJson     = json_encode($dayData);
-$donutLabels     = json_encode(array_column($topItems, 'name'));
-$donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topItems));
+// Variable aliases
+$totalRevenue      = $view->totalRevenue;
+$totalOrders       = $view->totalOrders;
+$totalRefundAmt    = $view->totalRefundAmt;
+$todayRevenue      = $view->todayRevenue;
+$monthRevenue      = $view->monthRevenue;
+$avgOrder          = $view->avgOrder;
+$selectedRange     = $view->selectedRange;
+$dateFrom          = $view->dateFrom;
+$dateTo            = $view->dateTo;
+$topItems          = $view->topItems;
+$latestOrders      = $view->latestOrders;
+$catRevenue        = $view->catRevenue;
+$maxCatRev         = $view->maxCatRev;
+$projNextMonth     = $view->projNextMonth;
+$projGrowthPct     = $view->projGrowthPct;
+$monthLabelsJson   = $view->monthLabelsJson;
+$monthDataJson     = $view->monthDataJson;
+$monthData         = $view->monthData ?? (is_string($monthDataJson) ? json_decode($monthDataJson, true) : (array)$monthDataJson) ?: [];
+$forecastDataJson  = $view->forecastDataJson;
+$forecastLabelsJson= $view->forecastLabelsJson;
+$dayLabelsJson     = $view->dayLabelsJson;
+$dayDataJson       = $view->dayDataJson;
+$donutLabels       = $view->donutLabels;
+$donutData         = $view->donutData;
+$hasOrderItems     = $view->hasOrderItems ?? true;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -506,7 +249,7 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
     </a>
     <div class="sidebar">
       <div class="user-panel mt-3 pb-3 mb-3 d-flex">
-      <div class="image"><img src="../dist/img/Empress' Cafe Boracay.jpg" class="img-circle elevation-2" alt="User Image"></div>
+      <div class="image"><img src="../dist/img/avatar.png" class="img-circle elevation-2" alt="User Image"></div>
       <div class="info">
           <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user'] ?? 'Admin') ?></a>
         </div>
@@ -522,7 +265,7 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
           <li class="nav-item"><a href="./report.php"          class="nav-link"><i class="nav-icon fas fa-file-alt"></i><p>Reports</p></a></li>
           <li class="nav-item"><a href="./void_refund.php"     class="nav-link"><i class="nav-icon fas fa-undo-alt"></i><p>Void &amp; Refund</p></a></li>
           <li class="nav-item"><a href="./settings.php" class="nav-link"><i class="nav-icon fas fa-cog"></i><p>Settings</p></a></li>
-          <li class="nav-item mt-auto"><a href="../../Backend/logout.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p></a></li>
+          <li class="nav-item mt-auto"><a href="../../Backend/Controllers/LogoutController.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p></a></li>
         </ul>
       </nav>
     </div>
@@ -669,7 +412,7 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
               <span class="info-box-icon" style="background:#3c8dbc;color:#fff;"><i class="fas fa-calculator"></i></span>
               <div class="info-box-content">
                 <span class="info-box-text" style="color:#555;">Net After Refunds</span>
-                <span class="info-box-number" style="color:#3c8dbc;">&#8369;<?= number_format(max(0, $totalRevenue - $totalRefundAmt), 2) ?></span>
+                <span class="info-box-number" style="color:#3c8dbc;">&#8369;<?= number_format(max(0, $totalRevenue), 2) ?></span>
               </div>
             </div>
           </div>
@@ -706,7 +449,7 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
               <span class="info-box-icon" style="background:#3c8dbc;color:#fff;"><i class="fas fa-calculator"></i></span>
               <div class="info-box-content">
                 <span class="info-box-text" style="color:#555;">Avg Monthly Revenue</span>
-                <span class="info-box-number" style="color:#3c8dbc;">&#8369;<?= number_format(array_sum($monthData) / max(1, count(array_filter($monthData))), 2) ?></span>
+                <span class="info-box-number" style="color:#3c8dbc;">&#8369;<?= number_format(array_sum($monthData) / max(1, count($monthData)), 2) ?></span>
                 <span class="progress-description" style="font-size:11px;color:#888;">Based on last 6 months</span>
               </div>
             </div>
@@ -886,8 +629,8 @@ $donutData       = json_encode(array_map(fn($i) => (float)$i['qty_sold'], $topIt
                     </tr>
                   </thead>
                   <tbody id="topItemsTbody">
-                    <?php if (!empty($tableItems)): ?>
-                      <?php foreach ($tableItems as $tiIdx => $ti): ?>
+                    <?php if (!empty($topItems)): ?>
+                      <?php foreach ($topItems as $tiIdx => $ti): ?>
                       <tr>
                         <td><span class="badge badge-secondary"><?= $tiIdx + 1 ?></span></td>
                         <td><?= htmlspecialchars($ti['name']) ?></td>
@@ -960,12 +703,15 @@ $(function () {
           hoverBackgroundColor: 'rgba(233,30,140,0.8)'
         },
         {
+          type: 'line',
           label: 'Forecast Revenue (₱)',
           data: paddedForecast,
-          backgroundColor: 'rgba(142,68,173,0.35)',
+          backgroundColor: 'rgba(142,68,173,0.15)',
           borderColor:     'rgba(142,68,173,1)',
           borderWidth: 2,
           borderDash: [6, 3],
+          pointRadius: 4,
+          fill: false,
           hoverBackgroundColor: 'rgba(142,68,173,0.6)'
         }
       ]
@@ -1079,8 +825,7 @@ $(function () {
   var MN=['January','February','March','April','May','June','July','August','September','October','November','December'];
   var DN=['M','T','W','T','F','S','S'];
   var today=new Date();today.setHours(0,0,0,0);
-  var vY=today.getFullYear(),vM=today.getMonth()>0?today.getMonth()-1:11;
-  if(today.getMonth()===0)vY--;
+  var vY=today.getFullYear(),vM=today.getMonth();
   var sA=null,sB=null,ph=0;
   <?php if($selectedRange==='custom'&&$dateFrom&&$dateTo):?>
   sA=new Date('<?=$dateFrom?>');sA.setHours(0,0,0,0);
@@ -1247,27 +992,73 @@ $(function () {
   }
 
 
+  function escHtml(s){
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* Parse "name|qty|addons|removed_json;;..." — mirrors the PHP render logic */
+  function parseItemDetails(raw){
+    var addons=[], removed=[];
+    if(!raw) return {addons:addons, removed:removed};
+    raw.split(';;').forEach(function(seg){
+      var parts=seg.split('|');
+      var iName =parts[0]||'';
+      var addon =String(parts[2]||'').trim();
+      var rawRem=String(parts[3]||'').trim();
+      if(addon) addons.push('<strong>'+escHtml(iName)+':</strong> '+escHtml(addon));
+      if(rawRem&&rawRem!=='[]'){
+        try{
+          var arr=JSON.parse(rawRem);
+          if(Array.isArray(arr)&&arr.length){
+            removed.push('<strong>'+escHtml(iName)+':</strong> No '+escHtml(arr.filter(Boolean).join(', ')));
+          } else if(!Array.isArray(arr)&&rawRem){
+            removed.push('<strong>'+escHtml(iName)+':</strong> No '+escHtml(rawRem));
+          }
+        }catch(e){
+          removed.push('<strong>'+escHtml(iName)+':</strong> No '+escHtml(rawRem));
+        }
+      }
+    });
+    return {addons:addons, removed:removed};
+  }
+
   function updateLatestOrders(orders){
     var tbody=document.getElementById('latestOrdersTbody');
-    if(!tbody||!orders||!orders.length) return;
+    if(!tbody) return;
+
+    /* Handle empty orders — clear table instead of bailing out silently */
+    if(!orders||!orders.length){
+      tbody.innerHTML='<tr><td colspan="8" class="text-center text-muted">No orders found.</td></tr>';
+      return;
+    }
+
     var prevIds=Array.from(tbody.querySelectorAll('tr[data-order-id]')).map(function(r){ return r.getAttribute('data-order-id'); });
     var newIds=orders.map(function(o){ return String(o.id); });
     if(JSON.stringify(prevIds)===JSON.stringify(newIds)) return;
+
     var html=orders.map(function(o){
       var isNew=prevIds.indexOf(String(o.id))===-1;
+
+      /* Parse item_details for add-ons and removed ingredients */
+      var det=parseItemDetails(o.item_details||'');
+      var addonsCell  =det.addons.length  ? det.addons.join('<br>')  : '<span class="text-muted">—</span>';
+      var removedCell =det.removed.length ? det.removed.join('<br>') : '<span class="text-muted">—</span>';
+
       var discount='<span class="text-muted">—</span>';
       if(parseFloat(o.discount_amt||0)>0){
         var dt=o.discount_type==='senior'?'Senior 20%':(o.discount_type==='pwd'?'PWD 20%':'Discount');
         discount='<span class="badge badge-success" style="font-size:11px;">'+dt+'</span><br>'
                 +'<span class="text-danger font-weight-bold">-₱'+parseFloat(o.discount_amt).toLocaleString('en',{minimumFractionDigits:2})+'</span>';
       }
-      return '<tr data-order-id="'+o.id+'"'+(isNew?' data-rt-new="1"':'')+'>'
-        +'<td><strong>#'+o.id+'</strong></td>'
-        +'<td style="white-space:nowrap;">'+o.created_at+'</td>'
-        +'<td>'+o.cashier_name+'</td>'
-        +'<td>'+(o.items||'—')+'</td>'
-        +'<td style="font-size:12px;"><span class="text-muted">—</span></td>'
-        +'<td style="font-size:12px;"><span class="text-muted">—</span></td>'
+
+      /* Escape all user-data fields before injecting into innerHTML */
+      return '<tr data-order-id="'+escHtml(o.id)+'"'+(isNew?' data-rt-new="1"':'')+'>'
+        +'<td><strong>#'+escHtml(o.id)+'</strong></td>'
+        +'<td style="white-space:nowrap;">'+escHtml(o.created_at)+'</td>'
+        +'<td>'+escHtml(o.cashier_name)+'</td>'
+        +'<td>'+escHtml(o.items||'—')+'</td>'
+        +'<td style="font-size:12px;">'+addonsCell+'</td>'
+        +'<td style="font-size:12px;">'+removedCell+'</td>'
         +'<td>'+discount+'</td>'
         +'<td><span class="text-success font-weight-bold">₱'+parseFloat(o.total_amt).toLocaleString('en',{minimumFractionDigits:2})+'</span></td>'
         +'</tr>';
@@ -1456,5 +1247,5 @@ $(function () {
 })();
 </script>
 <!-- ══ END top items real-time ═══════════════════════════════════ -->
-
 </body>
+</html>

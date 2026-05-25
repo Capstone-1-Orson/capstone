@@ -1,51 +1,16 @@
 <?php
-session_name('ADMIN_SESSION');
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
-    header("Location:../../lockscreen.html");
-    exit();
-}
+// Frontend/ADMIN/menu-management.php  (OOP refactored)
+require_once '../../Frontend/Core/MenuView.php';
+$view = new MenuView();
 
-// DB: operlytics  |  table: menu  |  PK: id
-require_once '../../Backend/conn.php';
-
-// ── Stats for info boxes ──────────────────────────────────────
-$total    = $conn->query("SELECT COUNT(*) AS c FROM menu")->fetch_assoc()['c'] ?? 0;
-$active   = $conn->query("SELECT COUNT(*) AS c FROM menu WHERE is_available = 1")->fetch_assoc()['c'] ?? 0;
-$inactive = $conn->query("SELECT COUNT(*) AS c FROM menu WHERE is_available = 0")->fetch_assoc()['c'] ?? 0;
-$cats     = $conn->query("SELECT COUNT(DISTINCT category) AS c FROM menu")->fetch_assoc()['c'] ?? 0;
-
-// ── Fetch all menu items ──────────────────────────────────────
-$items = [];
-$res = $conn->query("SELECT * FROM menu ORDER BY created_at DESC");
-while ($row = $res->fetch_assoc()) {
-    $items[] = $row;
-}
-
-// ── Fetch all ingredients for the dropdown ────────────────────
-$ingredients_list = [];
-$res3 = $conn->query("SELECT id, name, unit FROM ingredients ORDER BY name ASC");
-if ($res3) {
-    while ($row = $res3->fetch_assoc()) {
-        $ingredients_list[] = $row;
-    }
-}
-
-// ── Fetch menu_ingredients for display in table ───────────────
-$menu_ingredients_map = [];
-$res4 = $conn->query(
-    "SELECT mi.menu_id, mi.ingredient_id, mi.qty_needed, i.name, i.unit
-     FROM menu_ingredients mi
-     JOIN ingredients i ON i.id = mi.ingredient_id
-     ORDER BY mi.menu_id, i.name"
-);
-if ($res4) {
-    while ($row = $res4->fetch_assoc()) {
-        $menu_ingredients_map[$row['menu_id']][] = $row;
-    }
-}
-
-$conn->close();
+// Variable aliases
+$total                 = $view->total;
+$active                = $view->active;
+$inactive              = $view->inactive;
+$cats                  = $view->cats;
+$items                 = $view->items;
+$ingredients_list      = $view->ingredientsList;
+$menu_ingredients_map  = $view->menuIngredientsMap;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -233,7 +198,7 @@ $conn->close();
     </a>
     <div class="sidebar">
       <div class="user-panel mt-3 pb-3 mb-3 d-flex">
-        <div class="image"><img src="../dist/img/Empress' Cafe Boracay.jpg" class="img-circle elevation-2" alt="User Image"></div>
+        <div class="image"><img src="../dist/img/avatar.png" class="img-circle elevation-2" alt="User Image"></div>
         <div class="info">
            <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user']['firstname'] ?? 'admin') ?></a>
         </div>
@@ -286,7 +251,7 @@ $conn->close();
               </a>
           </li>
           <li class="nav-item mt-auto">
-            <a href="../../Backend/logout.php" class="nav-link">
+            <a href="../../Backend/Controllers/LogoutController.php" class="nav-link">
               <i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p>
             </a>
           </li>
@@ -493,7 +458,7 @@ $conn->close();
           <button type="button" class="close" data-dismiss="modal">&times;</button>
         </div>
 
-        <form action="../../Backend/menu_process.php" method="POST" enctype="multipart/form-data">
+        <form action="../../Backend/Controllers/MenuController.php" method="POST" enctype="multipart/form-data">
           <div class="modal-body">
 
             <div class="row">
@@ -642,7 +607,7 @@ $conn->close();
           <button type="button" class="close" data-dismiss="modal">&times;</button>
         </div>
 
-        <form action="../../Backend/menu_process.php" method="POST" enctype="multipart/form-data">
+        <form action="../../Backend/Controllers/MenuController.php" method="POST" enctype="multipart/form-data">
           <input type="hidden" name="update_menu" value="1">
           <input type="hidden" name="id" id="editId">
           <input type="hidden" name="existing_image" id="editExistingImage">
@@ -875,7 +840,7 @@ $conn->close();
          onmouseout="this.style.background='rgba(255,255,255,.07)';this.style.color='rgba(255,255,255,.65)'">
         Cancel
       </button>
-      <form id="deleteMenuForm" action="../../Backend/menu_process.php" method="POST" style="display:inline;">
+      <form id="deleteMenuForm" action="../../Backend/Controllers/MenuController.php" method="POST" style="display:inline;">
         <input type="hidden" name="action" value="delete">
         <input type="hidden" name="id" id="deleteMenuId">
         <button type="submit" style="
@@ -1135,7 +1100,7 @@ $conn->close();
       // Load existing ingredients via AJAX
       editSelected.length = 0;
       var menuId = btn.data('id');
-      $.getJSON('../../Backend/menu_process.php', { action: 'get_ingredients', id: menuId }, function (res) {
+      $.getJSON('../../Backend/Controllers/MenuController.php', { action: 'get_ingredients', id: menuId }, function (res) {
         if (res.success && res.data) {
           $.each(res.data, function (i, ing) {
             editSelected.push({

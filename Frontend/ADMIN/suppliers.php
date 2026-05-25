@@ -1,25 +1,14 @@
 <?php
-session_name('ADMIN_SESSION');
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
-    header("Location: ../../lockscreen.html");
-    exit();
-}
+// Frontend/ADMIN/suppliers.php  (OOP refactored)
+require_once '../../Frontend/Core/SupplierView.php';
+$view = new SupplierView();
 
-require_once '../../Backend/conn.php';
-
-// ── Stats ──────────────────────────────────────────────────────────────────
-$total_suppliers   = $conn->query("SELECT COUNT(*) AS c FROM suppliers")->fetch_assoc()['c'] ?? 0;
-$active_suppliers  = $conn->query("SELECT COUNT(*) AS c FROM suppliers WHERE status = 'Active'")->fetch_assoc()['c'] ?? 0;
-$inactive_suppliers= $conn->query("SELECT COUNT(*) AS c FROM suppliers WHERE status = 'Inactive'")->fetch_assoc()['c'] ?? 0;
-$categories        = $conn->query("SELECT COUNT(DISTINCT category) AS c FROM suppliers")->fetch_assoc()['c'] ?? 0;
-
-// ── Fetch all suppliers ────────────────────────────────────────────────────
-$suppliers = [];
-$res = $conn->query("SELECT * FROM suppliers ORDER BY name ASC");
-if ($res) { while ($row = $res->fetch_assoc()) { $suppliers[] = $row; } }
-
-$conn->close();
+// Variable aliases so the HTML below needs zero changes
+$total_suppliers    = $view->totalSuppliers;
+$active_suppliers   = $view->activeSuppliers;
+$inactive_suppliers = $view->inactiveSuppliers;
+$categories         = $view->categories;
+$suppliers          = $view->suppliers;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -214,7 +203,7 @@ $conn->close();
     </a>
     <div class="sidebar">
       <div class="user-panel mt-3 pb-3 mb-3 d-flex">
-        <div class="image"><img src="../dist/img/Empress' Cafe Boracay.jpg" class="img-circle elevation-2" alt="User Image"></div>
+        <div class="image"><img src="../dist/img/avatar.png" class="img-circle elevation-2" alt="User Image"></div>
        <div class="info">
              <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user'] ?? 'Admin') ?></a>
           </div>
@@ -245,7 +234,7 @@ $conn->close();
           <li class="nav-item"><a href="./void_refund.php"     class="nav-link"><i class="nav-icon fas fa-undo-alt"></i><p>Void &amp; Refund</p></a></li>
           <li class="nav-item"><a href="./settings.php" class="nav-link"><i class="nav-icon fas fa-cog"></i><p>Settings</p></a></li>
           <li class="nav-item mt-auto">
-            <a href="../../Backend/logout.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p></a>
+            <a href="../../Backend/Controllers/LogoutController.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p></a>
           </li>
         </ul>
       </nav>
@@ -436,7 +425,7 @@ $conn->close();
           <h5 class="modal-title"><i class="fas fa-plus-circle mr-2"></i>Add Supplier</h5>
           <button type="button" class="close" data-dismiss="modal">&times;</button>
         </div>
-        <form action="../../Backend/supplier_process.php" method="POST">
+        <form action="../../Backend/Controllers/SupplierController.php" method="POST">
           <input type="hidden" name="action" value="add">
           <div class="modal-body">
             <div class="row">
@@ -527,7 +516,7 @@ $conn->close();
           <h5 class="modal-title"><i class="fas fa-edit mr-2"></i>Edit Supplier</h5>
           <button type="button" class="close" data-dismiss="modal">&times;</button>
         </div>
-        <form action="../../Backend/supplier_process.php" method="POST">
+        <form action="../../Backend/Controllers/SupplierController.php" method="POST">
           <input type="hidden" name="action" value="update">
           <input type="hidden" name="id" id="editSuppId">
           <div class="modal-body">
@@ -835,7 +824,7 @@ $conn->close();
 <script>
   function confirmDeleteSupplier(id, name) {
     document.getElementById('deleteSupplierName').textContent = name;
-    document.getElementById('deleteSupplierLink').href = '../../Backend/supplier_process.php?action=delete&id=' + id;
+    document.getElementById('deleteSupplierLink').href = '../../Backend/Controllers/SupplierController.php?action=delete&id=' + id;
     var overlay = document.getElementById('deleteSupplierModal');
     var box = document.getElementById('deleteSupplierBox');
     overlay.style.display = 'flex';

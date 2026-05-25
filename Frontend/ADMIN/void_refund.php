@@ -1,199 +1,17 @@
 <?php
-session_name('ADMIN_SESSION');
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
-    if (isset($_GET['rt'])) {
-        header('Content-Type: application/json');
-        http_response_code(403);
-        echo json_encode(['error' => 'Unauthorized']);
-        exit();
-    }
-    header("Location: ../../lockscreen.html");
-    exit();
-}
+// Frontend/ADMIN/void_refund.php  (OOP refactored)
+require_once '../../Frontend/Core/VoidRefundView.php';
+$view = new VoidRefundView();   // dispatches ?rt JSON endpoint early
 
-require_once '../../Backend/conn.php';
-
-// ── Helper ─────────────────────────────────────────────────────
-function tableExists($conn, $table) {
-    $r = $conn->query("SHOW TABLES LIKE '$table'");
-    return $r && $r->num_rows > 0;
-}
-$hasOrderItems   = tableExists($conn, 'order_items');
-$hasOrderRefunds = tableExists($conn, 'order_refunds');
-
-// ══ REAL-TIME JSON API (?rt=1) ═════════════════════════════════
-if (isset($_GET['rt'])) {
-    header('Content-Type: application/json');
-    header('Cache-Control: no-store, no-cache, must-revalidate');
-
-    $vc = $rc = $pc = 0; $tv = $tr = 0.0;
-
-    $r = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS amt FROM orders WHERE status='voided'");
-    if ($r && $row = $r->fetch_assoc()) { $vc = (int)$row['cnt']; $tv = (float)$row['amt']; }
-
-    $r = $conn->query("SELECT COUNT(*) AS cnt FROM orders WHERE status IN ('refunded','partial_refund')");
-    if ($r && $row = $r->fetch_assoc()) $rc = (int)$row['cnt'];
-
-    if ($hasOrderRefunds) {
-        $r = $conn->query("SELECT COALESCE(SUM(refund_amt),0) AS amt FROM order_refunds");
-        if ($r && $row = $r->fetch_assoc()) $tr = (float)$row['amt'];
-    }
-
-    $r = $conn->query("SELECT COUNT(*) AS cnt FROM orders WHERE status NOT IN ('voided','refunded','partial_refund')");
-    if ($r && $row = $r->fetch_assoc()) $pc = (int)$row['cnt'];
-
-    $latestId = 0;
-    $r = $conn->query("SELECT MAX(id) AS mid FROM orders WHERE status NOT IN ('voided','refunded','partial_refund')");
-    if ($r && $row = $r->fetch_assoc()) $latestId = (int)($row['mid'] ?? 0);
-
-    // New active orders since client's last known id
-    $newOrders = [];
-    $since = isset($_GET['since']) ? (int)$_GET['since'] : 0;
-    if ($since > 0) {
-        if ($hasOrderItems) {
-            $stmt = $conn->prepare(
-                "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
-                        COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
-                        GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items
-                 FROM orders o
-                 LEFT JOIN user u ON u.id = o.user_id
-                 JOIN order_items oi ON oi.order_id = o.id
-                 JOIN menu m ON m.id = oi.menu_id
-                 WHERE o.status NOT IN ('voided','refunded','partial_refund') AND o.id > ?
-                 GROUP BY o.id ORDER BY o.id DESC LIMIT 20"
-            );
-            if ($stmt) { $stmt->bind_param('i', $since); $stmt->execute(); $res = $stmt->get_result(); while ($row = $res->fetch_assoc()) $newOrders[] = $row; $stmt->close(); }
-        } else {
-            $stmt = $conn->prepare(
-                "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
-                        COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name, '—' AS items
-                 FROM orders o LEFT JOIN user u ON u.id = o.user_id
-                 WHERE o.status NOT IN ('voided','refunded','partial_refund') AND o.id > ?
-                 ORDER BY o.id DESC LIMIT 20"
-            );
-            if ($stmt) { $stmt->bind_param('i', $since); $stmt->execute(); $res = $stmt->get_result(); while ($row = $res->fetch_assoc()) $newOrders[] = $row; $stmt->close(); }
-        }
-    }
-
-    // Orders recently voided/refunded (to remove from active table)
-    $removedIds = [];
-    $r = $conn->query("SELECT id FROM orders WHERE status IN ('voided','refunded','partial_refund') AND updated_at >= NOW() - INTERVAL 30 SECOND");
-    if ($r) while ($row = $r->fetch_assoc()) $removedIds[] = (int)$row['id'];
-
-    $conn->close();
-    echo json_encode(['voidedCount'=>$vc,'refundedCount'=>$rc,'pendingCount'=>$pc,'totalVoided'=>$tv,'totalRefunded'=>$tr,'latestOrderId'=>$latestId,'newOrders'=>$newOrders,'removedIds'=>$removedIds]);
-    exit();
-}
-// ══ END REAL-TIME API ══════════════════════════════════════════
-
-// ── Summary stats ──────────────────────────────────────────────
-$totalVoided = 0;
-$totalRefunded = 0;
-$voidedCount = 0;
-$refundedCount = 0;
-
-$r = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS amt FROM orders WHERE status='voided'");
-if ($r && $row = $r->fetch_assoc()) { $voidedCount = (int)$row['cnt']; $totalVoided = (float)$row['amt']; }
-
-$r = $conn->query("SELECT COUNT(*) AS cnt FROM orders WHERE status IN ('refunded','partial_refund')");
-if ($r && $row = $r->fetch_assoc()) $refundedCount = (int)$row['cnt'];
-
-if ($hasOrderRefunds) {
-    $r = $conn->query("SELECT COALESCE(SUM(refund_amt),0) AS amt FROM order_refunds");
-    if ($r && $row = $r->fetch_assoc()) $totalRefunded = (float)$row['amt'];
-}
-
-// ── Voided orders ──────────────────────────────────────────────
-$voidedOrders = [];
-if ($hasOrderItems) {
-    $r = $conn->query(
-        "SELECT o.id, o.table_no, o.total_amt, o.created_at,
-                COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
-                GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
-                SUM(oi.qty) AS total_qty
-         FROM orders o
-         LEFT JOIN user u ON u.id = o.user_id
-         JOIN order_items oi ON oi.order_id = o.id
-         JOIN menu m ON m.id = oi.menu_id
-         WHERE o.status = 'voided'
-         GROUP BY o.id ORDER BY o.created_at DESC"
-    );
-    if ($r) while ($row = $r->fetch_assoc()) $voidedOrders[] = $row;
-} else {
-    $r = $conn->query(
-        "SELECT o.id, o.table_no, o.total_amt, o.created_at,
-                COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
-                '—' AS items, 0 AS total_qty
-         FROM orders o LEFT JOIN user u ON u.id = o.user_id
-         WHERE o.status = 'voided' ORDER BY o.created_at DESC"
-    );
-    if ($r) while ($row = $r->fetch_assoc()) $voidedOrders[] = $row;
-}
-
-// ── Refunded / partial_refund orders ──────────────────────────
-$refundedOrders = [];
-if ($hasOrderItems && $hasOrderRefunds) {
-    $r = $conn->query(
-        "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
-                COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
-                GROUP_CONCAT(DISTINCT m.name ORDER BY m.name SEPARATOR ', ') AS items,
-                SUM(oi.qty) AS total_qty,
-                (SELECT SUM(r2.refund_amt) FROM order_refunds r2 WHERE r2.order_id = o.id) AS refund_total,
-                (SELECT r2.reason FROM order_refunds r2 WHERE r2.order_id = o.id ORDER BY r2.id DESC LIMIT 1) AS refund_reason,
-                (SELECT r2.created_by FROM order_refunds r2 WHERE r2.order_id = o.id ORDER BY r2.id DESC LIMIT 1) AS processed_by,
-                (SELECT r2.created_at FROM order_refunds r2 WHERE r2.order_id = o.id ORDER BY r2.id DESC LIMIT 1) AS refund_at
-         FROM orders o
-         LEFT JOIN user u ON u.id = o.user_id
-         JOIN order_items oi ON oi.order_id = o.id
-         JOIN menu m ON m.id = oi.menu_id
-         WHERE o.status IN ('refunded','partial_refund')
-         GROUP BY o.id ORDER BY o.created_at DESC"
-    );
-    if ($r) while ($row = $r->fetch_assoc()) $refundedOrders[] = $row;
-} else {
-    $r = $conn->query(
-        "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
-                COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
-                '—' AS items, 0 AS total_qty, 0 AS refund_total, '' AS refund_reason, '' AS processed_by, o.created_at AS refund_at
-         FROM orders o LEFT JOIN user u ON u.id = o.user_id
-         WHERE o.status IN ('refunded','partial_refund') ORDER BY o.created_at DESC"
-    );
-    if ($r) while ($row = $r->fetch_assoc()) $refundedOrders[] = $row;
-}
-
-// ── All orders eligible for void/refund (not yet done) ────────
-$pendingOrders = [];
-if ($hasOrderItems) {
-    $r = $conn->query(
-        "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
-                COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
-                GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
-                SUM(oi.qty) AS total_qty,
-                GROUP_CONCAT(CONCAT(oi.id,'|',m.id,'|',m.name,'|',oi.qty,'|',oi.unit_price) ORDER BY oi.id SEPARATOR ';;') AS item_details_raw
-         FROM orders o
-         LEFT JOIN user u ON u.id = o.user_id
-         JOIN order_items oi ON oi.order_id = o.id
-         JOIN menu m ON m.id = oi.menu_id
-         WHERE o.status NOT IN ('voided','refunded','partial_refund')
-         GROUP BY o.id ORDER BY o.created_at DESC LIMIT 100"
-    );
-    if ($r) while ($row = $r->fetch_assoc()) $pendingOrders[] = $row;
-} else {
-    $r = $conn->query(
-        "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
-                COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
-                '—' AS items, 0 AS total_qty, '' AS item_details_raw
-         FROM orders o LEFT JOIN user u ON u.id = o.user_id
-         WHERE o.status NOT IN ('voided','refunded','partial_refund')
-         ORDER BY o.created_at DESC LIMIT 100"
-    );
-    if ($r) while ($row = $r->fetch_assoc()) $pendingOrders[] = $row;
-}
-
-$conn->close();
-
-$pendingOrdersJson = json_encode($pendingOrders);
+// Variable aliases
+$voidedCount    = $view->voidedCount;
+$refundedCount  = $view->refundedCount;
+$totalVoided    = $view->totalVoided;
+$totalRefunded  = $view->totalRefunded;
+$voidedOrders      = $view->voidedOrders;
+$refundedOrders    = $view->refundedOrders;
+$pendingOrders     = $view->pendingOrders;
+$pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrders ?? []);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -344,7 +162,7 @@ $pendingOrdersJson = json_encode($pendingOrders);
     </a>
     <div class="sidebar">
       <div class="user-panel mt-3 pb-3 mb-3 d-flex">
-        <div class="image"><img src="../dist/img/Empress' Cafe Boracay.jpg" class="img-circle elevation-2" alt="User Image"></div>
+        <div class="image"><img src="../dist/img/avatar.png" class="img-circle elevation-2" alt="User Image"></div>
         <div class="info">
           <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user'] ?? 'Admin') ?></a>
         </div>
@@ -360,7 +178,7 @@ $pendingOrdersJson = json_encode($pendingOrders);
           <li class="nav-item"><a href="./report.php"          class="nav-link"><i class="nav-icon fas fa-file-alt"></i><p>Reports</p></a></li>
           <li class="nav-item"><a href="./void_refund.php"     class="nav-link active"><i class="nav-icon fas fa-undo-alt"></i><p>Void &amp; Refund</p></a></li>
           <li class="nav-item"><a href="./settings.php"        class="nav-link"><i class="nav-icon fas fa-cog"></i><p>Settings</p></a></li>
-          <li class="nav-item mt-auto"><a href="../../Backend/logout.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p></a></li>
+          <li class="nav-item mt-auto"><a href="../../Backend/Controllers/LogoutController.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p></a></li>
         </ul>
       </nav>
     </div>
@@ -779,7 +597,7 @@ async function submitVoid() {
   btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Processing…';
 
   try {
-    const res  = await fetch('../../Backend/pos_void_refund.php', {
+    const res  = await fetch('../../Backend/Controllers/PosController.php', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ action: 'void', order_id: voidOrderId, reason })
@@ -789,7 +607,9 @@ async function submitVoid() {
     if (data.success) {
       closeVoidModal();
       showToast('Order #' + voidOrderId + ' has been voided.', '#e74c3c');
-      setTimeout(() => location.reload(), 1600);
+      // Remove from Active table immediately
+      removeActiveRow(voidOrderId);
+      // The next poll will inject the row into the Voided tab and update stats
     } else {
       showToast(data.message || 'Failed to void order.', '#e74c3c');
       btn.disabled = false;
@@ -836,7 +656,7 @@ function openRefundModal(id, tableNo, total, items) {
 
   document.getElementById('refundOverlay').classList.add('open');
 
-  fetch('../../Backend/pos_get_order_items.php?order_id=' + id)
+  fetch('../../Backend/Controllers/OrderItemsController.php?order_id=' + id)
     .then(r => r.json())
     .then(data => {
       loading.style.display = 'none';
@@ -942,7 +762,7 @@ async function submitRefund() {
   }
 
   try {
-    const res  = await fetch('../../Backend/pos_void_refund.php', {
+    const res  = await fetch('../../Backend/Controllers/PosController.php', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(payload)
@@ -952,7 +772,9 @@ async function submitRefund() {
     if (data.success) {
       closeRefundModal();
       showToast('Refund processed for Order #' + refundOrderId + '.', '#3b82f6');
-      setTimeout(() => location.reload(), 1600);
+      // Remove from Active table immediately
+      removeActiveRow(refundOrderId);
+      // The next poll will inject the row into the Refunded tab and update stats
     } else {
       showToast(data.message || 'Failed to process refund.', '#e74c3c');
       btn.disabled = false;
@@ -1121,12 +943,14 @@ $(function () {
 
   /* ── Snapshot of counts when page loaded ── */
   var _snap = {
-    voidedCount:    parseInt('<?= $voidedCount ?>', 10)   || 0,
-    refundedCount:  parseInt('<?= $refundedCount ?>', 10) || 0,
-    totalVoided:    parseFloat('<?= $totalVoided ?>') || 0,
-    totalRefunded:  parseFloat('<?= $totalRefunded ?>') || 0,
-    pendingCount:   parseInt('<?= count($pendingOrders) ?>', 10) || 0,
-    latestOrderId:  <?= !empty($pendingOrders) ? (int)$pendingOrders[0]['id'] : 0 ?>
+    voidedCount:      parseInt('<?= $voidedCount ?>',  10)  || 0,
+    refundedCount:    parseInt('<?= $refundedCount ?>', 10) || 0,
+    totalVoided:      parseFloat('<?= $totalVoided ?>') || 0,
+    totalRefunded:    parseFloat('<?= $totalRefunded ?>') || 0,
+    pendingCount:     parseInt('<?= count($pendingOrders) ?>', 10) || 0,
+    latestOrderId:    <?= !empty($pendingOrders)   ? (int)$pendingOrders[0]['id']   : 0 ?>,
+    latestVoidedId:   <?= !empty($voidedOrders)    ? (int)$voidedOrders[0]['id']    : 0 ?>,
+    latestRefundedId: <?= !empty($refundedOrders)  ? (int)$refundedOrders[0]['id']  : 0 ?>
   };
 
   /* ── Live-dot indicator in page title area ── */
@@ -1196,23 +1020,14 @@ $(function () {
         o.table_no + '\',' + o.total_amt + ',\'' + items + '\')">' +
         '<i class="fas fa-rotate-left mr-1"></i>Refund</button></div>';
 
-    /* Date format from PHP: "M d, Y g:i A" */
-    var d = new Date(o.created_at.replace(' ', 'T'));
-    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    var dateStr = months[d.getMonth()] + ' ' + String(d.getDate()).padStart(2,'0') + ', ' +
-      d.getFullYear() + ' ' + d.toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit',hour12:true});
-
-    var totalFmt = '₱' + parseFloat(o.total_amt).toLocaleString('en',{minimumFractionDigits:2});
-    var itemsShort = (o.items || '—').length > 45 ? o.items.substring(0,45) + '…' : (o.items || '—');
-
     var row = dt.row.add([
       '<strong>#' + o.id + '</strong>',
-      '<small class="text-muted">' + dateStr + '</small>',
+      '<small class="text-muted">' + fmtDate(o.created_at) + '</small>',
       '<span class="badge badge-secondary">#' + o.table_no + '</span>',
       o.cashier_name || '—',
-      '<span title="' + (o.items||'') + '">' + itemsShort + '</span>',
+      '<span title="' + (o.items||'') + '">' + trimItems(o.items,45) + '</span>',
       statusBadge,
-      '<strong>' + totalFmt + '</strong>',
+      '<strong>' + fmtPeso(o.total_amt) + '</strong>',
       actions
     ]).draw(false).node();
 
@@ -1227,6 +1042,54 @@ $(function () {
     dt.rows(function(i, data) {
       return typeof data[0] === 'string' && data[0].indexOf('>' + str + '<') !== -1;
     }).remove().draw(false);
+  }
+
+  /* ── Helpers ── */
+  function fmtDate(str) {
+    var d = new Date((str || '').replace(' ', 'T'));
+    var mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return mo[d.getMonth()] + ' ' + String(d.getDate()).padStart(2,'0') + ', ' +
+      d.getFullYear() + ' ' + d.toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit',hour12:true});
+  }
+  function fmtPeso(n) { return '₱' + parseFloat(n||0).toLocaleString('en',{minimumFractionDigits:2}); }
+  function trimItems(s,max){ return (s||'—').length > max ? (s||'—').substring(0,max)+'…' : (s||'—'); }
+
+  /* ── Add a new row to the Voided DataTable ── */
+  function injectVoidedRow(o) {
+    var dt = $('#tbl-voided').DataTable();
+    var row = dt.row.add([
+      '<strong>#' + o.id + '</strong>',
+      '<small class="text-muted">' + fmtDate(o.created_at) + '</small>',
+      '<span class="badge badge-secondary">#' + o.table_no + '</span>',
+      o.cashier_name || '—',
+      '<span title="' + (o.items||'') + '">' + trimItems(o.items,45) + '</span>',
+      parseInt(o.total_qty||0,10),
+      '<span class="text-danger font-weight-bold">' + fmtPeso(o.total_amt) + '</span>'
+    ]).draw(false).node();
+    $(row).find('td').css({'white-space':'nowrap','overflow':'hidden','text-overflow':'ellipsis','max-width':'260px'});
+    flashRow(row);
+  }
+
+  /* ── Add a new row to the Refunded DataTable ── */
+  function injectRefundedRow(o) {
+    var dt = $('#tbl-refunded').DataTable();
+    var typeBadge = (o.status === 'partial_refund')
+      ? '<span class="badge-partial"><i class="fas fa-adjust mr-1"></i>Partial</span>'
+      : '<span class="badge-refunded"><i class="fas fa-rotate-left mr-1"></i>Full</span>';
+    var row = dt.row.add([
+      '<strong>#' + o.id + '</strong>',
+      '<small class="text-muted">' + fmtDate(o.created_at) + '</small>',
+      '<span class="badge badge-secondary">#' + o.table_no + '</span>',
+      typeBadge,
+      '<span title="' + (o.items||'') + '">' + trimItems(o.items,40) + '</span>',
+      '<s class="text-muted">' + fmtPeso(o.total_amt) + '</s>',
+      '<span class="text-primary font-weight-bold">' + fmtPeso(o.refund_total) + '</span>',
+      o.refund_reason || '—',
+      o.processed_by  || '—',
+      '<small class="text-muted">' + (o.refund_at ? fmtDate(o.refund_at) : '—') + '</small>'
+    ]).draw(false).node();
+    $(row).find('td').css({'white-space':'nowrap','overflow':'hidden','text-overflow':'ellipsis','max-width':'260px'});
+    flashRow(row);
   }
 
   /* ── Show a small inline alert banner ── */
@@ -1254,7 +1117,12 @@ $(function () {
 
   /* ── Main poll ── */
   function poll() {
-    fetch(POLL_URL + '&since=' + _snap.latestOrderId, { cache: 'no-store' })
+    var url = POLL_URL
+      + '&since='         + _snap.latestOrderId
+      + '&sinceVoided='   + _snap.latestVoidedId
+      + '&sinceRefunded=' + _snap.latestRefundedId;
+
+    fetch(url, { cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (d) {
         setDot(true);
@@ -1294,6 +1162,22 @@ $(function () {
           }
         });
 
+        /* ── New voided orders injected into Voided tab ── */
+        var newVoided = d.newVoided || [];
+        newVoided.forEach(function (o) {
+          if (o.id > _snap.latestVoidedId) {
+            injectVoidedRow(o);
+          }
+        });
+
+        /* ── New refunded orders injected into Refunded tab ── */
+        var newRefunded = d.newRefunded || [];
+        newRefunded.forEach(function (o) {
+          if (o.id > _snap.latestRefundedId) {
+            injectRefundedRow(o);
+          }
+        });
+
         /* ── Orders that became voided/refunded — remove from Active tab ── */
         var removed = d.removedIds || [];
         removed.forEach(function (id) { removeActiveRow(id); });
@@ -1308,6 +1192,10 @@ $(function () {
         if (d.latestOrderId > _snap.latestOrderId) {
           _snap.latestOrderId = d.latestOrderId;
         }
+
+        /* ── Advance voided/refunded cursors ── */
+        if (d.latestVoidedId   > _snap.latestVoidedId)   _snap.latestVoidedId   = d.latestVoidedId;
+        if (d.latestRefundedId > _snap.latestRefundedId) _snap.latestRefundedId = d.latestRefundedId;
 
         /* ── Update snapshot ── */
         _snap.voidedCount   = vc;

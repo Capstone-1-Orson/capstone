@@ -172,7 +172,7 @@
     </div>
 
     <!-- ✅ Posts "pass" to login.php — matches the lockscreen branch in login.php -->
-    <form action="Backend/login.php" method="POST" id="lockForm">
+    <form action="Backend/Controllers/LoginController.php" method="POST" id="lockForm">
 
       <div class="field-group">
         <label class="field-label" for="passInput">Password</label>
@@ -185,12 +185,13 @@
         <span id="btnText"><i class="fas fa-unlock-keyhole"></i>&nbsp; Unlock</span>
       </button>
 
-      <div class="divider">or</div>
+        <div class="divider">or</div>
 
       <a href="login-v2.html" class="alt-link">
         <i class="fas fa-shield-halved"></i>
         Staff login
       </a>
+
 
     </form>
 

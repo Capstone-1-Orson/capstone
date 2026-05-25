@@ -15,8 +15,8 @@
  *     ADD COLUMN token_expiry    DATETIME    DEFAULT NULL;
  */
 
-include('conn.php');
-
+require_once __DIR__ . '/Core/Database.php';
+$conn = Database::getInstance()->getConnection();
 // ── Grab & sanitise the token ─────────────────────────────────────
 $token = trim($_GET['token'] ?? '');
 

@@ -1,121 +1,14 @@
-﻿<?php
-session_name('ADMIN_SESSION');
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
-  header("Location: ../../lockscreen.html"); 
-  exit();
-}
-// Generate CSRF token if not set
-if (empty($_SESSION['csrf_token'])) {
-  $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-}
+<?php
+// Frontend/ADMIN/staff-list.php  (OOP refactored)
+require_once '../../Frontend/Core/StaffView.php';
+$view = new StaffView();   // dispatches ?rt_staff and ?rt_add_staff AJAX early
 
-// ── Real-time AJAX: add staff and return JSON result ──────────────
-if (isset($_GET['rt_add_staff']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
-  include('../../Backend/conn.php');
+// Variable aliases
+$staffRows  = $view->staffRows;
+$csrf_token = $view->csrfToken;
 
-  // CSRF check
-  if (empty($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-    http_response_code(403);
-    echo json_encode(['success' => false, 'message' => 'Invalid CSRF token.']);
-    exit();
-  }
-
-  $firstname = trim($_POST['firstname'] ?? '');
-  $lastname  = trim($_POST['lastname']  ?? '');
-  $email     = trim($_POST['email']     ?? '');
-  $password  = $_POST['password']       ?? '';
-  $contact   = trim($_POST['contact']   ?? '');
-  $address   = trim($_POST['address']   ?? '');
-  $position  = 'staff';
-
-  // Basic validation
-  if (!$firstname || !$lastname || !$email || !$password || !$contact || !$address) {
-    echo json_encode(['success' => false, 'message' => 'All fields are required.']);
-    exit();
-  }
-
-  // Email pattern: gmail or yahoo only
-  if (!preg_match('/^[a-zA-Z0-9._%+\-]+@(gmail|yahoo)\.(com|com\.ph)$/', $email)) {
-    echo json_encode(['success' => false, 'message' => 'Only Gmail or Yahoo email addresses are allowed.']);
-    exit();
-  }
-
-  // Check duplicate email
-  $stmt = $conn->prepare("SELECT id FROM user WHERE email = ?");
-  $stmt->bind_param('s', $email);
-  $stmt->execute();
-  $stmt->store_result();
-  if ($stmt->num_rows > 0) {
-    echo json_encode(['success' => false, 'message' => 'Email address is already in use.']);
-    exit();
-  }
-  $stmt->close();
-
-  // Handle image upload
-  $imagePath = '';
-  if (!empty($_FILES['image']['name'])) {
-    $allowed   = ['jpg','jpeg','png','gif','webp'];
-    $ext       = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
-    if (!in_array($ext, $allowed)) {
-      echo json_encode(['success' => false, 'message' => 'Invalid image type.']);
-      exit();
-    }
-    $uploadDir = '../../uploads/staff/';
-    if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
-    $filename  = uniqid('staff_', true) . '.' . $ext;
-    $dest      = $uploadDir . $filename;
-    if (!move_uploaded_file($_FILES['image']['tmp_name'], $dest)) {
-      echo json_encode(['success' => false, 'message' => 'Image upload failed.']);
-      exit();
-    }
-    $imagePath = 'uploads/staff/' . $filename;
-  }
-
-  $hashed = password_hash($password, PASSWORD_DEFAULT);
-  $stmt = $conn->prepare("INSERT INTO user (firstname, lastname, email, password, contact, address, position, image, email_verified) VALUES (?,?,?,?,?,?,?,?,0)");
-  $stmt->bind_param('ssssssss', $firstname, $lastname, $email, $hashed, $contact, $address, $position, $imagePath);
-
-  if ($stmt->execute()) {
-    $newId = $stmt->insert_id;
-    $stmt->close();
-    // Re-generate CSRF token
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    echo json_encode([
-      'success'      => true,
-      'message'      => 'Staff member added successfully.',
-      'new_id'       => $newId,
-      'new_csrf'     => $_SESSION['csrf_token'],
-    ]);
-  } else {
-    echo json_encode(['success' => false, 'message' => 'Database error: ' . $stmt->error]);
-  }
-  header('Content-Type: application/json');
-  exit();
-}
-
-// ── Real-time AJAX: return staff rows as JSON ──────────────────────
-if (isset($_GET['rt_staff'])) {
-  include('../../Backend/conn.php');
-  $result = mysqli_query($conn, "SELECT * FROM user WHERE position = 'staff' ORDER BY id ASC");
-  $staff  = [];
-  while ($row = mysqli_fetch_assoc($result)) {
-    $staff[] = [
-      'id'             => (int)$row['id'],
-      'firstname'      => $row['firstname'],
-      'lastname'       => $row['lastname'],
-      'email'          => $row['email'],
-      'email_verified' => (int)($row['email_verified'] ?? 0),
-      'position'       => $row['position'],
-      'contact'        => $row['contact'],
-      'address'        => $row['address'],
-      'image'          => $row['image'] ?? '',
-    ];
-  }
-  header('Content-Type: application/json');
-  echo json_encode(['staff' => $staff, 'ts' => time()]);
-  exit();
-}
+// Keep $_SESSION['csrf_token'] in sync (used by forms in the HTML)
+$_SESSION['csrf_token'] = $csrf_token;
 ?>
 
 <!DOCTYPE html>
@@ -314,9 +207,9 @@ if (isset($_GET['rt_staff'])) {
 
       <div class="sidebar">
         <div class="user-panel mt-3 pb-3 mb-3 d-flex">
-        <div class="image"><img src="../dist/img/Empress' Cafe Boracay.jpg" class="img-circle elevation-2" alt="User Image"></div>
+        <div class="image"><img src="../dist/img/avatar.png" class="img-circle elevation-2" alt="User Image"></div>
           <div class="info">
-             <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user']['firstname'] ?? 'admin') ?></a>
+             <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user']['firstname'] ?? 'Admin') ?></a>
           </div>
         </div>
 
@@ -346,7 +239,7 @@ if (isset($_GET['rt_staff'])) {
             <li class="nav-item"><a href="./void_refund.php"     class="nav-link"><i class="nav-icon fas fa-undo-alt"></i><p>Void &amp; Refund</p></a></li>
           <li class="nav-item"><a href="./settings.php" class="nav-link"><i class="nav-icon fas fa-cog"></i><p>Settings</p></a></li>
             <li class="nav-item mt-auto">
-              <a href="../../Backend/logout.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p></a>
+              <a href="../../Backend/Controllers/LogoutController.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p></a>
             </li>
           </ul>
         </nav>
@@ -359,14 +252,14 @@ if (isset($_GET['rt_staff'])) {
       <!-- Flash messages -->
       <?php if (!empty($_SESSION['success'])): ?>
         <div class="alert alert-success alert-dismissible fade show mx-3 mt-3" role="alert">
-          <i class="fas fa-check-circle mr-2"></i><?= htmlspecialchars($_SESSION['success']) ?>
+          <i class="fas fa-check-circle mr-2"></i><?= $_SESSION['success'] ?>
           <button type="button" class="close" data-dismiss="alert">&times;</button>
         </div>
         <?php unset($_SESSION['success']); ?>
       <?php endif; ?>
       <?php if (!empty($_SESSION['error'])): ?>
         <div class="alert alert-danger alert-dismissible fade show mx-3 mt-3" role="alert">
-          <i class="fas fa-exclamation-circle mr-2"></i><?= htmlspecialchars($_SESSION['error']) ?>
+          <i class="fas fa-exclamation-circle mr-2"></i><?= $_SESSION['error'] ?>
           <button type="button" class="close" data-dismiss="alert">&times;</button>
         </div>
         <?php unset($_SESSION['error']); ?>
@@ -430,12 +323,8 @@ if (isset($_GET['rt_staff'])) {
                     </thead>
 
                     <tbody id="staffTableBody">
-                      <?php
-                      include('../../Backend/conn.php');
-                      $result = mysqli_query($conn, "SELECT * FROM user WHERE position = 'staff'");
-                      while ($row = mysqli_fetch_assoc($result)) {
-                        $fullname = htmlspecialchars($row['firstname'] . ' ' . $row['lastname']);
-                      ?>
+                      <?php foreach ($staffRows as $row): ?>
+                      <?php $fullname = htmlspecialchars($row['firstname'] . ' ' . $row['lastname']); ?>
                       <tr
                         data-id="<?= $row['id']; ?>"
                         data-firstname="<?= htmlspecialchars($row['firstname'], ENT_QUOTES); ?>"
@@ -490,7 +379,7 @@ if (isset($_GET['rt_staff'])) {
                           <?php endif; ?>
                         </td>
                       </tr>
-                      <?php } ?>
+                      <?php endforeach; ?>
                     </tbody>
                   </table>
                 </div>
@@ -512,7 +401,7 @@ if (isset($_GET['rt_staff'])) {
             <h5 class="modal-title">Add New Staff Member</h5>
             <button type="button" class="close" data-dismiss="modal">&times;</button>
           </div>
-          <form id="addUserForm" action="../../Backend/process.php" method="POST" enctype="multipart/form-data" onsubmit="return submitAddStaff(event)">
+          <form id="addUserForm" action="../../Backend/Controllers/StaffController.php" method="POST" enctype="multipart/form-data" onsubmit="return submitAddStaff(event)">
             <input type="hidden" name="csrf_token" id="addUserCsrf" value="<?= $_SESSION['csrf_token'] ?>">
             <div class="modal-body">
               <!-- Upload progress bar -->
@@ -610,7 +499,7 @@ if (isset($_GET['rt_staff'])) {
             <h5 class="modal-title">Staff Details</h5>
             <button type="button" class="close" data-dismiss="modal">&times;</button>
           </div>
-          <form action="../../Backend/process.php" method="POST" enctype="multipart/form-data">
+          <form action="../../Backend/Controllers/StaffController.php" method="POST" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
             <div class="modal-body">
 
@@ -753,7 +642,7 @@ if (isset($_GET['rt_staff'])) {
              onmouseout="this.style.background='rgba(255,255,255,.07)';this.style.color='rgba(255,255,255,.65)'">
             Cancel
           </button>
-          <form action="../../Backend/process.php" method="POST" style="display:inline;">
+          <form action="../../Backend/Controllers/StaffController.php" method="POST" style="display:inline;">
             <input type="hidden" name="csrf_token" value="<?= $_SESSION['csrf_token'] ?>">
             <input type="hidden" name="user_id" id="delete_id">
             <button type="submit" name="delete_user" style="
@@ -956,7 +845,13 @@ if (isset($_GET['rt_staff'])) {
         closeBtn.disabled = false;
 
         var resp;
-        try { resp = JSON.parse(xhr.responseText); } catch(ex) { resp = { success: false, message: 'Unexpected server error.' }; }
+        try {
+          resp = JSON.parse(xhr.responseText);
+        } catch(ex) {
+          // Strip HTML tags from PHP error output for a readable message
+          var rawText = xhr.responseText.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+          resp = { success: false, message: 'Server error: ' + (rawText.substring(0, 200) || 'No response.') };
+        }
 
         if (xhr.status === 200 && resp.success) {
           // Finish progress bar
@@ -1373,12 +1268,6 @@ if (isset($_GET['rt_staff'])) {
   </div>
 </div>
 
-<!-- Hidden resend form (submitted programmatically) -->
-<form id="resendHiddenForm" action="../../Backend/process.php" method="POST" style="display:none;">
-  <input type="hidden" name="csrf_token" id="resendCsrf">
-  <input type="hidden" name="user_id"   id="resendUserId">
-  <button type="submit" name="resend_verification"></button>
-</form>
 
 <!-- ══ RESEND SUCCESS TOAST ══════════════════════════════════════════ -->
 <div id="resendToast" style="
@@ -1481,18 +1370,28 @@ function submitResend() {
   btn.disabled = true;
   btn.innerHTML = '<i class="fas fa-envelope resend-sending"></i> Sending…';
 
-  document.getElementById('resendCsrf').value   = _resendData.csrf;
-  document.getElementById('resendUserId').value = _resendData.userid;
-
-  // Short delay for UX feel, then submit
-  setTimeout(function(){
+  fetch(window.location.pathname + '?rt_resend_verify=1', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'csrf_token=' + encodeURIComponent(_resendData.csrf) +
+          '&staff_id='  + encodeURIComponent(_resendData.userid)
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
     closeResendModal();
-    showResendToast(_resendData.email);
-    // Submit the hidden form after toast appears
-    setTimeout(function(){
-      document.getElementById('resendHiddenForm').submit();
-    }, 600);
-  }, 700);
+    if (data.success) {
+      showResendToast(_resendData.email);
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Email';
+      alert('Error: ' + (data.message || 'Could not send email.'));
+    }
+  })
+  .catch(function() {
+    closeResendModal();
+    alert('Network error — please try again.');
+  });
 }
 
 /* ── Show toast ────────────────────────────────────────────────── */

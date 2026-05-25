@@ -1,328 +1,25 @@
 <?php
-session_name('ADMIN_SESSION');
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
-    header("Location:../../lockscreen.html");
-    exit();
-}
+// Frontend/ADMIN/report.php  (OOP refactored)
+require_once '../../Frontend/Core/ReportView.php';
+$view = new ReportView();   // dispatches ?sse, ?ajax=inventory, ?ajax=topitems early
 
-
-// ── SSE endpoint ─────────────────────────────────────────────────────────────
-if (isset($_GET['sse'])) {
-    require_once '../../Backend/conn.php';
-    header('Content-Type: text/event-stream');
-    header('Cache-Control: no-cache');
-    header('X-Accel-Buffering: no');
-    @ob_end_clean(); ob_implicit_flush(true);
-
-    $VALID = "status NOT IN ('voided','refunded','partial_refund')";
-    $data  = [];
-
-    $r = $conn->query("SELECT COUNT(*) AS c FROM orders WHERE DATE(created_at)=CURDATE() AND $VALID");
-    $data['ordersToday']   = ($r && $row=$r->fetch_assoc()) ? (int)$row['c'] : 0;
-
-    $r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at)=CURDATE() AND $VALID");
-    $data['dailyRevenue']  = ($r && $row=$r->fetch_assoc()) ? (float)$row['rev'] : 0.0;
-
-    $r = $conn->query("SELECT MAX(id) AS mid FROM orders");
-    $data['latestOrderId'] = ($r && $row=$r->fetch_assoc()) ? (int)$row['mid'] : 0;
-
-    $r = $conn->query("SELECT id, table_no, total_amt, created_at FROM orders ORDER BY id DESC LIMIT 1");
-    if ($r && $row=$r->fetch_assoc()) {
-        $data['latestOrder'] = ['id'=>(int)$row['id'],'table_no'=>$row['table_no'],
-                                'total_amt'=>(float)$row['total_amt'],'created_at'=>$row['created_at']];
-    }
-
-    // Recent orders for table — respect the same date range as the page
-    $sse_drpPresets = ['today'=>0,'7days'=>7,'30days'=>30,'3months'=>90,'12months'=>365,'mtd'=>-1,'ytd'=>-1,'alltime'=>-1,'custom'=>-1];
-    $sse_range = (isset($_GET['range']) && array_key_exists($_GET['range'], $sse_drpPresets)) ? $_GET['range'] : 'alltime';
-    if ($sse_range === 'today') {
-        $sse_dfO = "DATE(o.created_at)=CURDATE()";
-    } elseif ($sse_range === 'custom') {
-        $sse_from = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_from']??'') ? $_GET['date_from'] : date('Y-m-d', strtotime('-7 days'));
-        $sse_to   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_to']??'')   ? $_GET['date_to']   : date('Y-m-d');
-        $sse_dfO  = "DATE(o.created_at) BETWEEN '$sse_from' AND '$sse_to'";
-    } elseif ($sse_range === 'mtd') {
-        $sse_dfO = "YEAR(o.created_at)=YEAR(CURDATE()) AND MONTH(o.created_at)=MONTH(CURDATE())";
-    } elseif ($sse_range === 'ytd') {
-        $sse_dfO = "YEAR(o.created_at)=YEAR(CURDATE())";
-    } elseif ($sse_range === 'alltime') {
-        $sse_dfO = "1=1";
-    } else {
-        $sse_days = (int)$sse_drpPresets[$sse_range];
-        $sse_dfO  = "o.created_at >= DATE_SUB(CURDATE(), INTERVAL $sse_days DAY)";
-    }
-
-    $recent = [];
-    $hasOI  = $conn->query("SHOW TABLES LIKE 'order_items'")->num_rows > 0;
-    if ($hasOI) {
-        $r = $conn->query(
-            "SELECT o.id AS order_id, o.created_at, o.table_no, o.status, o.total_amt,
-                    COALESCE(o.discount_amt,0) AS discount_amt,
-                    COALESCE(o.discount_type,'') AS discount_type,
-                    COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
-                    GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
-                    SUM(oi.qty) AS total_qty,
-                    GROUP_CONCAT(
-                        CONCAT(
-                            m.name,'|',oi.qty,'|',
-                            COALESCE(oi.addons,''),'|',
-                            CASE
-                                WHEN oi.removed_ingredient_names IS NOT NULL
-                                     AND oi.removed_ingredient_names != '[]'
-                                     AND oi.removed_ingredient_names != ''
-                                THEN oi.removed_ingredient_names
-                                ELSE ''
-                            END
-                        )
-                        ORDER BY m.name SEPARATOR ';;'
-                    ) AS item_details
-             FROM orders o
-             LEFT JOIN user u ON u.id = o.user_id
-             JOIN order_items oi ON oi.order_id = o.id
-             JOIN menu m ON m.id = oi.menu_id
-             WHERE $sse_dfO
-             GROUP BY o.id ORDER BY o.created_at DESC LIMIT 50"
-        );
-        if ($r) while ($row=$r->fetch_assoc()) $recent[] = $row;
-    }
-    $data['recentOrders'] = $recent;
-
-    $conn->close();
-    echo "retry: 4000\n";
-    echo "event: stats\n";
-    echo "data: ".json_encode($data)."\n\n";
-    if (ob_get_level()) ob_flush();
-    flush();
-    exit;
-}
-// ── End SSE endpoint ──────────────────────────────────────────────────────────
-
-require_once '../../Backend/conn.php';
-
-// ── Helper: check if a table exists ───────────────────────────
-function tableExists($conn, $table) {
-    $res = $conn->query("SHOW TABLES LIKE '$table'");
-    return $res && $res->num_rows > 0;
-}
-
-$hasOrderItems = tableExists($conn, 'order_items');
-
-// ── Date Range Filter ─────────────────────────────────────────
-$drpPresets = ['today'=>0,'7days'=>7,'30days'=>30,'3months'=>90,'12months'=>365,'mtd'=>-1,'ytd'=>-1,'alltime'=>-1,'custom'=>-1];
-$selectedRange = (isset($_GET['range']) && array_key_exists($_GET['range'], $drpPresets)) ? $_GET['range'] : 'alltime';
-
-$dateFrom = $dateTo = '';
-if ($selectedRange === 'today') {
-    $df = $dfo = "DATE(created_at)=CURDATE()";
-    $dfO = "DATE(o.created_at)=CURDATE()";
-} elseif ($selectedRange === 'custom') {
-    $dateFrom = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_from']??'') ? $_GET['date_from'] : date('Y-m-d',strtotime('-7 days'));
-    $dateTo   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_to']??'')   ? $_GET['date_to']   : date('Y-m-d');
-    $df  = "DATE(created_at) BETWEEN '$dateFrom' AND '$dateTo'";
-    $dfO = "DATE(o.created_at) BETWEEN '$dateFrom' AND '$dateTo'";
-} elseif ($selectedRange === 'mtd') {
-    $df  = "YEAR(created_at)=YEAR(CURDATE()) AND MONTH(created_at)=MONTH(CURDATE())";
-    $dfO = "YEAR(o.created_at)=YEAR(CURDATE()) AND MONTH(o.created_at)=MONTH(CURDATE())";
-} elseif ($selectedRange === 'ytd') {
-    $df  = "YEAR(created_at)=YEAR(CURDATE())";
-    $dfO = "YEAR(o.created_at)=YEAR(CURDATE())";
-} elseif ($selectedRange === 'alltime') {
-    $df = $dfO = "1=1";
-} else {
-    $days = (int)$drpPresets[$selectedRange];
-    $df  = "created_at >= DATE_SUB(CURDATE(), INTERVAL $days DAY)";
-    $dfO = "o.created_at >= DATE_SUB(CURDATE(), INTERVAL $days DAY)";
-}
-
-// ── Summary Stats ─────────────────────────────────────────────
-// NOTE: voided / refunded / partial_refund orders are excluded from all stats
-$VALID = "status NOT IN ('voided','refunded','partial_refund')";
-
-$totalOrders  = 0;
-$totalRevenue = 0.0;
-$res = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE $VALID AND $df");
-if ($res && $row = $res->fetch_assoc()) {
-    $totalOrders  = (int)$row['cnt'];
-    $totalRevenue = (float)$row['rev'];
-}
-
-// Refund stats
-$totalRefunds   = 0;
-$totalRefundAmt = 0.0;
-$rRef = $conn->query("SELECT COUNT(*) AS cnt, COALESCE(SUM(refund_amt),0) AS amt FROM order_refunds WHERE $df");
-if ($rRef && $rowRef = $rRef->fetch_assoc()) {
-    $totalRefunds   = (int)$rowRef['cnt'];
-    $totalRefundAmt = (float)$rowRef['amt'];
-}
-
-$totalTables = 0;
-$res2 = $conn->query("SELECT COUNT(DISTINCT table_no) AS cnt FROM orders WHERE $VALID AND $df");
-if ($res2 && $row2 = $res2->fetch_assoc()) {
-    $totalTables = (int)$row2['cnt'];
-}
-
-$topItem = 'No orders yet';
-if ($hasOrderItems) {
-    $res3 = $conn->query(
-        "SELECT m.name, SUM(oi.qty) AS total_qty
-         FROM order_items oi
-         JOIN menu m ON m.id = oi.menu_id
-         JOIN orders o ON o.id = oi.order_id
-         WHERE $VALID AND $dfO
-         GROUP BY oi.menu_id ORDER BY total_qty DESC LIMIT 1"
-    );
-    if ($res3 && $row3 = $res3->fetch_assoc()) {
-        $topItem = htmlspecialchars($row3['name']) . ' (' . (int)$row3['total_qty'] . ' sold)';
-    }
-}
-
-// ── Sales Chart (last 7 days) ─────────────────────────────────
-$chartLabels = [];
-$chartData   = [];
-for ($i = 6; $i >= 0; $i--) {
-    $date = date('Y-m-d', strtotime("-$i days"));
-    $chartLabels[] = date('M d', strtotime("-$i days"));
-    $stmt = $conn->prepare("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at) = ? AND $VALID");
-    $stmt->bind_param('s', $date);
-    $stmt->execute();
-    $chartData[] = (float)$stmt->get_result()->fetch_assoc()['rev'];
-    $stmt->close();
-}
-
-// ── Inventory ─────────────────────────────────────────────────
-$inventoryRows = [];
-$res4 = $conn->query("SELECT name, unit, stock_qty, low_stock_threshold FROM ingredients ORDER BY name");
-if ($res4) while ($row = $res4->fetch_assoc()) $inventoryRows[] = $row;
-
-// ── Orders ────────────────────────────────────────────────────
-$orderRows = [];
-if ($hasOrderItems) {
-    $res5 = $conn->query(
-        "SELECT o.id AS order_id, o.created_at, o.table_no, o.status, o.total_amt,
-                COALESCE(o.discount_amt, 0) AS discount_amt,
-                COALESCE(o.discount_type, '') AS discount_type,
-                COALESCE(CONCAT(u.firstname,' ',u.lastname), 'N/A') AS cashier_name,
-                GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
-                SUM(oi.qty) AS total_qty,
-                GROUP_CONCAT(
-                    CONCAT(
-                        m.name,'|',oi.qty,'|',
-                        COALESCE(oi.addons,''),'|',
-                        CASE
-                            WHEN oi.removed_ingredient_names IS NOT NULL
-                                 AND oi.removed_ingredient_names != '[]'
-                                 AND oi.removed_ingredient_names != ''
-                            THEN oi.removed_ingredient_names
-                            WHEN oi.removed_ingredient_ids IS NOT NULL
-                                 AND oi.removed_ingredient_ids != '[]'
-                                 AND oi.removed_ingredient_ids != ''
-                            THEN (
-                                SELECT CONCAT('[',GROUP_CONCAT(JSON_QUOTE(i2.name) ORDER BY i2.name),']')
-                                FROM ingredients i2
-                                WHERE JSON_SEARCH(oi.removed_ingredient_ids, 'one', CAST(i2.id AS CHAR)) IS NOT NULL
-                            )
-                            ELSE ''
-                        END
-                    )
-                    ORDER BY m.name SEPARATOR ';;'
-                ) AS item_details
-         FROM orders o
-         LEFT JOIN user u ON u.id = o.user_id
-         JOIN order_items oi ON oi.order_id = o.id
-         JOIN menu m ON m.id = oi.menu_id
-         WHERE $dfO
-         GROUP BY o.id ORDER BY o.created_at DESC LIMIT 500"
-
-    );
-    if ($res5) while ($row = $res5->fetch_assoc()) $orderRows[] = $row;
-} else {
-    $res5 = $conn->query(
-        "SELECT o.id AS order_id, o.created_at, o.table_no, o.status, o.total_amt,
-                COALESCE(o.discount_amt,0) AS discount_amt, COALESCE(o.discount_type,'') AS discount_type,
-                COALESCE(CONCAT(u.firstname,' ',u.lastname), 'N/A') AS cashier_name,
-                '—' AS items, 0 AS total_qty, '' AS item_details
-         FROM orders o LEFT JOIN user u ON u.id = o.user_id
-         WHERE $dfO
-         ORDER BY o.created_at DESC LIMIT 500"
-    );
-    if ($res5) while ($row = $res5->fetch_assoc()) $orderRows[] = $row;
-}
-
-// ── Category Sales (valid orders only) ───────────────────────
-$catSales = [];
-if ($hasOrderItems) {
-    $res6 = $conn->query(
-        "SELECT m.category, SUM(oi.qty * oi.unit_price) AS revenue
-         FROM order_items oi
-         JOIN menu m ON m.id = oi.menu_id
-         JOIN orders o ON o.id = oi.order_id
-         WHERE $VALID AND $dfO
-         GROUP BY m.category ORDER BY revenue DESC"
-    );
-    if ($res6) while ($row = $res6->fetch_assoc()) $catSales[] = $row;
-}
-
-// ── Top Selling Items (for table + real-time polling) ─────────
-$topItems   = [];
-$tableItems = [];
-if ($hasOrderItems) {
-    $r4 = $conn->query(
-        "SELECT m.name, m.category, m.price,
-                SUM(oi.qty) AS qty_sold,
-                SUM(oi.qty * oi.unit_price) AS revenue
-         FROM order_items oi
-         JOIN menu m ON m.id = oi.menu_id
-         JOIN orders o ON o.id = oi.order_id
-         WHERE $VALID AND $dfO
-         GROUP BY oi.menu_id
-         ORDER BY qty_sold DESC
-         LIMIT 10"
-    );
-    if ($r4) while ($row = $r4->fetch_assoc()) {
-        $topItems[]   = $row;
-        $tableItems[] = $row;
-    }
-}
-
-// ── AJAX: real-time inventory endpoint ───────────────────────
-if (isset($_GET['ajax']) && $_GET['ajax'] === 'inventory') {
-    $invRows = [];
-    $rInv = $conn->query("SELECT name, unit, stock_qty, low_stock_threshold FROM ingredients ORDER BY name");
-    if ($rInv) while ($row = $rInv->fetch_assoc()) $invRows[] = $row;
-    $conn->close();
-    header('Content-Type: application/json');
-    echo json_encode(['rows' => $invRows]);
-    exit();
-}
-
-// ── AJAX: real-time top items endpoint ───────────────────────
-if (isset($_GET['ajax']) && $_GET['ajax'] === 'topitems') {
-    $ajaxItems = [];
-    if ($hasOrderItems) {
-        $rAjax = $conn->query(
-            "SELECT m.name, m.category, m.price,
-                    SUM(oi.qty) AS qty_sold,
-                    SUM(oi.qty * oi.unit_price) AS revenue
-             FROM order_items oi
-             JOIN menu m ON m.id = oi.menu_id
-             JOIN orders o ON o.id = oi.order_id
-             WHERE $VALID AND $dfO
-             GROUP BY oi.menu_id
-             ORDER BY qty_sold DESC
-             LIMIT 10"
-        );
-        if ($rAjax) while ($row = $rAjax->fetch_assoc()) $ajaxItems[] = $row;
-    }
-    $conn->close();
-    header('Content-Type: application/json');
-    echo json_encode(['items' => $ajaxItems]);
-    exit();
-}
-
-$conn->close();
-$chartLabelsJson = json_encode($chartLabels);
-$chartDataJson   = json_encode($chartData);
+// Variable aliases
+$totalOrders      = $view->totalOrders;
+$totalRevenue     = $view->totalRevenue;
+$totalRefunds     = $view->totalRefunds;
+$totalRefundAmt   = $view->totalRefundAmt;
+$totalTables      = $view->totalTables;
+$topItem          = $view->topItem;
+$selectedRange    = $view->selectedRange;
+$dateFrom         = $view->dateFrom;
+$dateTo           = $view->dateTo;
+$inventoryRows    = $view->inventoryRows;
+$orderRows        = $view->orderRows;
+$catSales         = $view->catSales;
+$topItems         = $view->topItems;
+$chartLabelsJson  = $view->chartLabelsJson;
+$chartDataJson    = $view->chartDataJson;
+$hasOrderItems    = $view->hasOrderItems ?? true;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -381,6 +78,7 @@ $chartDataJson   = json_encode($chartData);
     }
 
 
+    /* ══════════════════════════════════════════════════════
        GLOBAL FIXES — icon animations removed + mobile scrollbar
        ══════════════════════════════════════════════════════ */
 
@@ -583,7 +281,7 @@ $chartDataJson   = json_encode($chartData);
     </a>
     <div class="sidebar">
       <div class="user-panel mt-3 pb-3 mb-3 d-flex">
-      <div class="image"><img src="../dist/img/Empress' Cafe Boracay.jpg" class="img-circle elevation-2" alt="User Image"></div>
+      <div class="image"><img src="../dist/img/avatar.png" class="img-circle elevation-2" alt="User Image"></div>
       <div class="info">
           <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user'] ?? 'Admin') ?></a>
         </div>
@@ -599,7 +297,7 @@ $chartDataJson   = json_encode($chartData);
           <li class="nav-item"><a href="./report.php" class="nav-link active"><i class="nav-icon fas fa-file-alt"></i><p>Reports</p></a></li>
           <li class="nav-item"><a href="./void_refund.php"     class="nav-link"><i class="nav-icon fas fa-undo-alt"></i><p>Void &amp; Refund</p></a></li>
           <li class="nav-item"><a href="./settings.php" class="nav-link"><i class="nav-icon fas fa-cog"></i><p>Settings</p></a></li>
-          <li class="nav-item mt-auto"><a href="../../Backend/logout.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p></a></li>
+          <li class="nav-item mt-auto"><a href="../../Backend/Controllers/LogoutController.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p></a></li>
         </ul>
       </nav>
     </div>
@@ -882,8 +580,8 @@ $chartDataJson   = json_encode($chartData);
                 </tr>
               </thead>
               <tbody id="topItemsTbody">
-                <?php if (!empty($tableItems)): ?>
-                  <?php foreach ($tableItems as $tiIdx => $ti): ?>
+                <?php if (!empty($topItems)): ?>
+                  <?php foreach ($topItems as $tiIdx => $ti): ?>
                   <tr data-item-name="<?= htmlspecialchars($ti['name'], ENT_QUOTES) ?>" data-item-qty="<?= (int)$ti['qty_sold'] ?>">
                     <td><?php
                       $rank = $tiIdx + 1;
@@ -1560,4 +1258,3 @@ $(function(){
 <!-- ══ END top items real-time ════════════════════════════════════════ -->
 
 </body>
-</html>

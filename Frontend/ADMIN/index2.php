@@ -1,367 +1,41 @@
 <?php
-session_name('ADMIN_SESSION');
-session_start();
-if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'admin') {
-    if (isset($_GET['sse'])) { http_response_code(403); exit; }
-    header("Location: ../../lockscreen.html");
-    exit();
-}
+// Frontend/ADMIN/index2.php  (OOP refactored)
+require_once '../../Frontend/Core/DashboardView.php';
+$view = new DashboardView();   // dispatches ?sse endpoint early
 
-// ── SSE endpoint (replaces live_data.php) ────────────────────────
-if (isset($_GET['sse'])) {
-    require_once '../../Backend/conn.php';
-
-    header('Content-Type: text/event-stream');
-    header('Cache-Control: no-cache');
-    header('X-Accel-Buffering: no');
-    @ob_end_clean();
-    ob_implicit_flush(true);
-
-    function tableExists2($conn, $table) {
-        $r = $conn->query("SHOW TABLES LIKE '$table'");
-        return $r && $r->num_rows > 0;
-    }
-
-    $VALID         = "status NOT IN ('voided','refunded','partial_refund')";
-    $hasOrderItems = tableExists2($conn, 'order_items');
-    $data = [];
-
-    // 1. Info-box top row
-    $r = $conn->query("SELECT COUNT(DISTINCT table_no) AS c FROM orders WHERE DATE(created_at)=CURDATE() AND $VALID");
-    $data['dailyCustomers'] = ($r && $row = $r->fetch_assoc()) ? (int)$row['c'] : 0;
-
-    $r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE $VALID");
-    $data['totalRevenue'] = ($r && $row = $r->fetch_assoc()) ? (float)$row['rev'] : 0.0;
-
-    $r = $conn->query("SELECT COUNT(*) AS c FROM orders WHERE DATE(created_at)=CURDATE() AND $VALID");
-    $data['ordersToday'] = ($r && $row = $r->fetch_assoc()) ? (int)$row['c'] : 0;
-
-    $r = $conn->query("SELECT COUNT(*) AS c FROM user WHERE position='staff'");
-    $data['staffCount'] = ($r && $row = $r->fetch_assoc()) ? (int)$row['c'] : 0;
-
-    // 2. Right-panel stats
-    if ($hasOrderItems) {
-        $r = $conn->query(
-            "SELECT COALESCE(SUM(oi.qty),0) AS c FROM order_items oi
-             JOIN orders o ON o.id=oi.order_id
-             WHERE DATE(o.created_at)=CURDATE() AND $VALID"
-        );
-        $data['dailyItemsSold'] = ($r && $row = $r->fetch_assoc()) ? (int)$row['c'] : 0;
-    } else {
-        $data['dailyItemsSold'] = 0;
-    }
-
-    $r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at)=CURDATE() AND $VALID");
-    $data['dailyRevenue'] = ($r && $row = $r->fetch_assoc()) ? (float)$row['rev'] : 0.0;
-
-    $r = $conn->query("SELECT COUNT(*) AS c FROM ingredients WHERE stock_qty <= low_stock_threshold");
-    $data['lowStockCount'] = ($r && $row = $r->fetch_assoc()) ? (int)$row['c'] : 0;
-
-    $r = $conn->query("SELECT COUNT(*) AS c FROM ingredients WHERE expiry_date IS NOT NULL AND expiry_date < CURDATE()");
-    $data['expiredCount'] = ($r && $row = $r->fetch_assoc()) ? (int)$row['c'] : 0;
-
-    $r = $conn->query("SELECT COUNT(*) AS c FROM ingredients WHERE expiry_date IS NOT NULL AND expiry_date >= CURDATE() AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)");
-    $data['expiringSoonCount'] = ($r && $row = $r->fetch_assoc()) ? (int)$row['c'] : 0;
-
-    // 3. Monthly summary
-    $r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE MONTH(created_at)=MONTH(CURDATE()) AND YEAR(created_at)=YEAR(CURDATE()) AND $VALID");
-    $data['thisMonthRev'] = ($r && $row = $r->fetch_assoc()) ? (float)$row['rev'] : 0.0;
-
-    $r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE MONTH(created_at)=MONTH(CURDATE()-INTERVAL 1 MONTH) AND YEAR(created_at)=YEAR(CURDATE()-INTERVAL 1 MONTH) AND $VALID");
-    $data['lastMonthRev'] = ($r && $row = $r->fetch_assoc()) ? (float)$row['rev'] : 0.0;
-
-    $r = $conn->query("SELECT COUNT(*) AS c FROM orders WHERE $VALID");
-    $data['totalOrders'] = ($r && $row = $r->fetch_assoc()) ? (int)$row['c'] : 0;
-
-    // 4. Latest order ID
-    $r = $conn->query("SELECT MAX(id) AS max_id FROM orders");
-    $data['latestOrderId'] = ($r && $row = $r->fetch_assoc()) ? (int)$row['max_id'] : 0;
-
-    // 5. Latest order info for toast
-    $r = $conn->query("SELECT id, table_no, total_amt, created_at FROM orders ORDER BY id DESC LIMIT 1");
-    if ($r && $row = $r->fetch_assoc()) {
-        $data['latestOrder'] = [
-            'id'         => (int)$row['id'],
-            'table_no'   => $row['table_no'],
-            'total_amt'  => (float)$row['total_amt'],
-            'created_at' => $row['created_at'],
-        ];
-    }
-
-    // 6. Inventory rows
-    $invRows = [];
-    $r = $conn->query(
-        "SELECT id, name, unit, stock_qty, low_stock_threshold,
-                COALESCE(expiry_date,'') AS expiry_date,
-                CASE
-                  WHEN expiry_date IS NOT NULL AND expiry_date < CURDATE()         THEN 'expired'
-                  WHEN expiry_date IS NOT NULL AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 'soon'
-                  WHEN stock_qty <= low_stock_threshold THEN 'low'
-                  ELSE 'ok'
-                END AS health
-         FROM ingredients ORDER BY name"
-    );
-    if ($r) while ($row = $r->fetch_assoc()) $invRows[] = $row;
-    $data['inventory'] = $invRows;
-
-    // 7. Recent orders — today only (SSE is used for live "today" view)
-    $recentOrders = [];
-    if ($hasOrderItems) {
-        $r = $conn->query(
-            "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
-                    GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
-                    COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name
-             FROM orders o
-             JOIN order_items oi ON oi.order_id = o.id
-             JOIN menu m ON m.id = oi.menu_id
-             LEFT JOIN user u ON u.id = o.user_id
-             WHERE $VALID AND DATE(o.created_at) = CURDATE()
-             GROUP BY o.id ORDER BY o.created_at DESC LIMIT 50"
-        );
-        if ($r) while ($row = $r->fetch_assoc()) $recentOrders[] = $row;
-    }
-    $data['recentOrders'] = $recentOrders;
-
-    // 8. Menu counts
-    $r = $conn->query("SELECT COUNT(*) AS c FROM menu WHERE is_available=1");
-    $data['menuAvailable'] = ($r && $row = $r->fetch_assoc()) ? (int)$row['c'] : 0;
-    $r = $conn->query("SELECT COUNT(*) AS c FROM menu");
-    $data['menuTotal'] = ($r && $row = $r->fetch_assoc()) ? (int)$row['c'] : 0;
-
-    // 9. Suppliers
-    $r = $conn->query("SELECT COUNT(*) AS c FROM suppliers");
-    $data['suppliersCount'] = ($r && $row = $r->fetch_assoc()) ? (int)$row['c'] : 0;
-
-    // 10. Void/refund stats
-    $r = $conn->query("SELECT COUNT(*) AS c FROM orders WHERE status='voided'");
-    $data['voidedCount'] = ($r && $row = $r->fetch_assoc()) ? (int)$row['c'] : 0;
-
-    $r = $conn->query("SELECT COUNT(*) AS c FROM orders WHERE status IN ('refunded','partial_refund')");
-    $data['refundedCount'] = ($r && $row = $r->fetch_assoc()) ? (int)$row['c'] : 0;
-
-    $conn->close();
-
-    echo "retry: 4000\n";
-    echo "event: stats\n";
-    echo "data: " . json_encode($data) . "\n\n";
-
-    if (ob_get_level()) ob_flush();
-    flush();
-    exit;
-}
-// ── End SSE endpoint ─────────────────────────────────────────────
-
-require_once '../../Backend/conn.php';
-
-// ── Helper ─────────────────────────────────────────────────────
-function tableExists($conn, $table) {
-    $r = $conn->query("SHOW TABLES LIKE '$table'");
-    return $r && $r->num_rows > 0;
-}
-$hasOrderItems = tableExists($conn, 'order_items');
-
-// ── Valid order filter (exclude voided / refunded) ─────────────
-$VALID = "status NOT IN ('voided','refunded','partial_refund')";
-
-// ── History date filter for Recent Orders ──────────────────────
-$allowedRanges = ['today'=>0,'7days'=>7,'30days'=>30,'custom'=>-1,'3months'=>90,'12months'=>365,'mtd'=>-1,'ytd'=>-1,'alltime'=>-1];
-$selectedRange = isset($_GET['range']) && array_key_exists($_GET['range'], $allowedRanges)
-    ? $_GET['range'] : '7days';
-
-// Build date condition
-$dateFrom = $dateTo = '';
-if ($selectedRange === 'today') {
-    $dateFilter       = "DATE(o.created_at) = CURDATE()";
-    $dateFilterSimple = "DATE(created_at) = CURDATE()";
-} elseif ($selectedRange === 'custom') {
-    $dateFrom = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_from']??'') ? $_GET['date_from'] : date('Y-m-d', strtotime('-7 days'));
-    $dateTo   = preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['date_to']??'')   ? $_GET['date_to']   : date('Y-m-d');
-    $dateFilter       = "DATE(o.created_at) BETWEEN '$dateFrom' AND '$dateTo'";
-    $dateFilterSimple = "DATE(created_at)   BETWEEN '$dateFrom' AND '$dateTo'";
-} elseif ($selectedRange === 'mtd') {
-    $dateFilter       = "YEAR(o.created_at)=YEAR(CURDATE()) AND MONTH(o.created_at)=MONTH(CURDATE())";
-    $dateFilterSimple = "YEAR(created_at)=YEAR(CURDATE()) AND MONTH(created_at)=MONTH(CURDATE())";
-} elseif ($selectedRange === 'ytd') {
-    $dateFilter       = "YEAR(o.created_at)=YEAR(CURDATE())";
-    $dateFilterSimple = "YEAR(created_at)=YEAR(CURDATE())";
-} elseif ($selectedRange === 'alltime') {
-    $dateFilter = $dateFilterSimple = "1=1";
-} else {
-    $days = (int)$allowedRanges[$selectedRange];
-    $dateFilter       = "o.created_at >= DATE_SUB(CURDATE(), INTERVAL $days DAY)";
-    $dateFilterSimple = "created_at   >= DATE_SUB(CURDATE(), INTERVAL $days DAY)";
-}
-
-// ── Top info-box stats ─────────────────────────────────────────
-// Daily customers served = distinct table_no ordered today (valid only)
-$dailyCustomers = 0;
-$r = $conn->query("SELECT COUNT(DISTINCT table_no) AS c FROM orders WHERE DATE(created_at)=CURDATE() AND $VALID");
-if ($r && $row = $r->fetch_assoc()) $dailyCustomers = (int)$row['c'];
-
-// Total revenue (all time, valid only)
-$totalRevenue = 0.0;
-$r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE $VALID");
-if ($r && $row = $r->fetch_assoc()) $totalRevenue = (float)$row['rev'];
-
-// Orders today (valid only)
-$ordersToday = 0;
-$r = $conn->query("SELECT COUNT(*) AS c FROM orders WHERE DATE(created_at)=CURDATE() AND $VALID");
-if ($r && $row = $r->fetch_assoc()) $ordersToday = (int)$row['c'];
-
-// Staff count (from user table)
-$staffCount = 0;
-$r = $conn->query("SELECT COUNT(*) AS c FROM user WHERE position = 'staff'");
-if ($r && $row = $r->fetch_assoc()) $staffCount = (int)$row['c'];
-
-// ── Monthly recap chart (last 6 months) ────────────────────────
-$chartLabels = [];
-$chartData   = [];
-for ($i = 5; $i >= 0; $i--) {
-    $y = date('Y', strtotime("-$i months"));
-    $m = date('m', strtotime("-$i months"));
-    $chartLabels[] = date('M Y', strtotime("-$i months"));
-    $stmt = $conn->prepare(
-        "SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders
-         WHERE MONTH(created_at)=? AND YEAR(created_at)=? AND $VALID"
-    );
-    $stmt->bind_param('ss', $m, $y);
-    $stmt->execute();
-    $chartData[] = (float)$stmt->get_result()->fetch_assoc()['rev'];
-    $stmt->close();
-}
-
-// ── Monthly summary footer ─────────────────────────────────────
-$thisMonthRev = 0.0;
-$lastMonthRev = 0.0;
-$r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE MONTH(created_at)=MONTH(CURDATE()) AND YEAR(created_at)=YEAR(CURDATE()) AND $VALID");
-if ($r && $row = $r->fetch_assoc()) $thisMonthRev = (float)$row['rev'];
-$r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE MONTH(created_at)=MONTH(CURDATE()-INTERVAL 1 MONTH) AND YEAR(created_at)=YEAR(CURDATE()-INTERVAL 1 MONTH) AND $VALID");
-if ($r && $row = $r->fetch_assoc()) $lastMonthRev = (float)$row['rev'];
-$revChange = $lastMonthRev > 0 ? round((($thisMonthRev - $lastMonthRev) / $lastMonthRev) * 100, 1) : 0;
-
-$totalOrders = 0;
-$r = $conn->query("SELECT COUNT(*) AS c FROM orders WHERE $VALID");
-if ($r && $row = $r->fetch_assoc()) $totalOrders = (int)$row['c'];
-
-// ── Category revenue progress bars (valid only) ──────────────
-$catRevenue = [];
-if ($hasOrderItems) {
-    $r = $conn->query(
-        "SELECT m.category, SUM(oi.qty * oi.unit_price) AS revenue
-         FROM order_items oi
-         JOIN menu m ON m.id = oi.menu_id
-         JOIN orders o ON o.id = oi.order_id
-         WHERE $VALID
-         GROUP BY m.category ORDER BY revenue DESC LIMIT 4"
-    );
-    if ($r) while ($row = $r->fetch_assoc()) $catRevenue[] = $row;
-}
-$maxCatRev = !empty($catRevenue) ? (float)$catRevenue[0]['revenue'] : 1;
-
-// ── Right-side stats ───────────────────────────────────────────
-// Daily items sold (valid orders only)
-$dailyItemsSold = 0;
-if ($hasOrderItems) {
-    $r = $conn->query(
-        "SELECT COALESCE(SUM(oi.qty),0) AS c FROM order_items oi
-         JOIN orders o ON o.id=oi.order_id
-         WHERE DATE(o.created_at)=CURDATE() AND $VALID"
-    );
-    if ($r && $row = $r->fetch_assoc()) $dailyItemsSold = (int)$row['c'];
-}
-
-// Daily revenue (valid only)
-$dailyRevenue = 0.0;
-$r = $conn->query("SELECT COALESCE(SUM(total_amt),0) AS rev FROM orders WHERE DATE(created_at)=CURDATE() AND $VALID");
-if ($r && $row = $r->fetch_assoc()) $dailyRevenue = (float)$row['rev'];
-
-// Low stock count
-$lowStockCount = 0;
-$r = $conn->query("SELECT COUNT(*) AS c FROM ingredients WHERE stock_qty <= low_stock_threshold");
-if ($r && $row = $r->fetch_assoc()) $lowStockCount = (int)$row['c'];
-
-// Expired ingredients count
-$expiredCount = 0;
-$r = $conn->query("SELECT COUNT(*) AS c FROM ingredients WHERE expiry_date IS NOT NULL AND expiry_date < CURDATE()");
-if ($r && $row = $r->fetch_assoc()) $expiredCount = (int)$row['c'];
-
-// Expiring soon count (within 30 days)
-$expiringSoonCount = 0;
-$r = $conn->query("SELECT COUNT(*) AS c FROM ingredients WHERE expiry_date IS NOT NULL AND expiry_date >= CURDATE() AND expiry_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)");
-if ($r && $row = $r->fetch_assoc()) $expiringSoonCount = (int)$row['c'];
-
-// Expired ingredient names (for ticker)
-$expiredNames = [];
-$r = $conn->query("SELECT name, expiry_date FROM ingredients WHERE expiry_date IS NOT NULL AND expiry_date < CURDATE() ORDER BY expiry_date ASC LIMIT 5");
-if ($r) while ($row = $r->fetch_assoc()) $expiredNames[] = $row['name'];
-
-// ── New menu items (last 5 added) ──────────────────────────────
-$newMenuItems = [];
-$r = $conn->query("SELECT name, price, description, image FROM menu ORDER BY id DESC LIMIT 4");
-if ($r) while ($row = $r->fetch_assoc()) $newMenuItems[] = $row;
-
-// ── Staff list ────────────────────────────────────────────────
-$staffList = [];
-$r = $conn->query("SELECT firstname, lastname, image FROM user WHERE position = 'staff' ORDER BY id DESC LIMIT 5");
-if ($r) while ($row = $r->fetch_assoc()) $staffList[] = $row;
-
-// ── Recent orders (filtered by date, valid only) ──────────────
-$recentOrders = [];
-if ($hasOrderItems) {
-    $r = $conn->query(
-        "SELECT o.id, o.table_no, o.total_amt, o.created_at,
-                COALESCE(CONCAT(u.firstname,' ',u.lastname), 'N/A') AS cashier_name,
-                GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items
-         FROM orders o
-         JOIN order_items oi ON oi.order_id = o.id
-         JOIN menu m ON m.id = oi.menu_id
-         LEFT JOIN user u ON u.id = o.user_id
-         WHERE $VALID AND $dateFilter
-         GROUP BY o.id ORDER BY o.created_at DESC LIMIT 50"
-    );
-    if ($r) while ($row = $r->fetch_assoc()) $recentOrders[] = $row;
-} else {
-    $r = $conn->query("SELECT o.id, o.table_no, o.total_amt, o.created_at, COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name, '—' AS items FROM orders o LEFT JOIN user u ON u.id = o.user_id WHERE $VALID AND $dateFilter ORDER BY o.created_at DESC LIMIT 50");
-    if ($r) while ($row = $r->fetch_assoc()) $recentOrders[] = $row;
-}
-
-// ── Revenue Forecasting — Linear Regression on 6-month data ───
-function linearRegression(array $y): array {
-    $n = count($y);
-    if ($n < 2) return ['slope' => 0, 'intercept' => 0];
-    $sumX = 0; $sumY = 0; $sumXY = 0; $sumX2 = 0;
-    for ($i = 0; $i < $n; $i++) {
-        $sumX  += $i; $sumY  += $y[$i];
-        $sumXY += $i * $y[$i]; $sumX2 += $i * $i;
-    }
-    $denom = $n * $sumX2 - $sumX * $sumX;
-    if ($denom == 0) return ['slope' => 0, 'intercept' => $sumY / $n];
-    $slope     = ($n * $sumXY - $sumX * $sumY) / $denom;
-    $intercept = ($sumY - $slope * $sumX) / $n;
-    return ['slope' => $slope, 'intercept' => $intercept];
-}
-$reg = linearRegression($chartData);
-$n   = count($chartData);
-$forecastData   = [];
-$forecastLabels = [];
-for ($f = 1; $f <= 3; $f++) {
-    $forecastData[]   = round(max(0, $reg['intercept'] + $reg['slope'] * ($n - 1 + $f)), 2);
-    $forecastLabels[] = date('M Y', strtotime("+$f months"));
-}
-$projNextMonth   = $forecastData[0];
-$lastMonthActual = end($chartData);
-$projGrowthPct   = $lastMonthActual > 0
-    ? (($projNextMonth - $lastMonthActual) / $lastMonthActual) * 100 : 0;
-$avgMonthRev     = array_sum($chartData) / max(1, count(array_filter($chartData, fn($v) => $v > 0)));
-
-$conn->close();
-
-$chartLabelsJson = json_encode($chartLabels);
-$chartDataJson   = json_encode($chartData);
-$revTrend        = $revChange >= 0 ? '+' . $revChange . '%' : $revChange . '%';
-$revTrendClass   = $revChange >= 0 ? 'text-success' : 'text-danger';
-$revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
-
+// Variable aliases
+$dailyCustomers    = $view->dailyCustomers;
+$totalRevenue      = $view->totalRevenue;
+$ordersToday       = $view->ordersToday;
+$staffCount        = $view->staffCount;
+$dailyItemsSold    = $view->dailyItemsSold;
+$dailyRevenue      = $view->dailyRevenue;
+$lowStockCount     = $view->lowStockCount;
+$expiredCount      = $view->expiredCount;
+$expiringSoonCount = $view->expiringSoonCount;
+$thisMonthRev      = $view->thisMonthRev;
+$lastMonthRev      = $view->lastMonthRev;
+$revChange         = $view->revChange;
+$totalOrders       = $view->totalOrders;
+$catRevenue        = $view->catRevenue;
+$maxCatRev         = $view->maxCatRev;
+$expiredNames      = $view->expiredNames;
+$newMenuItems      = $view->newMenuItems;
+$staffList         = $view->staffList;
+$recentOrders      = $view->recentOrders;
+$selectedRange     = $view->selectedRange;
+$dateFrom          = $view->dateFrom;
+$dateTo            = $view->dateTo;
+$projNextMonth     = $view->projNextMonth;
+$projGrowthPct     = $view->projGrowthPct;
+$avgMonthRev       = $view->avgMonthRev;
+$chartLabelsJson   = $view->chartLabelsJson;
+$chartDataJson     = $view->chartDataJson;
+$forecastData      = $view->forecastData;
+$forecastLabels    = $view->forecastLabels;
+$revTrend          = $view->revTrend;
+$revTrendClass     = $view->revTrendClass;
+$revTrendIcon      = $view->revTrendIcon;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -373,6 +47,9 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
   <link rel="stylesheet" href="../plugins/fontawesome-free/css/all.min.css">
   <link rel="stylesheet" href="../plugins/overlayScrollbars/css/OverlayScrollbars.min.css">
   <link rel="stylesheet" href="../dist/css/adminlte.min.css">
+  <link rel="stylesheet" href="../plugins/datatables-bs4/css/dataTables.bootstrap4.min.css">
+  <link rel="stylesheet" href="../plugins/datatables-responsive/css/responsive.bootstrap4.min.css">
+  <link rel="stylesheet" href="../plugins/datatables-buttons/css/buttons.bootstrap4.min.css">
   <link rel="stylesheet" href="../dist/css/empress-cafe-theme.css">
   <style>
     /* Dark-mode toggle */
@@ -597,6 +274,105 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
     #drpTriggerBtn.open .drp-chevron{transform:rotate(180deg);}
     @media(max-width:600px){#drpPopup .drp-months{flex-direction:column;}#drpPopup .drp-presets{width:100%;border-right:none;border-bottom:1px solid #f0f0f0;display:flex;flex-wrap:wrap;padding:8px;}#drpPopup .drp-preset-item{padding:6px 10px;border-left:none;border-bottom:2px solid transparent;}#drpPopup .drp-preset-item.active{border-bottom-color:#e91e8c;border-left-color:transparent;}#drpPopup .drp-inner{flex-direction:column;}}
 
+    /* ══ REALTIME UPLOAD MODAL ══════════════════════════════════ */
+    #rtUploadBackdrop {
+      display:none;position:fixed;inset:0;z-index:9100;
+      background:rgba(0,0,0,.5);backdrop-filter:blur(6px);
+    }
+    #rtUploadModal {
+      display:none;position:fixed;z-index:9101;
+      top:50%;left:50%;transform:translate(-50%,-50%);
+      background:#fff;border-radius:16px;
+      box-shadow:0 24px 64px rgba(0,0,0,.28);
+      width:min(540px,96vw);overflow:hidden;
+      font-family:'Source Sans Pro',sans-serif;
+    }
+    body.dark-mode #rtUploadModal { background:#252535;color:#e0e0e0; }
+    #rtUploadModal .rtu-header {
+      background:linear-gradient(90deg,#e91e8c,#9c27b0);
+      color:#fff;padding:18px 22px;
+      display:flex;align-items:center;justify-content:space-between;
+    }
+    #rtUploadModal .rtu-header h5 { margin:0;font-size:1rem;font-weight:700; }
+    #rtUploadModal .rtu-close {
+      background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;
+      line-height:1;padding:0 4px;opacity:.8;transition:opacity .15s;
+    }
+    #rtUploadModal .rtu-close:hover { opacity:1; }
+    #rtUploadModal .rtu-body { padding:22px 24px; }
+    #rtUploadModal .rtu-type-row {
+      display:flex;gap:10px;margin-bottom:18px;
+    }
+    #rtUploadModal .rtu-type-btn {
+      flex:1;border:2px solid #e0e0e0;border-radius:10px;padding:10px 8px;
+      background:#fafafa;cursor:pointer;text-align:center;transition:border-color .15s,background .15s;
+      font-size:.82rem;font-weight:600;color:#555;
+    }
+    body.dark-mode #rtUploadModal .rtu-type-btn { background:#2a2a3e;border-color:#444;color:#bbb; }
+    #rtUploadModal .rtu-type-btn:hover { border-color:#e91e8c;background:#fdf0f8;color:#e91e8c; }
+    #rtUploadModal .rtu-type-btn.active { border-color:#e91e8c;background:#fdf0f8;color:#e91e8c; }
+    body.dark-mode #rtUploadModal .rtu-type-btn.active { background:#3a2a3a; }
+    #rtUploadModal .rtu-type-btn i { display:block;font-size:1.4rem;margin-bottom:5px; }
+    /* Drop zone */
+    #rtuDropZone {
+      border:2px dashed #d0d0d0;border-radius:12px;
+      padding:32px 20px;text-align:center;cursor:pointer;
+      transition:border-color .15s,background .15s;position:relative;
+      background:#fafafa;
+    }
+    body.dark-mode #rtuDropZone { background:#2a2a3e;border-color:#444; }
+    #rtuDropZone.drag-over { border-color:#e91e8c;background:#fdf0f8; }
+    body.dark-mode #rtuDropZone.drag-over { background:#3a2a3a; }
+    #rtuDropZone i { font-size:2rem;color:#ccc;margin-bottom:8px;display:block; }
+    #rtuDropZone p { margin:0;font-size:.85rem;color:#888; }
+    #rtuDropZone small { color:#aaa;font-size:.75rem; }
+    #rtuFileInput { display:none; }
+    /* Progress */
+    #rtuProgressWrap { display:none;margin-top:18px; }
+    #rtuFileName { font-size:.82rem;font-weight:600;color:#333;margin-bottom:6px;
+                   white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    body.dark-mode #rtuFileName { color:#ddd; }
+    #rtuProgressBar {
+      height:10px;border-radius:5px;background:#f0f0f0;overflow:hidden;margin-bottom:6px;
+    }
+    body.dark-mode #rtuProgressBar { background:#3a3a4a; }
+    #rtuProgressFill {
+      height:100%;width:0%;border-radius:5px;transition:width .1s linear;
+      background:linear-gradient(90deg,#e91e8c,#9c27b0);
+    }
+    #rtuProgressFill.complete { background:linear-gradient(90deg,#28a745,#20c997); }
+    #rtuProgressFill.error    { background:#e74c3c; }
+    #rtuProgressPct { font-size:.75rem;color:#888;text-align:right; }
+    /* Status message */
+    #rtuStatus { margin-top:10px;font-size:.83rem;min-height:20px; }
+    #rtuStatus.success { color:#28a745;font-weight:600; }
+    #rtuStatus.error   { color:#e74c3c;font-weight:600; }
+    /* Footer */
+    #rtUploadModal .rtu-footer {
+      padding:14px 24px 18px;display:flex;gap:10px;justify-content:flex-end;
+      border-top:1px solid #f0f0f0;
+    }
+    body.dark-mode #rtUploadModal .rtu-footer { border-color:#3a3a4a; }
+    #rtuUploadBtn {
+      background:linear-gradient(90deg,#e91e8c,#9c27b0);
+      color:#fff;border:none;border-radius:8px;padding:8px 22px;
+      font-size:.87rem;font-weight:700;cursor:pointer;transition:opacity .15s;
+    }
+    #rtuUploadBtn:disabled { opacity:.45;cursor:not-allowed; }
+    #rtuCancelBtn {
+      background:none;border:1px solid #d0d0d0;border-radius:8px;padding:8px 16px;
+      font-size:.87rem;cursor:pointer;color:#666;transition:border-color .15s;
+    }
+    body.dark-mode #rtuCancelBtn { border-color:#555;color:#aaa; }
+    #rtuCancelBtn:hover { border-color:#e91e8c;color:#e91e8c; }
+    /* Hint box */
+    #rtuHint {
+      margin-top:14px;padding:10px 14px;border-radius:8px;
+      background:#fff8e1;border:1px solid #ffe082;font-size:.78rem;color:#795548;
+      display:none;
+    }
+    body.dark-mode #rtuHint { background:#2a2a1a;border-color:#665500;color:#c8a96a; }
+
 </style>
 </head>
 <body class="hold-transition sidebar-mini layout-fixed layout-navbar-fixed layout-footer-fixed">
@@ -648,7 +424,20 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
         <a class="nav-link" data-widget="fullscreen" href="#" role="button"><i class="fas fa-expand-arrows-alt"></i></a>
       </li>
       <li class="nav-item">
+        <a class="nav-link" href="#" role="button" id="uploadTriggerBtn" title="Upload File" onclick="rtUploadOpen();return false;" style="position:relative;">
+          <i class="fas fa-cloud-upload-alt"></i>
+          <span id="uploadNavBadge" style="display:none;position:absolute;top:6px;right:4px;width:8px;height:8px;background:#28a745;border-radius:50%;border:2px solid #fff;"></span>
+        </a>
+      </li>
+      <li class="nav-item">
         <a class="nav-link" id="darkModeToggle" href="#" role="button"><i class="fas fa-moon"></i></a>
+      </li>
+          <li class="nav-item">
+        <a class="nav-link" href="#" role="button" id="navLogoutBtn" title="Log Out"
+           onclick="document.getElementById('logoutModal').style.display='flex';return false;"
+           style="color:#e74c3c;">
+          <i class="fas fa-sign-out-alt"></i>
+        </a>
       </li>
     </ul>
   </nav>
@@ -673,7 +462,7 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
           $admin_name  = htmlspecialchars(trim($admin_first . ' ' . $admin_last));
           $admin_photo = !empty($admin_image)
               ? '../../' . htmlspecialchars($admin_image)
-              : "../dist/img/Empress' Cafe Boracay.jpg";
+              : '../dist/img/avatar.png';
         ?>
         <div class="image"><img src="<?= $admin_photo ?>" class="img-circle elevation-2" alt="<?= $admin_name ?>"></div>
         <div class="info">
@@ -691,7 +480,7 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
           <li class="nav-item"><a href="./report.php"          class="nav-link"><i class="nav-icon fas fa-file-alt"></i><p>Reports</p></a></li>
           <li class="nav-item"><a href="./void_refund.php"     class="nav-link"><i class="nav-icon fas fa-undo-alt"></i><p>Void &amp; Refund</p></a></li>
           <li class="nav-item"><a href="./settings.php" class="nav-link"><i class="nav-icon fas fa-cog"></i><p>Settings</p></a></li>
-          <li class="nav-item mt-auto"><a href="../../Backend/logout.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p></a></li>
+          <li class="nav-item mt-auto"><a href="../../Backend/Controllers/LogoutController.php" class="nav-link"><i class="nav-icon fas fa-sign-out-alt"></i><p>Log Out</p></a></li>
         </ul>
       </nav>
     </div>
@@ -1130,8 +919,9 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
           <div class="col-12">
             <div class="card">
               <div class="card-header border-transparent d-flex flex-wrap align-items-center" style="gap:8px;">
-                <h3 class="card-title mr-auto"><i class="fas fa-receipt mr-2"></i>Recent Orders History&nbsp;<span class="rt-live-dot live-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;vertical-align:middle;margin-left:4px;" title="Live data connected"></span></h3>
-                <!-- Summary badge -->
+                <h3 class="card-title mr-auto">
+                  <i class="fas fa-receipt mr-2"></i>Recent Orders History&nbsp;<span class="rt-live-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;vertical-align:middle;margin-left:4px;" title="Live data connected"></span>
+                </h3>
                 <span id="recentOrdersBadge" class="badge badge-secondary" style="font-size:.8rem;">
                   <?= count($recentOrders) ?> order<?= count($recentOrders)!==1?'s':'' ?>
                   <?php if ($selectedRange==='today'):       ?>· Today
@@ -1140,46 +930,82 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
                   <?php elseif ($selectedRange==='custom'):  ?>· <?= date('M d',strtotime($dateFrom??'now')) ?> – <?= date('M d, Y',strtotime($dateTo??'now')) ?>
                   <?php endif; ?>
                 </span>
-                <!-- Date-range picker trigger (only shown for today view) -->
                 <?php if ($selectedRange === 'today'): ?>
                 <small class="text-muted ml-1" style="font-size:.75rem;">(live)</small>
                 <?php endif; ?>
               </div>
               <div class="card-body p-0">
                 <div class="table-responsive">
-                  <table class="table m-0 w-100" id="recentOrdersTable">
+                  <table class="table table-hover m-0 w-100" id="recentOrdersTable">
                     <thead>
                       <tr>
                         <th>Order ID</th>
-                        <th>Table No</th>
+                        <th>Date &amp; Time</th>
+                        <th>Table</th>
                         <th>Items</th>
                         <th>Cashier</th>
-                        <th>Date &amp; Time</th>
+                        <th style="font-size:11px;">Add-ons</th>
+                        <th style="font-size:11px;">Removed</th>
+                        <th>Discount</th>
                         <th>Total</th>
                         <th>Status</th>
                       </tr>
                     </thead>
-                    <tbody data-rt-container="recentOrders">
+                    <tbody id="latestOrdersTbody" data-rt-container="recentOrders">
                       <?php if (!empty($recentOrders)):
                         foreach ($recentOrders as $ro):
                           $roStatus = $ro['status'] ?? 'completed';
-                          if ($roStatus === 'voided')         $statusBadge = '<span class="badge badge-danger">Voided</span>';
-                          elseif ($roStatus === 'refunded')   $statusBadge = '<span class="badge badge-info">Refunded</span>';
-                          elseif ($roStatus === 'partial_refund') $statusBadge = '<span class="badge badge-warning">Partial Refund</span>';
-                          else                                $statusBadge = '<span class="badge badge-success">Completed</span>';
+                          if ($roStatus === 'voided')              $statusBadge = '<span class="badge badge-danger">Voided</span>';
+                          elseif ($roStatus === 'refunded')        $statusBadge = '<span class="badge badge-info">Refunded</span>';
+                          elseif ($roStatus === 'partial_refund')  $statusBadge = '<span class="badge badge-warning">Partial Refund</span>';
+                          else                                     $statusBadge = '<span class="badge badge-success">Completed</span>';
+
+                          /* Parse item_details for add-ons / removed ingredients */
+                          $allAddons  = [];
+                          $allRemoved = [];
+                          if (!empty($ro['item_details'])) {
+                            foreach (explode(';;', $ro['item_details']) as $seg) {
+                              $parts   = explode('|', $seg, 4);
+                              $iName   = $parts[0] ?? '';
+                              $addons  = trim($parts[2] ?? '');
+                              $rawRem  = trim($parts[3] ?? '');
+                              $removed = '';
+                              if ($rawRem !== '' && $rawRem !== '[]') {
+                                $arr = json_decode($rawRem, true);
+                                if (is_array($arr) && count($arr) > 0) $removed = implode(', ', array_filter($arr));
+                                elseif (!is_array($arr)) $removed = $rawRem;
+                              }
+                              if ($addons)  $allAddons[]  = '<strong>'.htmlspecialchars($iName).':</strong> '.htmlspecialchars($addons);
+                              if ($removed) $allRemoved[] = '<strong>'.htmlspecialchars($iName).':</strong> No '.htmlspecialchars($removed);
+                            }
+                          }
+                          $addonsCell  = !empty($allAddons)  ? implode('<br>', $allAddons)  : '<span class="text-muted">—</span>';
+                          $removedCell = !empty($allRemoved) ? implode('<br>', $allRemoved) : '<span class="text-muted">—</span>';
+                          $discAmt = (float)($ro['discount_amt'] ?? 0);
+                          $discType = $ro['discount_type'] ?? '';
+                          if ($discAmt > 0) {
+                            $discLabel = $discType === 'senior' ? 'Senior 20%' : ($discType === 'pwd' ? 'PWD 20%' : 'Discount');
+                            $discountCell = '<span class="badge badge-success" style="font-size:11px;">'.$discLabel.'</span><br>'
+                                          . '<span class="text-danger font-weight-bold">-&#8369;'.number_format($discAmt,2).'</span>';
+                          } else {
+                            $discountCell = '<span class="text-muted">—</span>';
+                          }
                       ?>
                       <tr data-order-id="<?= (int)$ro['id'] ?>">
                         <td><strong>#<?= (int)$ro['id'] ?></strong></td>
+                        <td style="white-space:nowrap;"><small class="text-muted"><?= htmlspecialchars(date('M d, Y g:i A', strtotime($ro['created_at']))) ?></small></td>
                         <td><?= htmlspecialchars($ro['table_no'] ?? '—') ?></td>
-                        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<?= htmlspecialchars($ro['items'] ?? '') ?>"><?= htmlspecialchars(mb_strimwidth($ro['items'] ?? '—', 0, 50, '…')) ?></td>
-                        <td><?= htmlspecialchars($ro['cashier_name'] ?? '—') ?></td>
-                        <td><small class="text-muted"><?= htmlspecialchars(date('M d, Y g:i A', strtotime($ro['created_at']))) ?></small></td>
+                        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="<?= htmlspecialchars($ro['items'] ?? '') ?>"><?= htmlspecialchars(mb_strimwidth($ro['items'] ?? '—', 0, 50, '…')) ?></td>
+                        <td><?= htmlspecialchars(trim($ro['cashier_name'] ?? '') ?: '—') ?></td>
+                        <td style="font-size:12px;"><?= $addonsCell ?></td>
+                        <td style="font-size:12px;"><?= $removedCell ?></td>
+                        <td><?= $discountCell ?></td>
                         <td><strong class="text-success">&#8369;<?= number_format((float)$ro['total_amt'], 2) ?></strong></td>
                         <td><?= $statusBadge ?></td>
                       </tr>
                       <?php endforeach; ?>
                       <?php else: ?>
-                      <tr><td colspan="7" class="text-center text-muted p-3">No recent orders.</td></tr>
+                      <tr><td colspan="10" class="text-center text-muted p-3">No recent orders.</td></tr>
                       <?php endif; ?>
                     </tbody>
                   </table>
@@ -1193,6 +1019,41 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
                   Period Total:&nbsp;<strong class="text-success">&#8369;<?= number_format($periodTotal, 2) ?></strong>
                 </span>
                 <a href="sale_revenue.php" class="btn btn-sm btn-secondary ml-auto">View All Orders</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Top Selling Items ─────────────────────────────── -->
+        <div class="row">
+          <div class="col-12">
+            <div class="card">
+              <div class="card-header d-flex align-items-center justify-content-between flex-wrap" style="gap:8px;">
+                <h3 class="card-title">
+                  <i class="fas fa-star mr-2"></i>Top Selling Items
+                  <span class="top-items-live-dot" style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block;vertical-align:middle;margin-left:6px;" title="Live — updating every 30s"></span>
+                </h3>
+                <small class="text-muted" id="topItemsLastUpdated" style="font-size:11px;"></small>
+              </div>
+              <div class="card-body">
+                <table id="topItemsTable" class="table table-bordered table-striped">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Item</th>
+                      <th>Category</th>
+                      <th>Unit Price (&#8369;)</th>
+                      <th>Qty Sold</th>
+                      <th>Revenue (&#8369;)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="topItemsTbody">
+                    <tr><td colspan="6" class="text-center text-muted p-3">Loading top items…</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="card-footer text-right">
+                <a href="sale_revenue.php" class="btn btn-sm btn-secondary"><i class="fas fa-chart-line mr-1"></i>Full Sales &amp; Revenue</a>
               </div>
             </div>
           </div>
@@ -1259,6 +1120,18 @@ $revTrendIcon    = $revChange >= 0 ? 'fa-caret-up' : 'fa-caret-down';
 <script src="../plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js"></script>
 <script src="../dist/js/adminlte.js"></script>
 <script src="../plugins/chart.js/Chart.min.js"></script>
+<script src="../plugins/datatables/jquery.dataTables.min.js"></script>
+<script src="../plugins/datatables-bs4/js/dataTables.bootstrap4.min.js"></script>
+<script src="../plugins/datatables-responsive/js/dataTables.responsive.min.js"></script>
+<script src="../plugins/datatables-responsive/js/responsive.bootstrap4.min.js"></script>
+<script src="../plugins/datatables-buttons/js/dataTables.buttons.min.js"></script>
+<script src="../plugins/datatables-buttons/js/buttons.bootstrap4.min.js"></script>
+<script src="../plugins/jszip/jszip.min.js"></script>
+<script src="../plugins/pdfmake/pdfmake.min.js"></script>
+<script src="../plugins/pdfmake/vfs_fonts.js"></script>
+<script src="../plugins/datatables-buttons/js/buttons.html5.min.js"></script>
+<script src="../plugins/datatables-buttons/js/buttons.print.min.js"></script>
+<script src="../plugins/datatables-buttons/js/buttons.colVis.min.js"></script>
 
 <!-- Monthly Revenue Chart -->
 <script>
@@ -1495,61 +1368,105 @@ $(function () {
   }
 
   function updateRecentOrders(orders) {
-    var tbodies = document.querySelectorAll('[data-rt-container="recentOrders"]');
-    if (!tbodies.length || !orders || !orders.length) return;
+    var tbody = document.getElementById('latestOrdersTbody');
+    if (!tbody) return;
 
-    // Only overwrite the table rows when the user is viewing "today" (live mode).
-    // For any other date-filter range the PHP-rendered rows are authoritative —
-    // we must NOT replace them with the SSE payload (which is always last 20 all-time).
-    var isLiveMode = (SELECTED_RANGE === 'today');
+    if (!orders || !orders.length) {
+      tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted">No recent orders.</td></tr>';
+      return;
+    }
 
-    tbodies.forEach(function (tbody) {
-      var prevIds = Array.from(tbody.querySelectorAll('tr[data-order-id]'))
-        .map(function (r) { return r.getAttribute('data-order-id'); });
+    var prevIds = Array.from(tbody.querySelectorAll('tr[data-order-id]'))
+      .map(function (r) { return r.getAttribute('data-order-id'); });
+    var newIds = orders.map(function (o) { return String(o.id); });
+    if (JSON.stringify(prevIds) === JSON.stringify(newIds)) return;
 
-      if (isLiveMode) {
-        var newIds  = orders.map(function (o) { return String(o.id); });
-        if (JSON.stringify(prevIds) === JSON.stringify(newIds)) return;
-        var html = orders.map(function (o) {
-          var statusBadge = '';
-          if      (o.status === 'voided')         statusBadge = '<span class="badge badge-danger">Voided</span>';
-          else if (o.status === 'refunded')       statusBadge = '<span class="badge badge-info">Refunded</span>';
-          else if (o.status === 'partial_refund') statusBadge = '<span class="badge badge-warning">Partial Refund</span>';
-          else                                    statusBadge = '<span class="badge badge-success">Completed</span>';
-          var date    = new Date(o.created_at);
-          var timeStr = date.toLocaleTimeString('en-PH', {hour:'2-digit',minute:'2-digit',hour12:true});
-          var dateStr = date.toLocaleDateString('en-PH', {month:'short',day:'numeric'});
-          var isNew   = prevIds.indexOf(String(o.id)) === -1 ? ' data-rt-new="1"' : '';
-          return '<tr data-order-id="' + o.id + '"' + isNew + '>' +
-            '<td><strong>#' + o.id + '</strong></td>' +
-            '<td>' + (o.table_no || '—') + '</td>' +
-            '<td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + (o.items||'') + '">' + (o.items || '—') + '</td>' +
-            '<td>' + (o.cashier_name || 'N/A') + '</td>' +
-            '<td><small class="text-muted">' + dateStr + ' ' + timeStr + '</small></td>' +
-            '<td><strong class="text-success">₱' + parseFloat(o.total_amt).toLocaleString('en',{minimumFractionDigits:2}) + '</strong></td>' +
-            '<td>' + statusBadge + '</td>' +
-            '</tr>';
-        }).join('');
-        tbody.innerHTML = html;
-        /* Flash highlight rows that are brand-new */
-        tbody.querySelectorAll('tr[data-rt-new="1"]').forEach(function (tr) {
-          tr.style.transition = 'none';
-          tr.style.backgroundColor = 'rgba(233,30,140,0.18)';
-          setTimeout(function () {
-            tr.style.transition = 'background-color 1.4s ease';
-            tr.style.backgroundColor = '';
-          }, 80);
-        });
+    var html = orders.map(function (o) {
+      var isNew = prevIds.indexOf(String(o.id)) === -1;
+
+      /* Parse item_details for add-ons and removed ingredients */
+      var det = parseItemDetails(o.item_details || '');
+      var addonsCell  = det.addons.length  ? det.addons.join('<br>')  : '<span class="text-muted">—</span>';
+      var removedCell = det.removed.length ? det.removed.join('<br>') : '<span class="text-muted">—</span>';
+
+      /* Discount cell */
+      var discount = '<span class="text-muted">—</span>';
+      if (parseFloat(o.discount_amt || 0) > 0) {
+        var dt = o.discount_type === 'senior' ? 'Senior 20%' : (o.discount_type === 'pwd' ? 'PWD 20%' : 'Discount');
+        discount = '<span class="badge badge-success" style="font-size:11px;">' + dt + '</span><br>'
+                 + '<span class="text-danger font-weight-bold">-₱' + parseFloat(o.discount_amt).toLocaleString('en',{minimumFractionDigits:2}) + '</span>';
       }
-      // In live mode, also update the summary badge count to reflect real-time row count
-      if (isLiveMode) {
-        var badge = document.getElementById('recentOrdersBadge');
-        if (badge) {
-          var count = tbody.querySelectorAll('tr[data-order-id]').length;
-          badge.textContent = count + ' order' + (count !== 1 ? 's' : '') + ' · Today';
+
+      /* Status badge */
+      var statusBadge = '';
+      if      (o.status === 'voided')         statusBadge = '<span class="badge badge-danger">Voided</span>';
+      else if (o.status === 'refunded')       statusBadge = '<span class="badge badge-info">Refunded</span>';
+      else if (o.status === 'partial_refund') statusBadge = '<span class="badge badge-warning">Partial Refund</span>';
+      else                                    statusBadge = '<span class="badge badge-success">Completed</span>';
+
+      return '<tr data-order-id="' + escHtml(o.id) + '"' + (isNew ? ' data-rt-new="1"' : '') + '>'
+        + '<td><strong>#' + escHtml(o.id) + '</strong></td>'
+        + '<td style="white-space:nowrap;"><small class="text-muted">' + escHtml(o.created_at) + '</small></td>'
+        + '<td>' + escHtml(o.table_no || '—') + '</td>'
+        + '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escHtml(o.items || '—') + '</td>'
+        + '<td>' + escHtml(o.cashier_name && o.cashier_name !== 'N/A' ? o.cashier_name : '—') + '</td>'
+        + '<td style="font-size:12px;">' + addonsCell + '</td>'
+        + '<td style="font-size:12px;">' + removedCell + '</td>'
+        + '<td>' + discount + '</td>'
+        + '<td><strong class="text-success">₱' + parseFloat(o.total_amt).toLocaleString('en',{minimumFractionDigits:2}) + '</strong></td>'
+        + '<td>' + statusBadge + '</td>'
+        + '</tr>';
+    }).join('');
+
+    tbody.innerHTML = html;
+
+    /* Flash highlight new rows */
+    tbody.querySelectorAll('tr[data-rt-new="1"]').forEach(function (tr) {
+      tr.style.transition = 'none';
+      tr.style.backgroundColor = 'rgba(233,30,140,0.18)';
+      setTimeout(function () {
+        tr.style.transition = 'background-color 1.4s ease';
+        tr.style.backgroundColor = '';
+      }, 80);
+    });
+
+    /* Update badge count in live mode */
+    if (SELECTED_RANGE === 'today') {
+      var badge = document.getElementById('recentOrdersBadge');
+      if (badge) {
+        var count = tbody.querySelectorAll('tr[data-order-id]').length;
+        badge.textContent = count + ' order' + (count !== 1 ? 's' : '') + ' · Today';
+      }
+    }
+  }
+
+  /* Parse "name|qty|addons|removed_json;;" segments — mirrors PHP render logic */
+  function escHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function parseItemDetails(raw) {
+    var addons = [], removed = [];
+    if (!raw) return { addons: addons, removed: removed };
+    raw.split(';;').forEach(function (seg) {
+      var parts  = seg.split('|');
+      var iName  = parts[0] || '';
+      var addon  = String(parts[2] || '').trim();
+      var rawRem = String(parts[3] || '').trim();
+      if (addon) addons.push('<strong>' + escHtml(iName) + ':</strong> ' + escHtml(addon));
+      if (rawRem && rawRem !== '[]') {
+        try {
+          var arr = JSON.parse(rawRem);
+          if (Array.isArray(arr) && arr.length) {
+            removed.push('<strong>' + escHtml(iName) + ':</strong> No ' + escHtml(arr.filter(Boolean).join(', ')));
+          } else if (!Array.isArray(arr) && rawRem) {
+            removed.push('<strong>' + escHtml(iName) + ':</strong> No ' + escHtml(rawRem));
+          }
+        } catch (e) {
+          removed.push('<strong>' + escHtml(iName) + ':</strong> No ' + escHtml(rawRem));
         }
       }
     });
+    return { addons: addons, removed: removed };
   }
 
   function updateInventory(rows) {
@@ -1660,6 +1577,122 @@ $(function () {
   }
 })();
 </script>
+
+<!-- ══ TOP SELLING ITEMS — REAL-TIME POLLING ══════════════════════ -->
+<script>
+(function(){
+  'use strict';
+  var POLL_INTERVAL = 30000; // refresh every 30 s
+
+  function buildUrl() {
+    var params = new URLSearchParams(window.location.search);
+    params.set('ajax', 'topitems');
+    return window.location.pathname + '?' + params.toString();
+  }
+
+  function setDot(ok) {
+    var dot = document.querySelector('.top-items-live-dot');
+    if (!dot) return;
+    dot.style.background = ok ? '#22c55e' : '#ef4444';
+    dot.title = ok ? 'Live — connected' : 'Live — reconnecting…';
+  }
+
+  function fmtNum(n, dec) {
+    return parseFloat(n || 0).toLocaleString('en', {minimumFractionDigits: dec, maximumFractionDigits: dec});
+  }
+
+  function rankBadge(rank) {
+    if (rank === 1) return '<span class="badge" style="background:#f4c542;color:#333;">🥇 1</span>';
+    if (rank === 2) return '<span class="badge" style="background:#b0b8c1;color:#fff;">🥈 2</span>';
+    if (rank === 3) return '<span class="badge" style="background:#cd7f32;color:#fff;">🥉 3</span>';
+    return '<span class="badge badge-secondary">' + rank + '</span>';
+  }
+
+  function flashRow(tr, color) {
+    tr.style.transition = 'none'; tr.style.backgroundColor = color;
+    setTimeout(function(){ tr.style.transition='background-color 1.6s ease'; tr.style.backgroundColor=''; }, 80);
+  }
+  function flashCell(td, color) {
+    td.style.transition = 'none'; td.style.backgroundColor = color;
+    setTimeout(function(){ td.style.transition='background-color 1.6s ease'; td.style.backgroundColor=''; }, 80);
+  }
+
+  function renderRows(items) {
+    var tbody = document.getElementById('topItemsTbody');
+    var tsEl  = document.getElementById('topItemsLastUpdated');
+    if (!tbody) return;
+
+    if (!items || !items.length) {
+      if ($.fn.DataTable.isDataTable('#topItemsTable')) $('#topItemsTable').DataTable().destroy();
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No sales data yet.</td></tr>';
+      return;
+    }
+
+    /* Snapshot previous state */
+    var prevQtyMap = {}, prevRankMap = {};
+    tbody.querySelectorAll('tr[data-item-name]').forEach(function(tr, idx){
+      var name = tr.getAttribute('data-item-name');
+      prevQtyMap[name]  = parseInt(tr.getAttribute('data-item-qty') || '0', 10);
+      prevRankMap[name] = idx;
+    });
+
+    if ($.fn.DataTable.isDataTable('#topItemsTable')) $('#topItemsTable').DataTable().destroy();
+
+    var esc = function(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); };
+    var html = items.map(function(it, idx){
+      var qty = parseInt(it.qty_sold, 10);
+      var name = esc(it.name);
+      return '<tr data-item-name="' + name + '" data-item-qty="' + qty + '">'
+        + '<td>' + rankBadge(idx + 1) + '</td>'
+        + '<td>' + name + '</td>'
+        + '<td>' + esc(it.category || '—') + '</td>'
+        + '<td>' + fmtNum(it.price, 2) + '</td>'
+        + '<td class="qty-cell"><strong>' + qty + '</strong></td>'
+        + '<td>₱' + fmtNum(it.revenue, 2) + '</td>'
+        + '</tr>';
+    }).join('');
+    tbody.innerHTML = html;
+
+    /* Flash highlights */
+    tbody.querySelectorAll('tr[data-item-name]').forEach(function(tr, idx){
+      var name   = tr.getAttribute('data-item-name');
+      var qty    = parseInt(tr.getAttribute('data-item-qty'), 10);
+      var wasNew = !(name in prevQtyMap);
+      var qtyUp  = !wasNew && qty > (prevQtyMap[name] || 0);
+      var rankChg= !wasNew && prevRankMap[name] !== undefined && prevRankMap[name] !== idx;
+      if (wasNew)       { flashRow(tr, 'rgba(233,30,140,.18)'); }
+      else if (qtyUp)   { flashRow(tr, 'rgba(40,167,69,.10)'); var qtyTd=tr.querySelector('.qty-cell'); if(qtyTd) flashCell(qtyTd,'rgba(40,167,69,.45)'); }
+      else if (rankChg) { flashRow(tr, 'rgba(255,193,7,.25)'); }
+    });
+
+    /* Re-init DataTables */
+    $('#topItemsTable').DataTable({
+      responsive: true, lengthChange: false, autoWidth: false,
+      order: [[4, 'desc']],
+      buttons: ['copy','csv','excel','pdf','print','colvis']
+    }).buttons().container().appendTo('#topItemsTable_wrapper .col-md-6:eq(0)');
+
+    if (tsEl) {
+      var now = new Date();
+      tsEl.textContent = 'Updated ' + now.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
+    }
+  }
+
+  function poll() {
+    fetch(buildUrl(), {cache: 'no-store'})
+      .then(function(r){ return r.json(); })
+      .then(function(data){ setDot(true); renderRows(data.items || []); })
+      .catch(function(){ setDot(false); });
+  }
+
+  $(function(){
+    poll(); // initial load
+    setInterval(poll, POLL_INTERVAL);
+  });
+})();
+</script>
+<!-- ══ END top items real-time ═══════════════════════════════════ -->
+
 <script>
 /* ── Date Range Picker ─────────────────────────────────────── */
 (function(){
@@ -1762,5 +1795,257 @@ $(function () {
   document.addEventListener('keydown',function(e){if(e.key==='Escape')drpClose();});
 })();
 </script>
+<!-- ══ REALTIME UPLOAD MODAL ══════════════════════════════════════ -->
+<div id="rtUploadBackdrop" onclick="rtUploadClose()"></div>
+<div id="rtUploadModal" role="dialog" aria-modal="true" aria-label="Upload File">
+  <div class="rtu-header">
+    <h5><i class="fas fa-cloud-upload-alt mr-2"></i>Real-Time Upload</h5>
+    <button class="rtu-close" onclick="rtUploadClose()" aria-label="Close">&times;</button>
+  </div>
+  <div class="rtu-body">
+    <!-- Upload type selector -->
+    <div class="rtu-type-row" id="rtuTypeRow">
+      <div class="rtu-type-btn active" data-type="menu_image" onclick="rtuSetType(this)">
+        <i class="fas fa-image"></i>Menu Image
+      </div>
+      <div class="rtu-type-btn" data-type="inventory_csv" onclick="rtuSetType(this)">
+        <i class="fas fa-file-csv"></i>Inventory CSV
+      </div>
+      <div class="rtu-type-btn" data-type="staff_photo" onclick="rtuSetType(this)">
+        <i class="fas fa-user-circle"></i>Staff Photo
+      </div>
+    </div>
+
+    <!-- Hint box -->
+    <div id="rtuHint"></div>
+
+    <!-- Drop zone -->
+    <div id="rtuDropZone"
+         ondragover="rtuDragOver(event)"
+         ondragleave="rtuDragLeave(event)"
+         ondrop="rtuDrop(event)"
+         onclick="document.getElementById('rtuFileInput').click()">
+      <i class="fas fa-cloud-upload-alt" id="rtuDropIcon"></i>
+      <p id="rtuDropText">Drag &amp; drop a file here, or <strong>click to browse</strong></p>
+      <small id="rtuDropHint">Accepted: JPG / PNG / WEBP · Max 10 MB</small>
+    </div>
+    <input type="file" id="rtuFileInput" onchange="rtuFileSelected(this.files[0])">
+
+    <!-- Progress area -->
+    <div id="rtuProgressWrap">
+      <div id="rtuFileName"></div>
+      <div id="rtuProgressBar"><div id="rtuProgressFill"></div></div>
+      <div id="rtuProgressPct">0%</div>
+      <div id="rtuStatus"></div>
+    </div>
+  </div>
+  <div class="rtu-footer">
+    <button id="rtuCancelBtn" onclick="rtUploadClose()">Cancel</button>
+    <button id="rtuUploadBtn" disabled onclick="rtuStartUpload()">
+      <i class="fas fa-upload mr-1"></i>Upload
+    </button>
+  </div>
+</div>
+
+<script>
+/* ── Real-Time Upload ────────────────────────────────────────────── */
+(function () {
+  var _type    = 'menu_image';
+  var _file    = null;
+  var _xhr     = null;
+  var _active  = false;
+
+  /* Type configs */
+  var TYPE_CFG = {
+    menu_image:     { accept: 'image/*',     hint: '📸 Upload a JPG/PNG/WEBP image for a menu item.  Max 10 MB.', ext: ['jpg','jpeg','png','webp','gif'], maxMB: 10 },
+    inventory_csv:  { accept: '.csv,.txt',   hint: '📋 Upload a CSV with columns: name, stock_qty, unit, low_stock_threshold, expiry_date.  Max 5 MB.', ext: ['csv','txt'], maxMB: 5 },
+    staff_photo:    { accept: 'image/*',     hint: '👤 Upload a staff member\'s photo (JPG/PNG).  Max 5 MB.', ext: ['jpg','jpeg','png','webp'], maxMB: 5 },
+  };
+
+  /* ── Public: open / close ── */
+  window.rtUploadOpen = function () {
+    document.getElementById('rtUploadBackdrop').style.display = 'block';
+    document.getElementById('rtUploadModal').style.display    = 'block';
+    rtuReset();
+  };
+  window.rtUploadClose = function () {
+    if (_active) { if (!confirm('Upload in progress. Cancel it?')) return; rtuAbort(); }
+    document.getElementById('rtUploadBackdrop').style.display = 'none';
+    document.getElementById('rtUploadModal').style.display    = 'none';
+    rtuReset();
+  };
+
+  /* ── Type selector ── */
+  window.rtuSetType = function (el) {
+    _type = el.dataset.type;
+    document.querySelectorAll('.rtu-type-btn').forEach(function (b) { b.classList.remove('active'); });
+    el.classList.add('active');
+    var cfg = TYPE_CFG[_type];
+    document.getElementById('rtuFileInput').accept = cfg.accept;
+    document.getElementById('rtuDropHint').textContent = 'Accepted: ' + cfg.ext.join(' / ').toUpperCase() + ' · Max ' + cfg.maxMB + ' MB';
+    var hint = document.getElementById('rtuHint');
+    hint.innerHTML  = cfg.hint;
+    hint.style.display = 'block';
+    rtuClearFile();
+  };
+
+  /* ── Drag & drop ── */
+  window.rtuDragOver  = function (e) { e.preventDefault(); document.getElementById('rtuDropZone').classList.add('drag-over'); };
+  window.rtuDragLeave = function ()  { document.getElementById('rtuDropZone').classList.remove('drag-over'); };
+  window.rtuDrop      = function (e) {
+    e.preventDefault();
+    document.getElementById('rtuDropZone').classList.remove('drag-over');
+    var f = e.dataTransfer.files[0];
+    if (f) rtuFileSelected(f);
+  };
+
+  /* ── File selection ── */
+  window.rtuFileSelected = function (file) {
+    if (!file) return;
+    var cfg = TYPE_CFG[_type];
+    var ext = file.name.split('.').pop().toLowerCase();
+    if (cfg.ext.indexOf(ext) === -1) {
+      rtuSetStatus('❌ Invalid file type. Expected: ' + cfg.ext.join(', '), 'error');
+      return;
+    }
+    if (file.size > cfg.maxMB * 1024 * 1024) {
+      rtuSetStatus('❌ File too large. Max ' + cfg.maxMB + ' MB.', 'error');
+      return;
+    }
+    _file = file;
+    /* Update drop zone */
+    document.getElementById('rtuDropIcon').className = 'fas fa-file-check';
+    document.getElementById('rtuDropText').innerHTML = '<strong>' + escHtml(file.name) + '</strong>';
+    document.getElementById('rtuDropHint').textContent = (file.size / 1024).toFixed(1) + ' KB';
+    document.getElementById('rtuUploadBtn').disabled = false;
+    document.getElementById('rtuProgressWrap').style.display = 'none';
+    rtuSetStatus('');
+  };
+
+  /* ── Start upload ── */
+  window.rtuStartUpload = function () {
+    if (!_file || _active) return;
+    _active = true;
+    document.getElementById('rtuUploadBtn').disabled = true;
+    document.getElementById('rtuCancelBtn').textContent = 'Cancel Upload';
+
+    /* Show progress */
+    var pw = document.getElementById('rtuProgressWrap');
+    pw.style.display = 'block';
+    document.getElementById('rtuFileName').textContent = _file.name;
+    rtuSetProgress(0, '');
+
+    var fd = new FormData();
+    fd.append('upload_type', _type);
+    fd.append('file', _file, _file.name);
+
+    _xhr = new XMLHttpRequest();
+    _xhr.open('POST', 'index2.php?upload=1', true);
+
+    /* Progress */
+    _xhr.upload.onprogress = function (e) {
+      if (e.lengthComputable) {
+        var pct = Math.round((e.loaded / e.total) * 100);
+        rtuSetProgress(pct, 'Uploading… ' + pct + '%');
+      }
+    };
+
+    /* Done */
+    _xhr.onload = function () {
+      _active = false;
+      try {
+        var res = JSON.parse(_xhr.responseText);
+        if (res.success) {
+          rtuSetProgress(100, 'done');
+          rtuSetStatus('✅ ' + (res.message || 'Upload complete!'), 'success');
+          document.getElementById('uploadNavBadge').style.display = 'block';
+          setTimeout(function () { document.getElementById('uploadNavBadge').style.display = 'none'; }, 4000);
+          document.getElementById('rtuCancelBtn').textContent = 'Close';
+        } else {
+          rtuSetProgress(100, 'error');
+          rtuSetStatus('❌ ' + (res.message || 'Upload failed.'), 'error');
+          document.getElementById('rtuCancelBtn').textContent = 'Cancel';
+          document.getElementById('rtuUploadBtn').disabled = false;
+        }
+      } catch (ex) {
+        rtuSetProgress(100, 'error');
+        rtuSetStatus('❌ Server error. Try again.', 'error');
+        document.getElementById('rtuCancelBtn').textContent = 'Cancel';
+        document.getElementById('rtuUploadBtn').disabled = false;
+      }
+    };
+
+    _xhr.onerror = function () {
+      _active = false;
+      rtuSetProgress(100, 'error');
+      rtuSetStatus('❌ Network error. Please try again.', 'error');
+      document.getElementById('rtuCancelBtn').textContent = 'Cancel';
+      document.getElementById('rtuUploadBtn').disabled = false;
+    };
+
+    _xhr.send(fd);
+  };
+
+  function rtuAbort() {
+    if (_xhr) { _xhr.abort(); _xhr = null; }
+    _active = false;
+  }
+
+  function rtuReset() {
+    rtuAbort();
+    _file   = null;
+    _type   = 'menu_image';
+    document.querySelectorAll('.rtu-type-btn').forEach(function (b) { b.classList.remove('active'); });
+    var first = document.querySelector('.rtu-type-btn');
+    if (first) first.classList.add('active');
+    document.getElementById('rtuFileInput').value  = '';
+    document.getElementById('rtuFileInput').accept = 'image/*';
+    document.getElementById('rtuDropIcon').className  = 'fas fa-cloud-upload-alt';
+    document.getElementById('rtuDropText').innerHTML  = 'Drag &amp; drop a file here, or <strong>click to browse</strong>';
+    document.getElementById('rtuDropHint').textContent = 'Accepted: JPG / PNG / WEBP · Max 10 MB';
+    document.getElementById('rtuProgressWrap').style.display = 'none';
+    document.getElementById('rtuUploadBtn').disabled  = true;
+    document.getElementById('rtuCancelBtn').textContent = 'Cancel';
+    document.getElementById('rtuHint').style.display = 'none';
+    rtuSetStatus('');
+    rtuSetProgress(0, '');
+  }
+
+  function rtuClearFile() {
+    _file = null;
+    document.getElementById('rtuFileInput').value = '';
+    document.getElementById('rtuDropIcon').className  = 'fas fa-cloud-upload-alt';
+    document.getElementById('rtuDropText').innerHTML  = 'Drag &amp; drop a file here, or <strong>click to browse</strong>';
+    document.getElementById('rtuUploadBtn').disabled = true;
+    rtuSetStatus('');
+  }
+
+  function rtuSetProgress(pct, state) {
+    var fill = document.getElementById('rtuProgressFill');
+    fill.style.width = pct + '%';
+    fill.className = 'rtuProgressFill' + (state === 'done' ? ' complete' : state === 'error' ? ' error' : '');
+    document.getElementById('rtuProgressPct').textContent = pct + '%';
+  }
+
+  function rtuSetStatus(msg, cls) {
+    var el = document.getElementById('rtuStatus');
+    el.textContent  = msg || '';
+    el.className    = 'rtuStatus ' + (cls || '');
+    // mirror to id attribute for CSS targeting
+    el.setAttribute('id', 'rtuStatus');
+    el.className = cls ? cls : '';
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* Keyboard close */
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && document.getElementById('rtUploadModal').style.display === 'block') {
+      rtUploadClose();
+    }
+  });
+})();
+</script>
 </body>
-</html>

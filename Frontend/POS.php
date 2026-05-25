@@ -1,16 +1,46 @@
 <?php
 // Frontend/POS.php  (sits directly inside Frontend/)
-session_name('STAFF_SESSION');
-session_start();
+
+// ── Suppress HTML error output so PHP warnings never corrupt JSON responses ──
+ini_set('display_errors', '0');
+error_reporting(E_ALL);
+ob_start();
+
+require_once '../Backend/Core/Session.php';
+Session::start(Session::STAFF);
+
+// ── API requests: return JSON errors instead of redirecting ──
+$_isApiRequest = (
+    isset($_GET['proc']) || isset($_GET['vr']) || isset($_GET['oi']) ||
+    isset($_GET['rt'])   || isset($_GET['menu_rt'])
+);
+
 if (!isset($_SESSION['user']) || $_SESSION['position'] !== 'staff') {
+    if ($_isApiRequest) {
+        ob_end_clean();
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => 'Session expired. Please log in again.']);
+        exit();
+    }
     header("Location:../login-v2.html");
     exit();
 }
 
-require_once '../Backend/conn.php';
+require_once '../Backend/Core/Database.php';
 
-if (!isset($conn) || $conn->connect_error) {
-    die("Database connection failed: " . ($conn->connect_error ?? 'conn.php did not define $conn'));
+// If Database.php provides a class instead of $conn, get the connection from it
+if (!isset($conn) && class_exists('Database')) {
+    try { $conn = Database::getInstance()->getConnection(); } catch (Throwable $e) { $conn = null; }
+}
+
+if (!isset($conn) || !$conn || (method_exists($conn,'ping') && !$conn->ping())) {
+    if ($_isApiRequest) {
+        ob_end_clean();
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => 'Database connection failed.']);
+        exit();
+    }
+    die("Database connection failed.");
 }
 
 // ══ REAL-TIME POLLING ENDPOINT (?rt=1) ════════════════════════
@@ -40,7 +70,7 @@ if (isset($_GET['rt'])) {
     );
     if ($r2 && $row2 = $r2->fetch_assoc()) { $cnt=(int)$row2['c']; $rev=(float)$row2['r']; }
 
-    $conn->close();
+    ob_clean();
     echo json_encode(['orders' => $rows, 'today_revenue' => $rev, 'today_orders' => $cnt]);
     exit();
 }
@@ -68,17 +98,330 @@ if (isset($_GET['menu_rt'])) {
             'is_available' => (bool)$row['is_available'],
         ];
     }
-    $conn->close();
+    ob_clean();
     echo json_encode(['menu' => $items, 'ts' => time()]);
     exit();
 }
 // ══ END MENU REAL-TIME ENDPOINT ═══════════════════════════════
 
+// ══ ORDER PROCESS ENDPOINT (POST ?proc=1) ════════════════════
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['proc'])) {
+    ob_clean();
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+
+    try {
+
+    $raw     = file_get_contents('php://input');
+    $payload = json_decode($raw, true);
+
+    if (!$payload || empty($payload['items'])) {
+        echo json_encode(['success' => false, 'message' => 'Invalid payload.']);
+        exit();
+    }
+
+    // ── Resolve cashier user_id from session ──────────────────────
+    $cashier_id = null;
+    $uk = $_SESSION['user'] ?? '';
+
+    // Detect which columns exist in `user` table to avoid prepare() returning false
+    $user_cols = [];
+    $ucr = $conn->query("SHOW COLUMNS FROM user");
+    if ($ucr) { while ($uc = $ucr->fetch_assoc()) $user_cols[] = $uc['Field']; }
+
+    if ($uk && !empty($user_cols)) {
+        // Build query using only columns that actually exist
+        $user_where_parts = [];
+        $user_where_types = '';
+        $user_where_vals  = [];
+        foreach (['email','username','firstname'] as $col) {
+            if (in_array($col, $user_cols)) {
+                $user_where_parts[] = "$col=?";
+                $user_where_types  .= 's';
+                $user_where_vals[]  = $uk;
+            }
+        }
+        if ($user_where_parts) {
+            $us = $conn->prepare('SELECT id FROM user WHERE ' . implode(' OR ', $user_where_parts) . ' LIMIT 1');
+            if ($us) {
+                $us->bind_param($user_where_types, ...$user_where_vals);
+                $us->execute();
+                $us->bind_result($cashier_id);
+                $us->fetch();
+                $us->close();
+            }
+        }
+    }
+    if (!$cashier_id) {
+        $sfn = $_SESSION['firstname'] ?? '';
+        $sln = $_SESSION['lastname']  ?? '';
+        if ($sfn && in_array('firstname', $user_cols)) {
+            $has_ln_col = in_array('lastname', $user_cols);
+            if ($has_ln_col) {
+                $us2 = $conn->prepare('SELECT id FROM user WHERE firstname=? AND lastname=? LIMIT 1');
+                if ($us2) { $us2->bind_param('ss', $sfn, $sln); $us2->execute(); $us2->bind_result($cashier_id); $us2->fetch(); $us2->close(); }
+            } else {
+                $us2 = $conn->prepare('SELECT id FROM user WHERE firstname=? LIMIT 1');
+                if ($us2) { $us2->bind_param('s', $sfn); $us2->execute(); $us2->bind_result($cashier_id); $us2->fetch(); $us2->close(); }
+            }
+        }
+    }
+
+    // ── Detect which columns exist in `orders` ────────────────────
+    $existing_cols = [];
+    $cols_res = $conn->query("SHOW COLUMNS FROM orders");
+    if ($cols_res) {
+        while ($c = $cols_res->fetch_assoc()) $existing_cols[] = $c['Field'];
+    } else {
+        echo json_encode(['success' => false, 'message' => 'DB error reading orders schema: ' . $conn->error]);
+        exit();
+    }
+
+    $table_no      = $conn->real_escape_string($payload['table_no']     ?? '01');
+    $total_amt     = (float)($payload['total_amt']     ?? 0);
+    $discount_amt  = (float)($payload['discount_amt']  ?? 0);
+    $discount_type = $conn->real_escape_string($payload['discount_type'] ?? '');
+    $order_type    = $conn->real_escape_string($payload['order_type']    ?? 'Dine In');
+    $pay_method    = $conn->real_escape_string($payload['pay_method']    ?? 'Cash');
+    $cash_tendered = (float)($payload['cash_tendered'] ?? 0);
+
+    // Always-present columns
+    $cols = 'table_no, status, total_amt, discount_amt, discount_type';
+    $vals = "'$table_no', 'Done', $total_amt, $discount_amt, '$discount_type'";
+
+    // Optional columns — only add if they exist in the schema
+    if (in_array('order_type',    $existing_cols)) { $cols .= ', order_type';    $vals .= ", '$order_type'"; }
+    if (in_array('pay_method',    $existing_cols)) { $cols .= ', pay_method';    $vals .= ", '$pay_method'"; }
+    if (in_array('cash_tendered', $existing_cols)) { $cols .= ', cash_tendered'; $vals .= ", $cash_tendered"; }
+    if (in_array('cashier_id',    $existing_cols) && $cashier_id) { $cols .= ', cashier_id'; $vals .= ", $cashier_id"; }
+    elseif (in_array('user_id',   $existing_cols) && $cashier_id) { $cols .= ', user_id';    $vals .= ", $cashier_id"; }
+
+    $cols .= ', created_at';
+    $vals .= ', NOW()';
+
+    if (!$conn->query("INSERT INTO orders ($cols) VALUES ($vals)")) {
+        echo json_encode(['success' => false, 'message' => 'DB error: ' . $conn->error]);
+        exit();
+    }
+    $order_id = $conn->insert_id;
+
+    // ── Insert order items ────────────────────────────────────────
+    $_hasOI_res = $conn->query("SHOW TABLES LIKE 'order_items'");
+    $hasOI = ($_hasOI_res && $_hasOI_res->num_rows > 0);
+
+    if ($hasOI) {
+        // Detect available columns in order_items
+        $oi_cols = [];
+        $oi_res  = $conn->query("SHOW COLUMNS FROM order_items");
+        while ($oc = $oi_res->fetch_assoc()) $oi_cols[] = $oc['Field'];
+
+        $has_addons    = in_array('addons',                    $oi_cols);
+        $has_notes     = in_array('notes',                     $oi_cols);
+        $has_rem_ids   = in_array('removed_ingredient_ids',   $oi_cols);
+        $has_rem_names = in_array('removed_ingredient_names', $oi_cols);
+
+        $item_cols = 'order_id, menu_id, qty, unit_price';
+        if ($has_addons)    $item_cols .= ', addons';
+        if ($has_notes)     $item_cols .= ', notes';
+        if ($has_rem_ids)   $item_cols .= ', removed_ingredient_ids';
+        if ($has_rem_names) $item_cols .= ', removed_ingredient_names';
+
+        foreach ($payload['items'] as $item) {
+            $menu_id    = (int)($item['menu_id']    ?? 0);
+            $qty        = (int)($item['qty']        ?? 1);
+            $unit_price = (float)($item['unit_price'] ?? 0);
+            $addons     = $conn->real_escape_string((string)($item['addons'] ?? ''));
+            $notes      = $conn->real_escape_string((string)($item['notes']  ?? ''));
+
+            // removed_ingredient_ids: normalise [{id,name}] or [id] → JSON arrays
+            $rem_raw = $item['removed_ingredient_ids'] ?? [];
+            $rem_ids_arr   = array_map(fn($r) => (int)(is_array($r) ? ($r['id']   ?? 0) : $r), $rem_raw);
+            $rem_names_arr = array_map(fn($r) => (string)(is_array($r) ? ($r['name'] ?? '') : ''), $rem_raw);
+            $rem_ids   = $conn->real_escape_string(json_encode($rem_ids_arr));
+            $rem_names = $conn->real_escape_string(json_encode($rem_names_arr));
+
+            $iv = "$order_id, $menu_id, $qty, $unit_price";
+            if ($has_addons)    $iv .= ", '$addons'";
+            if ($has_notes)     $iv .= ", '$notes'";
+            if ($has_rem_ids)   $iv .= ", '$rem_ids'";
+            if ($has_rem_names) $iv .= ", '$rem_names'";
+
+            if (!$conn->query("INSERT INTO order_items ($item_cols) VALUES ($iv)")) {
+                // Log but don't fail the whole order
+                error_log("order_items insert failed for order $order_id: " . $conn->error);
+            }
+        }
+    }
+
+    echo json_encode(['success' => true, 'order_id' => $order_id]);
+    exit();
+    } catch (Throwable $e) {
+        error_log('POS ?proc=1 error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
+        echo json_encode(['success' => false, 'message' => 'Server error: ' . $e->getMessage()]);
+        exit();
+    }
+}
+// ══ END ORDER PROCESS ENDPOINT ════════════════════════════════
+
+
+// ══ ORDER ITEMS ENDPOINT (GET ?oi=1&order_id=N) ══════════════
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['oi'])) {
+    ob_clean();
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+
+    try {
+
+    $order_id = (int)($_GET['order_id'] ?? 0);
+    if (!$order_id) {
+        echo json_encode(['success' => false, 'message' => 'Missing order_id.']);
+        exit();
+    }
+
+    $items = [];
+    $r = $conn->query(
+        "SELECT oi.menu_id, m.name, oi.qty, oi.unit_price
+         FROM order_items oi JOIN menu m ON m.id = oi.menu_id
+         WHERE oi.order_id = $order_id ORDER BY m.name"
+    );
+    if ($r) while ($row = $r->fetch_assoc()) {
+        $items[] = [
+            'menu_id'    => (int)   $row['menu_id'],
+            'name'       =>         $row['name'],
+            'qty'        => (int)   $row['qty'],
+            'unit_price' => (float) $row['unit_price'],
+        ];
+    }
+    echo json_encode(['success' => true, 'items' => $items]);
+    exit();
+    } catch (Throwable $e) {
+        error_log('POS ?oi error: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => 'Server error: ' . $e->getMessage()]);
+        exit();
+    }
+}
+// ══ END ORDER ITEMS ENDPOINT ══════════════════════════════════
+
+
+// ══ VOID / REFUND ENDPOINT (POST ?vr=1) ══════════════════════
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['vr'])) {
+    ob_clean();
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+
+    try {
+
+    $raw     = file_get_contents('php://input');
+    $payload = json_decode($raw, true);
+
+    if (!$payload || empty($payload['action']) || empty($payload['order_id'])) {
+        echo json_encode(['success' => false, 'message' => 'Invalid payload.']);
+        exit();
+    }
+
+    $action   = $payload['action'];   // 'void' or 'refund'
+    $order_id = (int)$payload['order_id'];
+    $reason   = $conn->real_escape_string($payload['reason'] ?? '');
+
+    // Resolve cashier full name from session
+    $created_by = trim(($_SESSION['firstname'] ?? '') . ' ' . ($_SESSION['lastname'] ?? ''));
+    if (!$created_by) {
+        $uk = $_SESSION['user'] ?? '';
+        if ($uk) {
+            // Detect user table columns to avoid prepare() returning false
+            $_vr_cols = [];
+            $_vcr = $conn->query("SHOW COLUMNS FROM user");
+            if ($_vcr) { while ($_vc = $_vcr->fetch_assoc()) $_vr_cols[] = $_vc['Field']; }
+            $_vr_where = []; $_vr_types = ''; $_vr_vals = [];
+            foreach (['email','username'] as $_vrc) {
+                if (in_array($_vrc, $_vr_cols)) { $_vr_where[] = "$_vrc=?"; $_vr_types .= 's'; $_vr_vals[] = $uk; }
+            }
+            if ($_vr_where) {
+                $_has_ln = in_array('lastname', $_vr_cols);
+                $_sel = 'firstname' . ($_has_ln ? ', lastname' : '');
+                $us = $conn->prepare("SELECT $_sel FROM user WHERE " . implode(' OR ', $_vr_where) . ' LIMIT 1');
+                if ($us) {
+                    $us->bind_param($_vr_types, ...$_vr_vals);
+                    $us->execute();
+                    if ($_has_ln) { $us->bind_result($_fn, $_ln); if ($us->fetch()) $created_by = trim("$_fn $_ln"); }
+                    else          { $us->bind_result($_fn);        if ($us->fetch()) $created_by = trim($_fn); }
+                    $us->close();
+                }
+            }
+        }
+        if (!$created_by) $created_by = 'unknown';
+    }
+
+    // Fetch current order
+    $ord = $conn->query("SELECT status, total_amt FROM orders WHERE id=$order_id LIMIT 1");
+    if (!$ord || !($cur = $ord->fetch_assoc())) {
+        echo json_encode(['success' => false, 'message' => 'Order not found.']);
+        exit();
+    }
+    if (in_array($cur['status'], ['voided', 'refunded'], true)) {
+        echo json_encode(['success' => false, 'message' => 'Order already ' . $cur['status'] . '.']);
+        exit();
+    }
+
+    if ($action === 'void') {
+        $conn->query("UPDATE orders SET status='voided', void_reason='$reason', voided_by='$created_by', voided_at=NOW() WHERE id=$order_id");
+        echo json_encode(['success' => true, 'message' => "Order #$order_id voided.", 'new_status' => 'voided']);
+        exit();
+    }
+
+    if ($action === 'refund') {
+        $refund_items = $payload['refund_items'] ?? null; // null = full refund
+        $new_status   = 'refunded';
+        $refund_amt   = (float)$cur['total_amt'];
+
+        if ($refund_items) {
+            // Partial refund: calculate amount from items
+            $refund_amt = 0;
+            foreach ($refund_items as $ri) {
+                $mid = (int)$ri['menu_id'];
+                $qty = (int)$ri['qty'];
+                $r2  = $conn->query("SELECT unit_price FROM order_items WHERE order_id=$order_id AND menu_id=$mid LIMIT 1");
+                if ($r2 && $rr = $r2->fetch_assoc()) {
+                    $refund_amt += (float)$rr['unit_price'] * $qty;
+                }
+            }
+            $new_status = 'partial_refund';
+        }
+
+        $refund_amt_esc = number_format($refund_amt, 2, '.', '');
+        $conn->query("UPDATE orders SET status='$new_status', refund_amt=$refund_amt_esc, refund_reason='$reason', refunded_by='$created_by', refunded_at=NOW() WHERE id=$order_id");
+        echo json_encode(['success' => true, 'message' => "Order #$order_id refunded (₱$refund_amt_esc).", 'new_status' => $new_status, 'refund_amt' => $refund_amt]);
+        exit();
+    }
+
+    echo json_encode(['success' => false, 'message' => 'Unknown action.']);
+    exit();
+    } catch (Throwable $e) {
+        error_log('POS ?vr error: ' . $e->getMessage());
+        echo json_encode(['success' => false, 'message' => 'Server error: ' . $e->getMessage()]);
+        exit();
+    }
+}
+// ══ END VOID / REFUND ENDPOINT ════════════════════════════════
+
+
+// ── DEBUG: visit POS.php?debug_session=1 then remove this block ──
+if (isset($_GET["debug_session"])) {
+    header("Content-Type: application/json");
+    $dk = $_SESSION["user"] ?? "";
+    $dr = [];
+    require_once __DIR__ . "/../Backend/Core/Database.php";
+    $ds = $conn->prepare("SELECT id, email, username, firstname, lastname FROM user WHERE email=? OR username=? LIMIT 5");
+    if ($ds) { $ds->bind_param("ss",$dk,$dk); $ds->execute(); $dres=$ds->get_result(); while($r=$dres->fetch_assoc()) $dr[]=$r; $ds->close(); }
+    echo json_encode(["session_user"=>$dk,"session_position"=>($_SESSION["position"]??""),"session_firstname"=>($_SESSION["firstname"]??""),"session_keys"=>array_keys($_SESSION),"db_rows"=>$dr],JSON_PRETTY_PRINT);
+    exit();
+}
+// ── END DEBUG ──
 // ── Resolve cashier full name from DB (always re-fetch to reflect current logged-in user) ──
 $email_key = $_SESSION['user'] ?? '';
-$stmt = $conn->prepare("SELECT firstname, lastname, image FROM user WHERE email = ? LIMIT 1");
+$stmt = $conn->prepare("SELECT firstname, lastname, image FROM user WHERE email = ? OR username = ? LIMIT 1");
 if ($stmt) {
-    $stmt->bind_param('s', $email_key);
+    $stmt->bind_param('ss', $email_key, $email_key);
     $stmt->execute();
     $stmt->bind_result($_sFirst, $_sLast, $_sImage);
     if ($stmt->fetch()) {
@@ -1262,7 +1605,7 @@ button{border:none;background:none;cursor:pointer;outline:none;color:inherit;}
   <button class="nav-btn" title="Reports"><i class="fa-solid fa-file-invoice-dollar"></i>Reports</button>
   <div class="s-spacer"></div>
   <button class="s-theme" id="themeBtn" title="Toggle theme"><i class="fa-solid fa-sun" id="themeIco"></i></button>
-  <a href="../Backend/logout.php" class="nav-btn nav-logout" title="Log Out">
+  <a href="../Backend/Controllers/LogoutController.php" class="nav-btn nav-logout" title="Log Out">
     <i class="fa-solid fa-right-from-bracket"></i>Logout
   </a>
   <?php
@@ -2655,12 +2998,16 @@ function placeOrder() {
   // Close the pay modal immediately on click
   closePayModal();
 
-  fetch('../Backend/pos_process.php',{
+  fetch('POS.php?proc=1',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
+    credentials:'same-origin',
     body:JSON.stringify(payload)
   })
-  .then(r=>r.json())
+  .then(r=>r.text().then(text=>{
+    try { return JSON.parse(text); }
+    catch(e) { console.error('Server returned non-JSON:\n', text); throw new Error('Invalid JSON response'); }
+  }))
   .then(res=>{
     btn.disabled=false;
     btn.innerHTML='<i class="fa-solid fa-check"></i> Confirm & Place Order';
@@ -3111,7 +3458,7 @@ async function openRefundModal(orderId, tableNo, total) {
   listEl.innerHTML = `<div style="text-align:center;padding:20px;color:var(--muted);"><i class="fa-solid fa-spinner fa-spin"></i> Loading…</div>`;
 
   try {
-    const res  = await fetch(`../Backend/pos_get_order_items.php?order_id=${orderId}`);
+    const res  = await fetch(`POS.php?oi=1&order_id=${orderId}`, { credentials: 'same-origin' });
     const data = await res.json();
     if (!data.success) throw new Error(data.message);
     vrCurrentItems = data.items.map(i => ({...i, refundQty: i.qty}));
@@ -3213,9 +3560,10 @@ async function submitVoidRefund() {
   }
 
   try {
-    const res  = await fetch('../Backend/pos_void_refund.php', {
+    const res  = await fetch('POS.php?vr=1', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       body:    JSON.stringify(payload),
     });
     const data = await res.json();
@@ -3401,7 +3749,7 @@ function showToast(msg,color='var(--accent)',dur=2400){
   toastTimer=setTimeout(()=>el.classList.remove('show'),dur);
 }
 </script>
-<script src="dist/js/empress-realtime.js" data-scope="pos"></script>
+<!-- Real-time polling is handled inline below -->
 
 <!-- ══ REAL-TIME VOID / REFUND WATCHER ══════════════════════════ -->
 <script>
