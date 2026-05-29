@@ -74,7 +74,7 @@ class MenuController
         $data = $this->collectFormData();
 
         if (!$data['name'] || !$data['category'] || $data['price'] <= 0) {
-            return $this->fail('Name, category, and a valid price are required.');
+            $this->fail('Name, category, and a valid price are required.');
         }
 
         try {
@@ -100,7 +100,7 @@ class MenuController
         $data = $this->collectFormData();
 
         if (!$id || !$data['name'] || !$data['category'] || $data['price'] <= 0) {
-            return $this->fail('Name, category, and a valid price are required.');
+            $this->fail('Name, category, and a valid price are required.');
         }
 
         try {
@@ -131,20 +131,39 @@ class MenuController
     {
         $id = (int) ($_POST['id'] ?? 0);
         if (!$id) {
-            return $this->fail('Invalid item ID.');
+            $this->fail('Invalid item ID.');
+        }
+
+        $item = $this->model->findById($id);
+        if (!$item) {
+            $this->fail('Menu item not found.');
         }
 
         if ($this->model->hasOrderHistory($id)) {
-            // Soft delete — preserve history
-            $this->model->softDelete($id);
-            Session::flashSuccess('Item has order history and was hidden (set to Inactive) instead of deleted.');
-        } else {
-            $item = $this->model->findById($id);
-            $this->model->delete($id);
-            if ($item && !empty($item['image'])) {
-                $this->uploader->delete($item['image']);
+            // Soft delete — item is linked to orders, preserve history
+            if ($this->model->softDelete($id)) {
+                Session::flashSuccess("\"{$item['name']}\" has order history — it has been set to Inactive instead of permanently deleted.");
+            } else {
+                Session::flashError('Failed to deactivate menu item. Please try again.');
             }
-            Session::flashSuccess('Menu item deleted successfully.');
+        } else {
+            // Hard delete — no order history, safe to remove
+            try {
+                if ($this->model->delete($id)) {
+                    if (!empty($item['image'])) {
+                        $this->uploader->delete($item['image']);
+                    }
+                    Session::flashSuccess("\"{$item['name']}\" deleted successfully.");
+                } else {
+                    // delete() returned false — likely a DB constraint; fall back to soft-delete
+                    $this->model->softDelete($id);
+                    Session::flashSuccess("\"{$item['name']}\" could not be fully deleted (it may be referenced elsewhere) and was set to Inactive instead.");
+                }
+            } catch (\Exception $e) {
+                // FK constraint or other DB error — fall back to soft-delete
+                $this->model->softDelete($id);
+                Session::flashSuccess("\"{$item['name']}\" could not be fully deleted and was set to Inactive instead.");
+            }
         }
 
         $this->redirect();
