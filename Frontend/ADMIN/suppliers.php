@@ -202,10 +202,24 @@ $suppliers          = $view->suppliers;
       <span class="brand-text font-weight-light">Empress' Cafe</span>
     </a>
     <div class="sidebar">
+      <?php
+        $admin_image = $_SESSION['image'] ?? '';
+        $admin_first = $_SESSION['firstname'] ?? '';
+        $admin_last  = $_SESSION['lastname']  ?? '';
+        if (empty($admin_first)) {
+            $admin_first = strpos($_SESSION['user'] ?? '', '@') !== false
+                ? explode('@', $_SESSION['user'])[0]
+                : ($_SESSION['user'] ?? 'Admin');
+        }
+        $admin_name  = htmlspecialchars(trim($admin_first . ' ' . $admin_last));
+        $admin_photo = !empty($admin_image)
+            ? '../../' . htmlspecialchars($admin_image)
+            : '../dist/img/avatar.png';
+      ?>
       <div class="user-panel mt-3 pb-3 mb-3 d-flex">
-        <div class="image"><img src="../dist/img/avatar.png" class="img-circle elevation-2" alt="User Image"></div>
+        <div class="image"><img src="<?= $admin_photo ?>" class="img-circle elevation-2" alt="<?= $admin_name ?>"></div>
        <div class="info">
-             <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user'] ?? 'Admin') ?></a>
+             <a href="#" class="d-block"><?= $admin_name ?></a>
           </div>
       </div>
       <nav class="mt-2">

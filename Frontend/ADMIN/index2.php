@@ -451,20 +451,20 @@ $revTrendIcon      = $view->revTrendIcon;
     <div class="sidebar">
       <div class="user-panel mt-3 pb-3 mb-3 d-flex">
         <?php
-          $admin_image = $_SESSION['image'] ?? '';
-          $admin_first = $_SESSION['firstname'] ?? '';
-          $admin_last  = $_SESSION['lastname']  ?? '';
-          if (empty($admin_first)) {
-              $admin_first = strpos($_SESSION['user'] ?? '', '@') !== false
-                  ? explode('@', $_SESSION['user'])[0]
-                  : ($_SESSION['user'] ?? 'Admin');
-          }
-          $admin_name  = htmlspecialchars(trim($admin_first . ' ' . $admin_last));
-          $admin_photo = !empty($admin_image)
-              ? '../../' . htmlspecialchars($admin_image)
-              : '../dist/img/avatar.png';
-        ?>
-        <div class="image"><img src="<?= $admin_photo ?>" class="img-circle elevation-2" alt="<?= $admin_name ?>"></div>
+        $admin_image = $_SESSION['image'] ?? '';
+        $admin_first = $_SESSION['firstname'] ?? '';
+        $admin_last  = $_SESSION['lastname']  ?? '';
+        if (empty($admin_first)) {
+            $admin_first = strpos($_SESSION['user'] ?? '', '@') !== false
+                ? explode('@', $_SESSION['user'])[0]
+                : ($_SESSION['user'] ?? 'Admin');
+        }
+        $admin_name  = htmlspecialchars(trim($admin_first . ' ' . $admin_last));
+        $admin_photo = !empty($admin_image)
+            ? '../../' . htmlspecialchars($admin_image)
+            : '../dist/img/avatar.png';
+      ?>
+      <div class="image"><img src="<?= $admin_photo ?>" class="img-circle elevation-2" alt="<?= $admin_name ?>"></div>
         <div class="info">
           <a href="#" class="d-block"><?= $admin_name ?></a>
         </div>
