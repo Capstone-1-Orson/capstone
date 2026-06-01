@@ -1,4 +1,34 @@
 <?php
+// ── Live-stock AJAX endpoint ──────────────────────────────────────────────
+// Called by JS every 30 s: ?live_stock=1
+// Returns JSON array of {id, stock_qty, updated_at} for all ingredients.
+if (isset($_GET['live_stock'])) {
+    require_once '../../Frontend/Core/InventoryView.php';
+    // requireAdmin() is called inside InventoryView constructor via View,
+    // but we need just the DB — boot a minimal connection instead.
+    require_once '../../Backend/Core/Database.php';
+    require_once '../../Backend/Core/Session.php';
+    require_once '../../Backend/Core/Auth.php';
+    Auth::requireAdmin('../../lockscreen.html');
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    $db   = Database::getInstance()->getConnection();
+    $rows = [];
+    $res  = $db->query('SELECT id, stock_qty, low_stock_threshold, updated_at FROM ingredients');
+    if ($res) while ($r = $res->fetch_assoc()) {
+        $rows[] = [
+            'id'                  => (int)$r['id'],
+            'stock_qty'           => (float)$r['stock_qty'],
+            'low_stock_threshold' => (float)$r['low_stock_threshold'],
+            'updated_at'          => $r['updated_at'],
+        ];
+    }
+    echo json_encode($rows);
+    exit();
+}
+// ── End live-stock endpoint ───────────────────────────────────────────────
+?>
+<?php
 // Frontend/ADMIN/inventory.php  (OOP refactored)
 require_once '../../Frontend/Core/InventoryView.php';
 $view = new InventoryView();
@@ -447,6 +477,9 @@ function fmtQty(float|int|string $val): string {
                                             <span class="badge badge-danger ml-1"><?= $expired ?></span>
                                         <?php endif; ?>
                                     </button>
+                                    <button class="btn btn-danger mb-2 mt-2" data-toggle="modal" data-target="#wasteReportModal">
+                                        <i class="fas fa-trash-alt mr-1"></i> Report Waste
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -516,7 +549,7 @@ function fmtQty(float|int|string $val): string {
                                         }
                                     }
                                 ?>
-                                <tr>
+                                <tr data-ing-id="<?= $item['id'] ?>">
                                     <td><?= $item['id'] ?></td>
                                     <td><?= htmlspecialchars($item['name']) ?></td>
                                     <td><?= htmlspecialchars($item['unit']) ?></td>
@@ -976,6 +1009,84 @@ function fmtQty(float|int|string $val): string {
         </div>
     </div>
 
+    <!-- ══════════════════════════════════════════════════════════
+         WASTE REPORT MODAL
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="modal fade" id="wasteReportModal" tabindex="-1" role="dialog">
+        <div class="modal-dialog modal-xl" role="document">
+            <div class="modal-content">
+                <div class="modal-header" style="background:linear-gradient(135deg,rgba(220,53,69,.8),rgba(156,39,176,.6));">
+                    <h5 class="modal-title text-white">
+                        <i class="fas fa-trash-alt mr-2"></i>Report Wasted / Spoiled Ingredients
+                    </h5>
+                    <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+                </div>
+
+                <form action="../../Backend/Controllers/InventoryController.php" method="POST" id="wasteReportForm">
+                    <input type="hidden" name="report_waste" value="1">
+
+                    <div class="modal-body">
+                        <p class="text-muted mb-1">
+                            <i class="fas fa-info-circle mr-1 text-warning"></i>
+                            Record ingredients that were spoiled, dropped, or wasted today.
+                            Stock will be <strong>automatically deducted</strong> from inventory.
+                        </p>
+
+                        <!-- Date picker -->
+                        <div class="form-group mb-3">
+                            <label class="font-weight-bold"><i class="fas fa-calendar-day mr-1"></i> Waste Date</label>
+                            <input type="date" name="waste_date" id="wasteDateInput"
+                                   class="form-control" style="max-width:220px;"
+                                   value="<?= date('Y-m-d') ?>" max="<?= date('Y-m-d') ?>" required>
+                        </div>
+
+                        <!-- Dynamic waste rows -->
+                        <table class="table table-sm table-bordered" id="wasteTable">
+                            <thead class="thead-dark">
+                                <tr>
+                                    <th style="min-width:200px;">Ingredient</th>
+                                    <th style="min-width:110px;">Qty Wasted</th>
+                                    <th style="min-width:200px;">Reason / Notes</th>
+                                    <th style="width:50px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="wasteRowsBody">
+                                <!-- First row seeded via JS -->
+                            </tbody>
+                        </table>
+
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="addWasteRowBtn">
+                            <i class="fas fa-plus mr-1"></i> Add Another Item
+                        </button>
+                    </div><!-- /.modal-body -->
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                            <i class="fas fa-times mr-1"></i> Cancel
+                        </button>
+                        <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-save mr-1"></i> Save Waste Report
+                        </button>
+                    </div>
+                </form>
+
+                <!-- ── Waste History sub-section ── -->
+                <div class="modal-footer justify-content-start border-top pt-3 pb-3">
+                    <div class="w-100">
+                        <h6 class="font-weight-bold mb-2">
+                            <i class="fas fa-history mr-1 text-muted"></i> Today's Waste Log
+                        </h6>
+                        <div id="wasteTodayLog" class="text-muted small">
+                            Loading…
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    <!-- ══ END Waste Report Modal ═══════════════════════════════ -->
+
 </div><!-- /.wrapper -->
 
 
@@ -1361,6 +1472,201 @@ function fmtQty(float|int|string $val): string {
 })();
 </script>
 <!-- ══ END real-time notification ════════════════════════════════════ -->
+
+<!-- ══ WASTE REPORT MODAL JS ══════════════════════════════════ -->
+<script>
+(function ($) {
+    // Ingredient list from PHP for the select dropdown
+    var ingredients = <?php
+        $ingList = array_map(fn($i) => [
+            'id'   => (int)    $i['id'],
+            'name' => $i['name'],
+            'unit' => $i['unit'],
+            'stock'=> (float)  $i['stock_qty'],
+        ], $items);
+        echo json_encode($ingList, JSON_HEX_TAG);
+    ?>;
+
+    function buildIngredientOptions(selectedId) {
+        var html = '<option value="">-- Select Ingredient --</option>';
+        ingredients.forEach(function (ing) {
+            var sel = (ing.id == selectedId) ? ' selected' : '';
+            html += '<option value="' + ing.id + '" data-unit="' + ing.unit + '" data-stock="' + ing.stock + '"' + sel + '>'
+                  + ing.name
+                  + '</option>';
+        });
+        return html;
+    }
+
+    function buildRow(idx) {
+        return '<tr class="waste-row">'
+            + '<td><select name="waste_ingredient_id[]" class="form-control form-control-sm waste-ing-select" required>'
+            + buildIngredientOptions(null)
+            + '</select></td>'
+            + '<td><input type="number" name="waste_qty[]" class="form-control form-control-sm waste-qty-input" step="0.01" min="0.01" placeholder="0" required></td>'
+            + '<td><input type="text" name="waste_reason[]" class="form-control form-control-sm" placeholder="e.g. Dropped, Expired, Spilled"></td>'
+            + '<td><button type="button" class="btn btn-sm btn-outline-danger remove-waste-row" title="Remove"><i class="fas fa-times"></i></button></td>'
+            + '</tr>';
+    }
+
+    // Seed first row on modal open
+    $('#wasteReportModal').on('show.bs.modal', function () {
+        var $body = $('#wasteRowsBody');
+        if ($body.find('.waste-row').length === 0) {
+            $body.html(buildRow(0));
+        }
+        loadTodayWasteLog();
+    });
+
+    // Add row
+    $('#addWasteRowBtn').on('click', function () {
+        var idx = $('#wasteRowsBody .waste-row').length;
+        $('#wasteRowsBody').append(buildRow(idx));
+    });
+
+    // Remove row (keep at least 1)
+    $(document).on('click', '.remove-waste-row', function () {
+        if ($('#wasteRowsBody .waste-row').length > 1) {
+            $(this).closest('tr').remove();
+        }
+    });
+
+    // Update unit label when ingredient is chosen
+    $(document).on('change', '.waste-ing-select', function () {
+        var unit  = $(this).find(':selected').data('unit') || '—';
+        var stock = $(this).find(':selected').data('stock');
+        var $row  = $(this).closest('tr');
+        var $qInput = $row.find('.waste-qty-input');
+        if (stock !== undefined) {
+            $qInput.attr('max', stock);
+        }
+    });
+
+    // Validate: qty must not exceed current stock
+    $('#wasteReportForm').on('submit', function (e) {
+        var valid = true;
+        $('#wasteRowsBody .waste-row').each(function () {
+            var $sel   = $(this).find('.waste-ing-select');
+            var $qty   = $(this).find('.waste-qty-input');
+            var stock  = parseFloat($sel.find(':selected').data('stock')) || 0;
+            var entered = parseFloat($qty.val()) || 0;
+            if (entered > stock) {
+                alert('Qty wasted for "' + $sel.find(':selected').text().split('(')[0].trim()
+                    + '" exceeds current stock (' + stock + '). Please check the amount.');
+                valid = false;
+                return false; // break
+            }
+        });
+        return valid;
+    });
+
+    // Load today's waste from a quick AJAX call
+    function loadTodayWasteLog() {
+        var today = new Date().toISOString().slice(0, 10);
+        $('#wasteTodayLog').html('<em>Loading…</em>');
+        $.get('../../Backend/Controllers/InventoryController.php', { fetch_waste_log: 1, date: today }, function (data) {
+            if (!data || !data.rows || data.rows.length === 0) {
+                $('#wasteTodayLog').html('<span class="text-muted">No waste recorded today.</span>');
+                return;
+            }
+            var html = '<table class="table table-sm table-striped mb-0"><thead><tr>'
+                + '<th>Ingredient</th><th>Qty</th><th>Unit</th><th>Reason</th><th>Reported By</th><th>Time</th>'
+                + '</tr></thead><tbody>';
+            data.rows.forEach(function (r) {
+                html += '<tr><td>' + r.ingredient_name + '</td><td>' + r.qty_wasted + '</td><td>' + r.unit
+                      + '</td><td>' + (r.reason || '—') + '</td><td>' + r.reported_by
+                      + '</td><td>' + r.created_at + '</td></tr>';
+            });
+            html += '</tbody></table>';
+            $('#wasteTodayLog').html(html);
+        }, 'json').fail(function () {
+            $('#wasteTodayLog').html('<span class="text-muted">Could not load log.</span>');
+        });
+    }
+
+}(jQuery));
+</script>
+<!-- ══ END Waste Report Modal JS ══════════════════════════════ -->
+
+
+<!-- ── Live stock refresh ──────────────────────────────────────────── -->
+<script>
+(function () {
+  var INTERVAL = 30000; // refresh every 30 seconds
+
+  function fmtQty(n) {
+    n = parseFloat(n);
+    return n === Math.floor(n) ? String(Math.floor(n)) : n.toFixed(2);
+  }
+
+  function statusInfo(qty, threshold) {
+    if (qty === 0)          return { cls: 'badge-danger',  label: 'Out of Stock' };
+    if (qty <= threshold)   return { cls: 'badge-warning', label: 'Low Stock' };
+    return                         { cls: 'badge-success', label: 'Available' };
+  }
+
+  function refreshStock() {
+    fetch(window.location.pathname + '?live_stock=1', {
+      credentials: 'same-origin',
+      cache: 'no-store'
+    })
+    .then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); })
+    .then(function(rows){
+      rows.forEach(function(ing){
+        var row = document.querySelector('tr[data-ing-id="' + ing.id + '"]');
+        if (!row) return;
+
+        var si = statusInfo(ing.stock_qty, ing.low_stock_threshold);
+
+        // Update stock qty badge (3rd td)
+        var stockCell = row.cells[3];
+        if (stockCell) {
+          var badge = stockCell.querySelector('.badge');
+          if (badge) {
+            badge.className = 'badge ' + si.cls;
+            badge.textContent = fmtQty(ing.stock_qty);
+          }
+        }
+
+        // Update status badge (5th td)
+        var statusCell = row.cells[5];
+        if (statusCell) {
+          var sbadge = statusCell.querySelector('.badge');
+          if (sbadge) {
+            sbadge.className = 'badge ' + si.cls;
+            sbadge.textContent = si.label;
+          }
+        }
+
+        // Update last-updated (8th td)
+        var updCell = row.cells[7];
+        if (updCell) {
+          var sm = updCell.querySelector('small');
+          if (sm && ing.updated_at) sm.textContent = ing.updated_at;
+        }
+      });
+    })
+    .catch(function(){/* silent — will retry next interval */});
+  }
+
+  // Show a live indicator badge in the page
+  document.addEventListener('DOMContentLoaded', function(){
+    var heading = document.querySelector('.content-header h1, .card-title');
+    if (heading) {
+      var dot = document.createElement('span');
+      dot.id = 'liveStockDot';
+      dot.title = 'Stock levels auto-refresh every 30 seconds';
+      dot.style.cssText = 'display:inline-block;width:9px;height:9px;background:#28a745;border-radius:50%;margin-left:8px;vertical-align:middle;animation:rtPulse 2s infinite;';
+      heading.appendChild(dot);
+    }
+    setTimeout(function loop(){
+      refreshStock();
+      setTimeout(loop, INTERVAL);
+    }, INTERVAL);
+  });
+})();
+</script>
+<!-- ── End live stock refresh ───────────────────────────────────────── -->
 
 </body>
 </html>

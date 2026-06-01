@@ -26,6 +26,12 @@ class VoidRefundView extends View
     public bool $hasOrderItems   = false;
     private bool $hasOrderRefunds = false;
 
+    /* True DB-wide max IDs — used to seed the JS polling cursor correctly,
+       independent of what $pendingOrders / JOIN queries returned */
+    public int $maxActiveOrderId  = 0;
+    public int $maxVoidedId       = 0;
+    public int $maxRefundedId     = 0;
+
     public function __construct()
     {
         parent::__construct();
@@ -83,15 +89,16 @@ class VoidRefundView extends View
         // New orders since client's last known id
         $newOrders = [];
         $since     = isset($_GET['since']) ? (int)$_GET['since'] : 0;
-        if ($since > 0) {
+        if ($since >= 0) {
+            // LEFT JOIN order_items so orders without items still appear
             $sql = $this->hasOrderItems
                 ? "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
                           COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
-                          GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items
+                          COALESCE(GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', '),'—') AS items
                    FROM orders o
                    LEFT JOIN user u ON u.id = o.user_id
-                   JOIN order_items oi ON oi.order_id = o.id
-                   JOIN menu m ON m.id = oi.menu_id
+                   LEFT JOIN order_items oi ON oi.order_id = o.id
+                   LEFT JOIN menu m ON m.id = oi.menu_id
                    WHERE o.status NOT IN ('voided','refunded','partial_refund') AND o.id > $since
                    GROUP BY o.id ORDER BY o.id DESC LIMIT 20"
                 : "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
@@ -104,7 +111,7 @@ class VoidRefundView extends View
 
         // Orders recently voided/refunded (for client-side removal from Active tab)
         $removedIds = array_column(
-            $this->fetchAll("SELECT id FROM orders WHERE status IN ('voided','refunded','partial_refund') AND updated_at >= NOW() - INTERVAL 30 SECOND"),
+            $this->fetchAll("SELECT id FROM orders WHERE status IN ('voided','refunded','partial_refund') AND id > " . max(0, $since)),
             'id'
         );
         $removedIds = array_map('intval', $removedIds);
@@ -116,12 +123,12 @@ class VoidRefundView extends View
             $sql = $this->hasOrderItems
                 ? "SELECT o.id, o.table_no, o.total_amt, o.created_at,
                           COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
-                          GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
-                          SUM(oi.qty) AS total_qty
+                          COALESCE(GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', '),'—') AS items,
+                          COALESCE(SUM(oi.qty),0) AS total_qty
                    FROM orders o
                    LEFT JOIN user u ON u.id = o.user_id
-                   JOIN order_items oi ON oi.order_id = o.id
-                   JOIN menu m ON m.id = oi.menu_id
+                   LEFT JOIN order_items oi ON oi.order_id = o.id
+                   LEFT JOIN menu m ON m.id = oi.menu_id
                    WHERE o.status = 'voided' AND o.id > $sinceVoided
                    GROUP BY o.id ORDER BY o.id DESC LIMIT 20"
                 : "SELECT o.id, o.table_no, o.total_amt, o.created_at,
@@ -140,16 +147,16 @@ class VoidRefundView extends View
             $newRefunded = $this->fetchAll(
                 "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
                         COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
-                        GROUP_CONCAT(DISTINCT m.name ORDER BY m.name SEPARATOR ', ') AS items,
-                        SUM(oi.qty) AS total_qty,
+                        COALESCE(GROUP_CONCAT(DISTINCT m.name ORDER BY m.name SEPARATOR ', '),'—') AS items,
+                        COALESCE(SUM(oi.qty),0) AS total_qty,
                         (SELECT SUM(r2.refund_amt) FROM order_refunds r2 WHERE r2.order_id = o.id) AS refund_total,
                         (SELECT r2.reason FROM order_refunds r2 WHERE r2.order_id = o.id ORDER BY r2.id DESC LIMIT 1) AS refund_reason,
                         (SELECT r2.created_by FROM order_refunds r2 WHERE r2.order_id = o.id ORDER BY r2.id DESC LIMIT 1) AS processed_by,
                         (SELECT r2.created_at FROM order_refunds r2 WHERE r2.order_id = o.id ORDER BY r2.id DESC LIMIT 1) AS refund_at
                  FROM orders o
                  LEFT JOIN user u ON u.id = o.user_id
-                 JOIN order_items oi ON oi.order_id = o.id
-                 JOIN menu m ON m.id = oi.menu_id
+                 LEFT JOIN order_items oi ON oi.order_id = o.id
+                 LEFT JOIN menu m ON m.id = oi.menu_id
                  WHERE o.status IN ('refunded','partial_refund') AND o.id > $sinceRefunded
                  GROUP BY o.id ORDER BY o.id DESC LIMIT 20"
             );
@@ -165,11 +172,11 @@ class VoidRefundView extends View
             );
         }
 
-        // Latest voided/refunded ids (so client can advance its cursors)
+        // Latest voided/refunded ids
         $rowV = $this->fetchOne("SELECT MAX(id) AS mid FROM orders WHERE status='voided'");
         $rowR = $this->fetchOne("SELECT MAX(id) AS mid FROM orders WHERE status IN ('refunded','partial_refund')");
-        $latestVoidedId    = (int)($rowV['mid'] ?? 0);
-        $latestRefundedId  = (int)($rowR['mid'] ?? 0);
+        $latestVoidedId   = (int)($rowV['mid'] ?? 0);
+        $latestRefundedId = (int)($rowR['mid'] ?? 0);
 
         echo json_encode([
             'voidedCount'      => $vc,    'refundedCount'    => $rc,    'pendingCount'     => $pc,
@@ -177,21 +184,34 @@ class VoidRefundView extends View
             'newOrders'        => $newOrders, 'removedIds'   => $removedIds,
             'newVoided'        => $newVoided, 'newRefunded'  => $newRefunded,
             'latestVoidedId'   => $latestVoidedId, 'latestRefundedId' => $latestRefundedId,
+            '_debug' => [
+                'since'          => $since,
+                'sinceVoided'    => $sinceVoided,
+                'sinceRefunded'  => $sinceRefunded,
+                'latestId'       => $latestId,
+                'newOrdersCount' => count($newOrders),
+                'newOrderIds'    => array_column($newOrders, 'id'),
+                'removedIds'     => $removedIds,
+                'hasOrderItems'  => $this->hasOrderItems,
+                'sql_used'       => $this->hasOrderItems ? 'WITH_order_items' : 'WITHOUT_order_items',
+            ],
         ]);
         exit();
     }
 
     // ─────────────────────────────────────────────────────────────
-    //  Page data
+    //  Page data  (LEFT JOINs so every order always appears)
     // ─────────────────────────────────────────────────────────────
 
     private function load(): void
     {
-        // Stats
-        $row = $this->fetchOne("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS amt FROM orders WHERE status='voided'");
+        // ── Stats ────────────────────────────────────────────────
+        $row = $this->fetchOne("SELECT COUNT(*) AS cnt, COALESCE(SUM(total_amt),0) AS amt
+                                FROM orders WHERE status='voided'");
         if ($row) { $this->voidedCount = (int)$row['cnt']; $this->totalVoided = (float)$row['amt']; }
 
-        $row = $this->fetchOne("SELECT COUNT(*) AS cnt FROM orders WHERE status IN ('refunded','partial_refund')");
+        $row = $this->fetchOne("SELECT COUNT(*) AS cnt FROM orders
+                                WHERE status IN ('refunded','partial_refund')");
         if ($row) $this->refundedCount = (int)$row['cnt'];
 
         if ($this->hasOrderRefunds) {
@@ -199,17 +219,17 @@ class VoidRefundView extends View
             if ($row) $this->totalRefunded = (float)$row['amt'];
         }
 
-        // Voided orders
+        // ── Voided orders — LEFT JOIN so orders with no items still show ──
         $this->voidedOrders = $this->hasOrderItems
             ? $this->fetchAll(
                 "SELECT o.id, o.table_no, o.total_amt, o.created_at,
                         COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
-                        GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
-                        SUM(oi.qty) AS total_qty
+                        COALESCE(GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', '),'—') AS items,
+                        COALESCE(SUM(oi.qty),0) AS total_qty
                  FROM orders o
                  LEFT JOIN user u ON u.id = o.user_id
-                 JOIN order_items oi ON oi.order_id = o.id
-                 JOIN menu m ON m.id = oi.menu_id
+                 LEFT JOIN order_items oi ON oi.order_id = o.id
+                 LEFT JOIN menu m ON m.id = oi.menu_id
                  WHERE o.status = 'voided'
                  GROUP BY o.id ORDER BY o.created_at DESC"
               )
@@ -221,21 +241,21 @@ class VoidRefundView extends View
                  WHERE o.status = 'voided' ORDER BY o.created_at DESC"
               );
 
-        // Refunded / partial_refund orders
+        // ── Refunded orders — LEFT JOIN so orders with no items still show ──
         $this->refundedOrders = ($this->hasOrderItems && $this->hasOrderRefunds)
             ? $this->fetchAll(
                 "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
                         COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
-                        GROUP_CONCAT(DISTINCT m.name ORDER BY m.name SEPARATOR ', ') AS items,
-                        SUM(oi.qty) AS total_qty,
+                        COALESCE(GROUP_CONCAT(DISTINCT m.name ORDER BY m.name SEPARATOR ', '),'—') AS items,
+                        COALESCE(SUM(oi.qty),0) AS total_qty,
                         (SELECT SUM(r2.refund_amt) FROM order_refunds r2 WHERE r2.order_id = o.id) AS refund_total,
                         (SELECT r2.reason FROM order_refunds r2 WHERE r2.order_id = o.id ORDER BY r2.id DESC LIMIT 1) AS refund_reason,
                         (SELECT r2.created_by FROM order_refunds r2 WHERE r2.order_id = o.id ORDER BY r2.id DESC LIMIT 1) AS processed_by,
                         (SELECT r2.created_at FROM order_refunds r2 WHERE r2.order_id = o.id ORDER BY r2.id DESC LIMIT 1) AS refund_at
                  FROM orders o
                  LEFT JOIN user u ON u.id = o.user_id
-                 JOIN order_items oi ON oi.order_id = o.id
-                 JOIN menu m ON m.id = oi.menu_id
+                 LEFT JOIN order_items oi ON oi.order_id = o.id
+                 LEFT JOIN menu m ON m.id = oi.menu_id
                  WHERE o.status IN ('refunded','partial_refund')
                  GROUP BY o.id ORDER BY o.created_at DESC"
               )
@@ -248,20 +268,23 @@ class VoidRefundView extends View
                  WHERE o.status IN ('refunded','partial_refund') ORDER BY o.created_at DESC"
               );
 
-        // Active orders eligible for void/refund
+        // ── Active orders — LEFT JOIN so ALL orders always appear ──
         $this->pendingOrders = $this->hasOrderItems
             ? $this->fetchAll(
                 "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
                         COALESCE(CONCAT(u.firstname,' ',u.lastname),'N/A') AS cashier_name,
-                        GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', ') AS items,
-                        SUM(oi.qty) AS total_qty,
-                        GROUP_CONCAT(CONCAT(oi.id,'|',m.id,'|',m.name,'|',oi.qty,'|',oi.unit_price) ORDER BY oi.id SEPARATOR ';;') AS item_details_raw
+                        COALESCE(GROUP_CONCAT(m.name ORDER BY m.name SEPARATOR ', '),'—') AS items,
+                        COALESCE(SUM(oi.qty),0) AS total_qty,
+                        COALESCE(GROUP_CONCAT(
+                            CONCAT(oi.id,'|',m.id,'|',m.name,'|',oi.qty,'|',oi.unit_price)
+                            ORDER BY oi.id SEPARATOR ';;'
+                        ),'') AS item_details_raw
                  FROM orders o
                  LEFT JOIN user u ON u.id = o.user_id
-                 JOIN order_items oi ON oi.order_id = o.id
-                 JOIN menu m ON m.id = oi.menu_id
+                 LEFT JOIN order_items oi ON oi.order_id = o.id
+                 LEFT JOIN menu m ON m.id = oi.menu_id
                  WHERE o.status NOT IN ('voided','refunded','partial_refund')
-                 GROUP BY o.id ORDER BY o.created_at DESC LIMIT 100"
+                 GROUP BY o.id ORDER BY o.created_at DESC LIMIT 200"
               )
             : $this->fetchAll(
                 "SELECT o.id, o.table_no, o.total_amt, o.status, o.created_at,
@@ -269,13 +292,30 @@ class VoidRefundView extends View
                         '—' AS items, 0 AS total_qty, '' AS item_details_raw
                  FROM orders o LEFT JOIN user u ON u.id = o.user_id
                  WHERE o.status NOT IN ('voided','refunded','partial_refund')
-                 ORDER BY o.created_at DESC LIMIT 100"
+                 ORDER BY o.created_at DESC LIMIT 200"
               );
+
+        $this->loadMaxIds();
     }
 
     private function tableExists(string $table): bool
     {
         $r = $this->db->query("SHOW TABLES LIKE '$table'");
         return $r && $r->num_rows > 0;
+    }
+
+    /* ── True DB-wide max IDs (not limited by JOIN / LIMIT) ── */
+    private function loadMaxIds(): void
+    {
+        $r = $this->fetchOne("SELECT MAX(id) AS mid FROM orders
+                              WHERE status NOT IN ('voided','refunded','partial_refund')");
+        $this->maxActiveOrderId = (int)($r['mid'] ?? 0);
+
+        $r = $this->fetchOne("SELECT MAX(id) AS mid FROM orders WHERE status = 'voided'");
+        $this->maxVoidedId = (int)($r['mid'] ?? 0);
+
+        $r = $this->fetchOne("SELECT MAX(id) AS mid FROM orders
+                              WHERE status IN ('refunded','partial_refund')");
+        $this->maxRefundedId = (int)($r['mid'] ?? 0);
     }
 }

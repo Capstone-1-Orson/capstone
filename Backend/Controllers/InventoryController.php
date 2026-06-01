@@ -31,11 +31,18 @@ class InventoryController
 
     public function handle(): void
     {
+        // AJAX: fetch waste log for a specific date (GET)
+        if (isset($_GET['fetch_waste_log'])) {
+            $this->fetchWasteLog();
+            return;
+        }
+
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
             $this->redirect();
         }
 
         if (isset($_POST['save_ingredient']))          { $this->create();          return; }
+        if (isset($_POST['report_waste']))             { $this->reportWaste();     return; }
         if (isset($_POST['update_ingredient']))        { $this->update();          return; }
         if (isset($_POST['bulk_restock']))             { $this->bulkRestock();     return; }
         if (isset($_POST['bulk_update_thresholds']))   { $this->bulkThresholds();  return; }
@@ -146,6 +153,59 @@ class InventoryController
             Session::flashSuccess('Ingredient deleted successfully.');
         } else {
             Session::flashError('Failed to delete ingredient.');
+        }
+
+        $this->redirect();
+    }
+
+    private function fetchWasteLog(): never
+    {
+        header('Content-Type: application/json');
+        $date = $_GET['date'] ?? date('Y-m-d');
+        $rows = $this->model->getWasteLogs($date, $date);
+        echo json_encode(['rows' => $rows]);
+        exit();
+    }
+
+    private function reportWaste(): never
+    {
+        $rows    = $_POST['waste_ingredient_id'] ?? [];
+        $qtys    = $_POST['waste_qty']           ?? [];
+        $reasons = $_POST['waste_reason']        ?? [];
+        $date    = trim($_POST['waste_date']      ?? date('Y-m-d'));
+        $actor   = Session::get('firstname', '') ?: Session::get('user', 'admin');
+
+        if (empty($rows)) {
+            return $this->fail('No waste items submitted.');
+        }
+
+        $count = 0;
+        foreach ($rows as $idx => $ingId) {
+            $ingId = (int) $ingId;
+            $qty   = (float) ($qtys[$idx]    ?? 0);
+            $why   = trim($reasons[$idx]     ?? '');
+
+            if ($ingId <= 0 || $qty <= 0) {
+                continue;
+            }
+
+            $ok = $this->model->logWaste([
+                'ingredient_id' => $ingId,
+                'qty_wasted'    => $qty,
+                'reason'        => $why ?: 'Spoilage / waste',
+                'reported_by'   => $actor,
+                'waste_date'    => $date,
+            ]);
+
+            if ($ok) {
+                $count++;
+            }
+        }
+
+        if ($count > 0) {
+            Session::flashSuccess("$count waste item(s) recorded and deducted from inventory.");
+        } else {
+            Session::flashError('No valid waste entries were saved. Check quantities.');
         }
 
         $this->redirect();

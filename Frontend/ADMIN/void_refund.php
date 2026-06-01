@@ -161,24 +161,10 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
       <span class="brand-text font-weight-light">Empress' Cafe</span>
     </a>
     <div class="sidebar">
-      <?php
-        $admin_image = $_SESSION['image'] ?? '';
-        $admin_first = $_SESSION['firstname'] ?? '';
-        $admin_last  = $_SESSION['lastname']  ?? '';
-        if (empty($admin_first)) {
-            $admin_first = strpos($_SESSION['user'] ?? '', '@') !== false
-                ? explode('@', $_SESSION['user'])[0]
-                : ($_SESSION['user'] ?? 'Admin');
-        }
-        $admin_name  = htmlspecialchars(trim($admin_first . ' ' . $admin_last));
-        $admin_photo = !empty($admin_image)
-            ? '../../' . htmlspecialchars($admin_image)
-            : '../dist/img/avatar.png';
-      ?>
       <div class="user-panel mt-3 pb-3 mb-3 d-flex">
-        <div class="image"><img src="<?= $admin_photo ?>" class="img-circle elevation-2" alt="<?= $admin_name ?>"></div>
+        <div class="image"><img src="../dist/img/avatar.png" class="img-circle elevation-2" alt="User Image"></div>
         <div class="info">
-          <a href="#" class="d-block"><?= $admin_name ?></a>
+          <a href="#" class="d-block"><?= htmlspecialchars($_SESSION['user'] ?? 'Admin') ?></a>
         </div>
       </div>
       <nav class="mt-2">
@@ -549,32 +535,6 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
 // ── Pending orders data from PHP ──────────────────────────────
 const PENDING_ORDERS = <?= $pendingOrdersJson ?>;
 
-// ── DataTables init ───────────────────────────────────────────
-$(function () {
-  ['tbl-active','tbl-voided','tbl-refunded'].forEach(function(id) {
-    var el = $('#' + id);
-    if (el.length && !$.fn.DataTable.isDataTable(el)) {
-      el.DataTable({
-        responsive: true,
-        lengthChange: false,
-        autoWidth: false,
-        order: [[1, 'desc']],
-        buttons: ['copy','csv','excel','pdf','print','colvis']
-      }).buttons().container().appendTo('#' + id + '_wrapper .col-md-6:eq(0)');
-    }
-  });
-
-  // Re-init on tab show so hidden tables render properly
-  $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
-    var pane = $(e.target).attr('href');
-    $(pane).find('table').each(function () {
-      if ($.fn.DataTable.isDataTable(this)) {
-        $(this).DataTable().columns.adjust().responsive.recalc();
-      }
-    });
-  });
-});
-
 // ── Void modal state ──────────────────────────────────────────
 let voidOrderId    = null;
 let voidOrderTotal = 0;
@@ -611,7 +571,7 @@ async function submitVoid() {
   btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Processing…';
 
   try {
-    const res  = await fetch('../../Backend/Controllers/PosController.php', {
+    const res  = await fetch('../../Backend/Controllers/RefundVoidController.php', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ action: 'void', order_id: voidOrderId, reason })
@@ -630,7 +590,7 @@ async function submitVoid() {
       btn.innerHTML = '<i class="fas fa-ban mr-1"></i> Confirm Void';
     }
   } catch (err) {
-    showToast('Network error. Please try again.', '#e74c3c');
+    showToast('Network error: ' + (err.message || 'Please try again.'), '#e74c3c');
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-ban mr-1"></i> Confirm Void';
   }
@@ -776,7 +736,7 @@ async function submitRefund() {
   }
 
   try {
-    const res  = await fetch('../../Backend/Controllers/PosController.php', {
+    const res  = await fetch('../../Backend/Controllers/RefundVoidController.php', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(payload)
@@ -795,7 +755,7 @@ async function submitRefund() {
       btn.innerHTML = '<i class="fas fa-rotate-left mr-1"></i> Confirm Refund';
     }
   } catch (err) {
-    showToast('Network error. Please try again.', '#e74c3c');
+    showToast('Network error: ' + (err.message || 'Please try again.'), '#e74c3c');
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-rotate-left mr-1"></i> Confirm Refund';
   }
@@ -820,6 +780,15 @@ function showToast(msg, color) {
   toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 3000);
 }
 
+// ── Remove a row from the Active Orders DataTable (global scope) ──
+function removeActiveRow(orderId) {
+  var dt  = $('#tbl-active').DataTable();
+  var str = '#' + orderId;
+  dt.rows(function(i, data) {
+    return typeof data[0] === 'string' && data[0].indexOf('>' + str + '<') !== -1;
+  }).remove().draw(false);
+}
+
 // ── Dark Mode ──────────────────────────────────────────────────
 $(function () {
   var isDark = localStorage.getItem('darkMode') === 'true';
@@ -835,6 +804,34 @@ $(function () {
     }
   }
   applyMode(isDark);
+
+  // ── Initialise DataTables ──────────────────────────────────────
+  // Active Orders: no search bar, no length-change dropdown
+  if (!$.fn.DataTable.isDataTable('#tbl-active')) {
+    $('#tbl-active').DataTable({
+      order:        [[0, 'desc']],
+      searching:    false,
+      lengthChange: false,
+      pageLength:   10,
+      language:     { emptyTable: 'No active orders.' }
+    });
+  }
+  // Voided & Refunded: keep search + length controls
+  if (!$.fn.DataTable.isDataTable('#tbl-voided')) {
+    $('#tbl-voided').DataTable({
+      order:      [[0, 'desc']],
+      pageLength: 10,
+      language:   { emptyTable: 'No voided orders.' }
+    });
+  }
+  if (!$.fn.DataTable.isDataTable('#tbl-refunded')) {
+    $('#tbl-refunded').DataTable({
+      order:      [[0, 'desc']],
+      pageLength: 10,
+      language:   { emptyTable: 'No refunded orders.' }
+    });
+  }
+
   $('#darkModeToggle').on('click', function (e) {
     e.preventDefault();
     isDark = !isDark;
@@ -962,9 +959,9 @@ $(function () {
     totalVoided:      parseFloat('<?= $totalVoided ?>') || 0,
     totalRefunded:    parseFloat('<?= $totalRefunded ?>') || 0,
     pendingCount:     parseInt('<?= count($pendingOrders) ?>', 10) || 0,
-    latestOrderId:    <?= !empty($pendingOrders)   ? (int)$pendingOrders[0]['id']   : 0 ?>,
-    latestVoidedId:   <?= !empty($voidedOrders)    ? (int)$voidedOrders[0]['id']    : 0 ?>,
-    latestRefundedId: <?= !empty($refundedOrders)  ? (int)$refundedOrders[0]['id']  : 0 ?>
+    latestOrderId:    <?= (int)$view->maxActiveOrderId ?>,
+    latestVoidedId:   <?= (int)$view->maxVoidedId ?>,
+    latestRefundedId: <?= (int)$view->maxRefundedId ?>
   };
 
   /* ── Live-dot indicator in page title area ── */
@@ -1047,15 +1044,6 @@ $(function () {
 
     $(row).find('td').css({'white-space':'nowrap','overflow':'hidden','text-overflow':'ellipsis','max-width':'260px'});
     flashRow(row);
-  }
-
-  /* ── Remove a row from Active Orders by order id ── */
-  function removeActiveRow(orderId) {
-    var dt  = $('#tbl-active').DataTable();
-    var str = '#' + orderId;
-    dt.rows(function(i, data) {
-      return typeof data[0] === 'string' && data[0].indexOf('>' + str + '<') !== -1;
-    }).remove().draw(false);
   }
 
   /* ── Helpers ── */
@@ -1173,6 +1161,7 @@ $(function () {
         newOrders.forEach(function (o) {
           if (o.id > _snap.latestOrderId) {
             injectActiveRow(o);
+            _snap.latestOrderId = o.id;  // advance cursor immediately to prevent duplicates
           }
         });
 
@@ -1181,6 +1170,7 @@ $(function () {
         newVoided.forEach(function (o) {
           if (o.id > _snap.latestVoidedId) {
             injectVoidedRow(o);
+            _snap.latestVoidedId = o.id;
           }
         });
 
@@ -1189,6 +1179,7 @@ $(function () {
         newRefunded.forEach(function (o) {
           if (o.id > _snap.latestRefundedId) {
             injectRefundedRow(o);
+            _snap.latestRefundedId = o.id;
           }
         });
 

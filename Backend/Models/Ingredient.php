@@ -195,6 +195,84 @@ class Ingredient
     }
 
     // ─────────────────────────────────────────────────────────────
+    //  Waste logging
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * Record a waste event and deduct from stock.
+     *
+     * @param array $data  Keys: ingredient_id, qty_wasted, reason, reported_by, waste_date
+     * @return bool
+     */
+    public function logWaste(array $data): bool
+    {
+        $now = date('Y-m-d H:i:s');
+
+        // Insert waste log
+        $stmt = $this->db->prepare(
+            'INSERT INTO ingredient_waste_log
+             (ingredient_id, qty_wasted, reason, reported_by, waste_date, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->bind_param(
+            'idssss',
+            $data['ingredient_id'],
+            $data['qty_wasted'],
+            $data['reason'],
+            $data['reported_by'],
+            $data['waste_date'],
+            $now
+        );
+        $ok = $stmt->execute();
+        $stmt->close();
+
+        if (!$ok) {
+            return false;
+        }
+
+        // Deduct from actual stock (floor at 0)
+        return $this->deduct((int)$data['ingredient_id'], (float)$data['qty_wasted']);
+    }
+
+    /**
+     * Retrieve waste log entries, optionally filtered by date range.
+     *
+     * @param string|null $from  Date string Y-m-d
+     * @param string|null $to    Date string Y-m-d
+     * @return array[]
+     */
+    public function getWasteLogs(?string $from = null, ?string $to = null): array
+    {
+        $sql = 'SELECT wl.*, i.name AS ingredient_name, i.unit
+                FROM ingredient_waste_log wl
+                JOIN ingredients i ON i.id = wl.ingredient_id';
+
+        $params = [];
+        $types  = '';
+
+        if ($from && $to) {
+            $sql    .= ' WHERE wl.waste_date BETWEEN ? AND ?';
+            $types   = 'ss';
+            $params  = [$from, $to];
+        } elseif ($from) {
+            $sql    .= ' WHERE wl.waste_date >= ?';
+            $types   = 's';
+            $params  = [$from];
+        }
+
+        $sql .= ' ORDER BY wl.waste_date DESC, wl.created_at DESC';
+
+        $stmt = $this->db->prepare($sql);
+        if ($params) {
+            $stmt->bind_param($types, ...$params);
+        }
+        $stmt->execute();
+        $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt->close();
+        return $rows;
+    }
+
+    // ─────────────────────────────────────────────────────────────
     //  Recipe helpers (used by OrderService)
     // ─────────────────────────────────────────────────────────────
 

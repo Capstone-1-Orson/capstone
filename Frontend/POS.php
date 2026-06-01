@@ -253,6 +253,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['proc'])) {
         }
     }
 
+
+    // ── Deduct ingredients from inventory ────────────────────────
+    // For every ordered item, subtract the required ingredient quantities
+    // based on the menu_ingredients recipe table.
+    foreach ($payload['items'] as $_di_item) {
+        $_di_menu_id = (int)($_di_item['menu_id'] ?? 0);
+        $_di_qty     = (int)($_di_item['qty']     ?? 1);
+        $_di_rem_raw = $_di_item['removed_ingredient_ids'] ?? [];
+        $_di_rem_ids = array_map(
+            fn($r) => (int)(is_array($r) ? ($r['id'] ?? 0) : $r),
+            $_di_rem_raw
+        );
+        if ($_di_menu_id <= 0 || $_di_qty <= 0) continue;
+
+        $_di_stmt = $conn->prepare(
+            'SELECT mi.ingredient_id, mi.qty_needed
+             FROM menu_ingredients mi
+             WHERE mi.menu_id = ?'
+        );
+        if (!$_di_stmt) continue;
+        $_di_stmt->bind_param('i', $_di_menu_id);
+        $_di_stmt->execute();
+        $_di_res = $_di_stmt->get_result();
+
+        while ($_di_row = $_di_res->fetch_assoc()) {
+            $_di_ing_id     = (int)   $_di_row['ingredient_id'];
+            $_di_qty_needed = (float) $_di_row['qty_needed'];
+            if (in_array($_di_ing_id, $_di_rem_ids, true)) continue;
+            $_di_deduct = $_di_qty_needed * $_di_qty;
+            $_di_upd = $conn->prepare(
+                'UPDATE ingredients
+                 SET stock_qty = GREATEST(stock_qty - ?, 0),
+                     updated_at = NOW()
+                 WHERE id = ?'
+            );
+            if ($_di_upd) {
+                $_di_upd->bind_param('di', $_di_deduct, $_di_ing_id);
+                $_di_upd->execute();
+                $_di_upd->close();
+            }
+        }
+        $_di_stmt->close();
+    }
+    // ── End ingredient deduction ──────────────────────────────────
+
     echo json_encode(['success' => true, 'order_id' => $order_id]);
     exit();
     } catch (Throwable $e) {
@@ -302,6 +347,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['oi'])) {
 }
 // ══ END ORDER ITEMS ENDPOINT ══════════════════════════════════
 
+
+
+// ── Helper: restore ingredient stock for one order-item ──────
+if (!function_exists('_pos_restore_ingredients')) {
+    function _pos_restore_ingredients($conn, int $menu_id, int $qty, string $rem_json): void {
+        $rem_ids = json_decode($rem_json, true);
+        if (!is_array($rem_ids)) $rem_ids = [];
+        $rem_ids = array_map('intval', $rem_ids);
+        $st = $conn->prepare(
+            'SELECT mi.ingredient_id, mi.qty_needed
+              FROM menu_ingredients mi WHERE mi.menu_id = ?'
+        );
+        if (!$st) return;
+        $st->bind_param('i', $menu_id);
+        $st->execute();
+        $res = $st->get_result();
+        while ($row = $res->fetch_assoc()) {
+            $iid = (int) $row['ingredient_id'];
+            $qn  = (float) $row['qty_needed'];
+            if (in_array($iid, $rem_ids, true)) continue;
+            $restore = $qn * $qty;
+            $u = $conn->prepare('UPDATE ingredients SET stock_qty = stock_qty + ?, updated_at = NOW() WHERE id = ?');
+            if ($u) { $u->bind_param('di', $restore, $iid); $u->execute(); $u->close(); }
+        }
+        $st->close();
+    }
+}
+// ── End restore helper ────────────────────────────────────────
 
 // ══ VOID / REFUND ENDPOINT (POST ?vr=1) ══════════════════════
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['vr'])) {
@@ -365,6 +438,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['vr'])) {
 
     if ($action === 'void') {
         $conn->query("UPDATE orders SET status='voided', void_reason='$reason', voided_by='$created_by', voided_at=NOW() WHERE id=$order_id");
+        // Restore stock for all items in this order
+        $_vr_oi = $conn->query("SELECT menu_id, qty, removed_ingredient_ids FROM order_items WHERE order_id=$order_id");
+        if ($_vr_oi) {
+            while ($_vr_row = $_vr_oi->fetch_assoc()) {
+                _pos_restore_ingredients($conn, (int)$_vr_row['menu_id'], (int)$_vr_row['qty'], $_vr_row['removed_ingredient_ids'] ?? '[]');
+            }
+        }
         echo json_encode(['success' => true, 'message' => "Order #$order_id voided.", 'new_status' => 'voided']);
         exit();
     }
@@ -386,6 +466,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['vr'])) {
                 }
             }
             $new_status = 'partial_refund';
+
+            // Restore stock for refunded items only
+            foreach ($refund_items as $_rf_ri) {
+                $_rf_mid = (int)$_rf_ri['menu_id'];
+                $_rf_qty = (int)$_rf_ri['qty'];
+                $_rf_r = $conn->query("SELECT removed_ingredient_ids FROM order_items WHERE order_id=$order_id AND menu_id=$_rf_mid LIMIT 1");
+                $_rf_json = ($_rf_r && $_rf_row = $_rf_r->fetch_assoc()) ? ($_rf_row['removed_ingredient_ids'] ?? '[]') : '[]';
+                _pos_restore_ingredients($conn, $_rf_mid, $_rf_qty, $_rf_json);
+            }
+        } else {
+            // Full refund — restore all items
+            $_rf_all = $conn->query("SELECT menu_id, qty, removed_ingredient_ids FROM order_items WHERE order_id=$order_id");
+            if ($_rf_all) {
+                while ($_rf_row2 = $_rf_all->fetch_assoc()) {
+                    _pos_restore_ingredients($conn, (int)$_rf_row2['menu_id'], (int)$_rf_row2['qty'], $_rf_row2['removed_ingredient_ids'] ?? '[]');
+                }
+            }
         }
 
         $refund_amt_esc = number_format($refund_amt, 2, '.', '');
