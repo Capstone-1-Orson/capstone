@@ -126,6 +126,7 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
       .vr-stat .stat-num { font-size: 1.3rem; }
       .vr-modal { max-width: 98vw; }
     }
+
   </style>
 <style>
 @keyframes rtPulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.55)}70%{box-shadow:0 0 0 7px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
@@ -290,6 +291,19 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
 
               <!-- ── Active Orders Tab ───────────────────────── -->
               <div class="tab-pane fade show active" id="pane-active" role="tabpanel">
+                <!-- ── Real-time header bar ── -->
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid rgba(233,30,140,.15);background:rgba(233,30,140,.04);">
+                  <div id="activeRtNewBadge" style="display:none;">
+                    <span style="font-size:.8rem;font-weight:700;color:#e91e8c;">
+                      <i class="fas fa-bolt mr-1" style="font-size:.72rem;"></i>New order received — table updated
+                    </span>
+                  </div>
+                  <div style="flex:1;"></div>
+                  <span id="activeUpdatedAt" style="font-size:.78rem;color:#aaa;font-weight:600;">
+                    Updated <span id="activeUpdatedTime">—</span>
+                  </span>
+                </div>
+
                 <div class="table-responsive">
                   <table id="tbl-active" class="table table-bordered table-striped m-0">
                     <thead>
@@ -309,7 +323,7 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
                         <?php foreach ($pendingOrders as $o): ?>
                         <tr>
                           <td><strong>#<?= (int)$o['id'] ?></strong></td>
-                          <td><small class="text-muted"><?= date('M d, Y g:i A', strtotime($o['created_at'])) ?></small></td>
+                          <td><span data-order="<?= strtotime($o['created_at']) ?>"><small class="text-muted"><?= date('M d, Y g:i A', strtotime($o['created_at'])) ?></small></span></td>
                           <td><span class="badge badge-secondary">#<?= htmlspecialchars($o['table_no']) ?></span></td>
                           <td><?= htmlspecialchars($o['cashier_name'] ?? '—') ?></td>
                           <td title="<?= htmlspecialchars($o['items']) ?>"><?= htmlspecialchars(mb_strimwidth($o['items'], 0, 45, '…')) ?></td>
@@ -346,12 +360,13 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
                     <thead>
                       <tr>
                         <th>Order #</th>
-                        <th>Date &amp; Time</th>
+                        <th>Order Date</th>
                         <th>Bill No.</th>
                         <th>Cashier</th>
                         <th>Items</th>
                         <th>Qty</th>
                         <th>Amount Voided (&#8369;)</th>
+                        <th>Void Date</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -359,16 +374,18 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
                         <?php foreach ($voidedOrders as $o): ?>
                         <tr>
                           <td><strong>#<?= (int)$o['id'] ?></strong></td>
-                          <td><small class="text-muted"><?= date('M d, Y g:i A', strtotime($o['created_at'])) ?></small></td>
+                          <td><span data-order="<?= strtotime($o['created_at']) ?>"><small class="text-muted"><?= date('M d, Y g:i A', strtotime($o['created_at'])) ?></small></span></td>
                           <td><span class="badge badge-secondary">#<?= htmlspecialchars($o['table_no']) ?></span></td>
                           <td><?= htmlspecialchars($o['cashier_name'] ?? '—') ?></td>
                           <td title="<?= htmlspecialchars($o['items']) ?>"><?= htmlspecialchars(mb_strimwidth($o['items'], 0, 45, '…')) ?></td>
                           <td><?= (int)$o['total_qty'] ?></td>
                           <td><span class="text-danger font-weight-bold">&#8369;<?= number_format((float)$o['total_amt'], 2) ?></span></td>
+                          <?php $voidTs = $o['voided_at'] ?? $o['updated_at'] ?? $o['created_at']; ?>
+                          <td><span data-order="<?= $voidTs ? strtotime($voidTs) : 0 ?>"><small class="text-muted"><?= $voidTs ? date('M d, Y g:i A', strtotime($voidTs)) : '—' ?></small></span></td>
                         </tr>
                         <?php endforeach; ?>
                       <?php else: ?>
-                        <tr><td colspan="7" class="text-center text-muted p-4">No voided orders found.</td></tr>
+                        <tr><td colspan="8" class="text-center text-muted p-4">No voided orders found.</td></tr>
                       <?php endif; ?>
                     </tbody>
                   </table>
@@ -398,7 +415,7 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
                         <?php foreach ($refundedOrders as $o): ?>
                         <tr>
                           <td><strong>#<?= (int)$o['id'] ?></strong></td>
-                          <td><small class="text-muted"><?= date('M d, Y g:i A', strtotime($o['created_at'])) ?></small></td>
+                          <td><span data-order="<?= strtotime($o['created_at']) ?>"><small class="text-muted"><?= date('M d, Y g:i A', strtotime($o['created_at'])) ?></small></span></td>
                           <td><span class="badge badge-secondary">#<?= htmlspecialchars($o['table_no']) ?></span></td>
                           <td>
                             <?php if ($o['status'] === 'partial_refund'): ?>
@@ -412,7 +429,7 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
                           <td><span class="text-primary font-weight-bold">&#8369;<?= number_format((float)($o['refund_total'] ?? 0), 2) ?></span></td>
                           <td><?= htmlspecialchars($o['refund_reason'] ?? '—') ?></td>
                           <td><?= htmlspecialchars($o['processed_by'] ?? '—') ?></td>
-                          <td><small class="text-muted"><?= $o['refund_at'] ? date('M d, Y g:i A', strtotime($o['refund_at'])) : '—' ?></small></td>
+                          <td><span data-order="<?= $o['refund_at'] ? strtotime($o['refund_at']) : 0 ?>"><small class="text-muted"><?= $o['refund_at'] ? date('M d, Y g:i A', strtotime($o['refund_at'])) : '—' ?></small></span></td>
                         </tr>
                         <?php endforeach; ?>
                       <?php else: ?>
@@ -806,29 +823,57 @@ $(function () {
   applyMode(isDark);
 
   // ── Initialise DataTables ──────────────────────────────────────
+
+  /* Shared render function: extracts numeric timestamp from
+     data-order="..." for sorting, returns raw HTML for display */
+  function dtDateRender(data, type) {
+    if (type === 'sort' || type === 'type') {
+      var s = (typeof data === 'string') ? data : (data ? String(data) : '');
+      var m = s.match(/data-order="(\d+)"/);
+      return m ? parseInt(m[1], 10) : 0;
+    }
+    return data;
+  }
+
   // Active Orders: no search bar, no length-change dropdown
   if (!$.fn.DataTable.isDataTable('#tbl-active')) {
     $('#tbl-active').DataTable({
-      order:        [[0, 'desc']],
+      order:        [[1, 'desc']],
       searching:    false,
       lengthChange: false,
       pageLength:   10,
-      language:     { emptyTable: 'No active orders.' }
+      language:     { emptyTable: 'No active orders.' },
+      columnDefs: [
+        { targets: 1, type: 'num', render: dtDateRender },
+        { targets: 7, orderable: false, searchable: false },
+        { targets: '_all', defaultContent: '' }
+      ]
     });
   }
-  // Voided & Refunded: keep search + length controls
+  // Voided: keep search + length controls
   if (!$.fn.DataTable.isDataTable('#tbl-voided')) {
     $('#tbl-voided').DataTable({
-      order:      [[0, 'desc']],
+      order:      [[7, 'desc']],
       pageLength: 10,
-      language:   { emptyTable: 'No voided orders.' }
+      language:   { emptyTable: 'No voided orders.' },
+      columnDefs: [
+        { targets: 1, type: 'num', render: dtDateRender },
+        { targets: 7, type: 'num', render: dtDateRender },
+        { targets: '_all', defaultContent: '' }
+      ]
     });
   }
+  // Refunded: two date columns — col 1 (Order Date) and col 9 (Refund Date)
   if (!$.fn.DataTable.isDataTable('#tbl-refunded')) {
     $('#tbl-refunded').DataTable({
-      order:      [[0, 'desc']],
+      order:      [[1, 'desc']],
       pageLength: 10,
-      language:   { emptyTable: 'No refunded orders.' }
+      language:   { emptyTable: 'No refunded orders.' },
+      columnDefs: [
+        { targets: 1, type: 'num', render: dtDateRender },
+        { targets: 9, type: 'num', render: dtDateRender },
+        { targets: '_all', defaultContent: '' }
+      ]
     });
   }
 
@@ -871,6 +916,56 @@ $(function () {
     <div id="noToastTimeBadge"  style="background:rgba(255,255,255,.15);border-radius:20px;padding:3px 10px;font-size:.78rem;"></div>
   </div>
 </div>
+
+<!-- ── Void real-time notification toast ── -->
+<div id="voidRtToast" style="
+  display:none;position:fixed;bottom:24px;right:24px;z-index:99998;
+  min-width:300px;max-width:360px;
+  background:linear-gradient(135deg,#e74c3c 0%,#c0392b 100%);
+  color:#fff;border-radius:14px;
+  box-shadow:0 8px 32px rgba(231,76,60,.45);
+  padding:16px 20px;font-family:'Source Sans Pro',sans-serif;
+  animation:toastSlideIn .35s cubic-bezier(.22,1,.36,1);
+">
+  <div style="display:flex;align-items:flex-start;gap:12px;">
+    <div style="font-size:1.6rem;line-height:1;">🚫</div>
+    <div style="flex:1;">
+      <div style="font-weight:700;font-size:.95rem;margin-bottom:2px;">Order Voided</div>
+      <div id="voidRtMsg" style="font-size:.82rem;opacity:.9;">An order has been voided.</div>
+    </div>
+    <button onclick="document.getElementById('voidRtToast').style.display='none'"
+      style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;padding:0;line-height:1;opacity:.8;">✕</button>
+  </div>
+  <div style="margin-top:10px;display:flex;gap:8px;">
+    <div id="voidRtOrderBadge" style="background:rgba(255,255,255,.2);border-radius:20px;padding:3px 10px;font-size:.78rem;font-weight:600;"></div>
+    <div id="voidRtTimeBadge"  style="background:rgba(255,255,255,.15);border-radius:20px;padding:3px 10px;font-size:.78rem;"></div>
+  </div>
+</div>
+
+<!-- ── Refund real-time notification toast ── -->
+<div id="refundRtToast" style="
+  display:none;position:fixed;bottom:24px;right:24px;z-index:99997;
+  min-width:300px;max-width:360px;
+  background:linear-gradient(135deg,#3b82f6 0%,#1d4ed8 100%);
+  color:#fff;border-radius:14px;
+  box-shadow:0 8px 32px rgba(59,130,246,.45);
+  padding:16px 20px;font-family:'Source Sans Pro',sans-serif;
+  animation:toastSlideIn .35s cubic-bezier(.22,1,.36,1);
+">
+  <div style="display:flex;align-items:flex-start;gap:12px;">
+    <div style="font-size:1.6rem;line-height:1;">↩️</div>
+    <div style="flex:1;">
+      <div style="font-weight:700;font-size:.95rem;margin-bottom:2px;">Refund Processed</div>
+      <div id="refundRtMsg" style="font-size:.82rem;opacity:.9;">A refund has been processed.</div>
+    </div>
+    <button onclick="document.getElementById('refundRtToast').style.display='none'"
+      style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;padding:0;line-height:1;opacity:.8;">✕</button>
+  </div>
+  <div style="margin-top:10px;display:flex;gap:8px;">
+    <div id="refundRtOrderBadge" style="background:rgba(255,255,255,.2);border-radius:20px;padding:3px 10px;font-size:.78rem;font-weight:600;"></div>
+    <div id="refundRtTimeBadge"  style="background:rgba(255,255,255,.15);border-radius:20px;padding:3px 10px;font-size:.78rem;"></div>
+  </div>
+</div>
 <style>
 @keyframes toastSlideIn{from{opacity:0;transform:translateY(30px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
 </style>
@@ -906,6 +1001,62 @@ $(function () {
       g.gain.setValueAtTime(0.3, ctx.currentTime);
       g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
       osc.start(); osc.stop(ctx.currentTime + 0.4);
+    } catch(e){}
+  }
+
+  /* ── Show void real-time notification toast ── */
+  function showVoidRtToast(orderId, tableNo, amount) {
+    var toast = document.getElementById('voidRtToast');
+    if (!toast) return;
+    var msg   = document.getElementById('voidRtMsg');
+    var badge = document.getElementById('voidRtOrderBadge');
+    var time  = document.getElementById('voidRtTimeBadge');
+    if (msg)   msg.textContent   = 'Table #' + (tableNo || '—') + ' — ₱' + parseFloat(amount || 0).toLocaleString('en',{minimumFractionDigits:2}) + ' reversed';
+    if (badge) badge.textContent = 'Order #' + (orderId || '');
+    if (time)  time.textContent  = new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:true});
+    toast.style.display   = 'block';
+    toast.style.animation = 'none';
+    void toast.offsetWidth;
+    toast.style.animation = 'toastSlideIn .35s cubic-bezier(.22,1,.36,1)';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function(){ toast.style.display='none'; }, 7000);
+    /* low warning beep */
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ctx.createOscillator(); var g = ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.type = 'sine'; osc.frequency.value = 440;
+      g.gain.setValueAtTime(0.25, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      osc.start(); osc.stop(ctx.currentTime + 0.5);
+    } catch(e){}
+  }
+
+  /* ── Show refund real-time notification toast ── */
+  function showRefundRtToast(orderId, tableNo, amount) {
+    var toast = document.getElementById('refundRtToast');
+    if (!toast) return;
+    var msg   = document.getElementById('refundRtMsg');
+    var badge = document.getElementById('refundRtOrderBadge');
+    var time  = document.getElementById('refundRtTimeBadge');
+    if (msg)   msg.textContent   = 'Table #' + (tableNo || '—') + ' — ₱' + parseFloat(amount || 0).toLocaleString('en',{minimumFractionDigits:2}) + ' refunded';
+    if (badge) badge.textContent = 'Order #' + (orderId || '');
+    if (time)  time.textContent  = new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:true});
+    toast.style.display   = 'block';
+    toast.style.animation = 'none';
+    void toast.offsetWidth;
+    toast.style.animation = 'toastSlideIn .35s cubic-bezier(.22,1,.36,1)';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function(){ toast.style.display='none'; }, 7000);
+    /* info chime */
+    try {
+      var ctx = new (window.AudioContext || window.webkitAudioContext)();
+      var osc = ctx.createOscillator(); var g = ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.type = 'sine'; osc.frequency.value = 660;
+      g.gain.setValueAtTime(0.25, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+      osc.start(); osc.stop(ctx.currentTime + 0.45);
     } catch(e){}
   }
 
@@ -1018,32 +1169,90 @@ $(function () {
   /* ── Add a new row to the Active Orders DataTable ── */
   function injectActiveRow(o) {
     var dt = $('#tbl-active').DataTable();
+
+    /* Skip duplicates — check if this order ID already exists in the table */
+    var alreadyExists = false;
+    dt.rows().every(function () {
+      var rowData = this.data();
+      if (rowData && rowData[0] && String(rowData[0]).indexOf('>#' + o.id + '<') !== -1) {
+        alreadyExists = true;
+      }
+    });
+    if (alreadyExists) return;
+
     /* Build status badge */
     var statusBadge = '<span class="badge-done"><i class="fas fa-check mr-1"></i>' +
       (o.status.charAt(0).toUpperCase() + o.status.slice(1)) + '</span>';
-    /* Build action buttons */
-    var items  = (o.items || '—').replace(/'/g, "\\'");
-    var actions = '<div class="d-flex gap-1" style="gap:6px;">' +
-      '<button class="btn-void" onclick="openVoidModal(' + o.id + ',\'' +
-        o.table_no + '\',' + o.total_amt + ',\'' + items + '\')">' +
-        '<i class="fas fa-ban mr-1"></i>Void</button>' +
-      '<button class="btn-refund" onclick="openRefundModal(' + o.id + ',\'' +
-        o.table_no + '\',' + o.total_amt + ',\'' + items + '\')">' +
-        '<i class="fas fa-rotate-left mr-1"></i>Refund</button></div>';
 
-    var row = dt.row.add([
+    /* Build action buttons — safely escape item strings */
+    var safeItems = (o.items || '—')
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/"/g, '&quot;');
+    var safeTotal = parseFloat(o.total_amt || 0);
+    var actions =
+      '<div class="d-flex" style="gap:6px;">' +
+        '<button class="btn-void" onclick="openVoidModal(' + o.id + ',\'' +
+          o.table_no + '\',' + safeTotal + ',\'' + safeItems + '\')">' +
+          '<i class="fas fa-ban mr-1"></i>Void</button>' +
+        '<button class="btn-refund" onclick="openRefundModal(' + o.id + ',\'' +
+          o.table_no + '\',' + safeTotal + ',\'' + safeItems + '\')">' +
+          '<i class="fas fa-rotate-left mr-1"></i>Refund</button>' +
+      '</div>';
+
+    var ts = Math.floor(new Date((o.created_at || '').replace(' ', 'T')).getTime() / 1000);
+
+    var rowNode = dt.row.add([
       '<strong>#' + o.id + '</strong>',
-      '<small class="text-muted">' + fmtDate(o.created_at) + '</small>',
+      '<span data-order="' + ts + '"><small class="text-muted">' + fmtDate(o.created_at) + '</small></span>',
       '<span class="badge badge-secondary">#' + o.table_no + '</span>',
       o.cashier_name || '—',
-      '<span title="' + (o.items||'') + '">' + trimItems(o.items,45) + '</span>',
+      '<span title="' + (o.items || '').replace(/"/g, '&quot;') + '">' + trimItems(o.items, 45) + '</span>',
       statusBadge,
       '<strong>' + fmtPeso(o.total_amt) + '</strong>',
       actions
     ]).draw(false).node();
 
-    $(row).find('td').css({'white-space':'nowrap','overflow':'hidden','text-overflow':'ellipsis','max-width':'260px'});
-    flashRow(row);
+    /* Style cells */
+    $(rowNode).find('td').css({
+      'white-space': 'nowrap',
+      'overflow': 'hidden',
+      'text-overflow': 'ellipsis',
+      'max-width': '260px'
+    });
+
+    /* Append a pulsing "NEW" badge to the Order # cell */
+    $(rowNode).find('td:first').append(
+      ' <span class="new-order-badge" style="' +
+        'display:inline-block;background:#e91e8c;color:#fff;' +
+        'font-size:.62rem;font-weight:700;padding:1px 6px;' +
+        'border-radius:20px;vertical-align:middle;margin-left:4px;' +
+        'animation:rtPulse 1.4s 3;">' +
+      'NEW</span>'
+    );
+    /* Fade out the NEW badge after 10 s */
+    setTimeout(function () {
+      $(rowNode).find('.new-order-badge').fadeOut(400, function () { $(this).remove(); });
+    }, 10000);
+
+    /* Flash the entire row pink */
+    flashRow(rowNode);
+
+    /* Increment Active Orders tab badge */
+    var ab = tabBadge('pane-active');
+    if (ab) {
+      var cur = parseInt(ab.textContent, 10) || 0;
+      ab.textContent = cur + 1;
+    }
+
+    /* Re-sort by date descending so newest order appears first */
+    dt.order([1, 'desc']).draw(false);
+
+    /* Scroll the Active table into view */
+    var wrapper = document.querySelector('#tbl-active_wrapper');
+    if (wrapper) {
+      wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   }
 
   /* ── Helpers ── */
@@ -1059,14 +1268,18 @@ $(function () {
   /* ── Add a new row to the Voided DataTable ── */
   function injectVoidedRow(o) {
     var dt = $('#tbl-voided').DataTable();
+    var ts  = Math.floor(new Date((o.created_at || '').replace(' ', 'T')).getTime() / 1000);
+    var voidRaw = o.voided_at || o.updated_at || o.created_at || '';
+    var vts = voidRaw ? Math.floor(new Date(voidRaw.replace(' ', 'T')).getTime() / 1000) : 0;
     var row = dt.row.add([
       '<strong>#' + o.id + '</strong>',
-      '<small class="text-muted">' + fmtDate(o.created_at) + '</small>',
+      '<span data-order="' + ts + '"><small class="text-muted">' + fmtDate(o.created_at) + '</small></span>',
       '<span class="badge badge-secondary">#' + o.table_no + '</span>',
       o.cashier_name || '—',
       '<span title="' + (o.items||'') + '">' + trimItems(o.items,45) + '</span>',
       parseInt(o.total_qty||0,10),
-      '<span class="text-danger font-weight-bold">' + fmtPeso(o.total_amt) + '</span>'
+      '<span class="text-danger font-weight-bold">' + fmtPeso(o.total_amt) + '</span>',
+      '<span data-order="' + vts + '"><small class="text-muted">' + (voidRaw ? fmtDate(voidRaw) : '—') + '</small></span>'
     ]).draw(false).node();
     $(row).find('td').css({'white-space':'nowrap','overflow':'hidden','text-overflow':'ellipsis','max-width':'260px'});
     flashRow(row);
@@ -1078,9 +1291,11 @@ $(function () {
     var typeBadge = (o.status === 'partial_refund')
       ? '<span class="badge-partial"><i class="fas fa-adjust mr-1"></i>Partial</span>'
       : '<span class="badge-refunded"><i class="fas fa-rotate-left mr-1"></i>Full</span>';
+    var ts  = Math.floor(new Date((o.created_at || '').replace(' ', 'T')).getTime() / 1000);
+    var rts = o.refund_at ? Math.floor(new Date((o.refund_at || '').replace(' ', 'T')).getTime() / 1000) : 0;
     var row = dt.row.add([
       '<strong>#' + o.id + '</strong>',
-      '<small class="text-muted">' + fmtDate(o.created_at) + '</small>',
+      '<span data-order="' + ts + '"><small class="text-muted">' + fmtDate(o.created_at) + '</small></span>',
       '<span class="badge badge-secondary">#' + o.table_no + '</span>',
       typeBadge,
       '<span title="' + (o.items||'') + '">' + trimItems(o.items,40) + '</span>',
@@ -1088,7 +1303,7 @@ $(function () {
       '<span class="text-primary font-weight-bold">' + fmtPeso(o.refund_total) + '</span>',
       o.refund_reason || '—',
       o.processed_by  || '—',
-      '<small class="text-muted">' + (o.refund_at ? fmtDate(o.refund_at) : '—') + '</small>'
+      '<span data-order="' + rts + '"><small class="text-muted">' + (o.refund_at ? fmtDate(o.refund_at) : '—') + '</small></span>'
     ]).draw(false).node();
     $(row).find('td').css({'white-space':'nowrap','overflow':'hidden','text-overflow':'ellipsis','max-width':'260px'});
     flashRow(row);
@@ -1129,6 +1344,10 @@ $(function () {
       .then(function (d) {
         setDot(true);
 
+        /* ── Stamp "Updated HH:MM:SS" ── */
+        var _utEl = document.getElementById('activeUpdatedTime');
+        if (_utEl) _utEl.textContent = new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
+
         /* ── Stat cards ── */
         var vc = parseInt(d.voidedCount,   10) || 0;
         var rc = parseInt(d.refundedCount, 10) || 0;
@@ -1151,19 +1370,55 @@ $(function () {
           animateNum($stat(3), '₱' + tr.toLocaleString('en',{minimumFractionDigits:2}));
         }
 
-        /* ── Active Orders count badge ── */
-        if (pc !== _snap.pendingCount) {
-          var ab = tabBadge('pane-active'); if (ab) ab.textContent = pc;
+        /* ── Active Orders count badge — only update if no injections happened
+             (injectActiveRow already increments it per new row) ── */
+        if (pc !== _snap.pendingCount && injectedCount === 0) {
+          var ab2 = tabBadge('pane-active'); if (ab2) ab2.textContent = pc;
         }
 
         /* ── New active orders injected into table ── */
         var newOrders = d.newOrders || [];
+        // Sort ascending so oldest-new goes in first; newest ends up on top after DataTable re-sort
+        newOrders.sort(function(a, b) { return a.id - b.id; });
+        var injectedCount = 0;
         newOrders.forEach(function (o) {
           if (o.id > _snap.latestOrderId) {
             injectActiveRow(o);
-            _snap.latestOrderId = o.id;  // advance cursor immediately to prevent duplicates
+            _snap.latestOrderId = Math.max(_snap.latestOrderId, o.id);
+            injectedCount++;
           }
         });
+        /* Only advance the cursor from d.latestOrderId if newOrders was empty
+           (meaning there were truly no new orders, not that they were skipped) */
+        if (newOrders.length === 0 && d.latestOrderId > _snap.latestOrderId) {
+          _snap.latestOrderId = d.latestOrderId;
+        }
+        if (injectedCount > 0) {
+          /* Show the inline "New order received" banner above the table */
+          var _badge = document.getElementById('activeRtNewBadge');
+          if (_badge) {
+            var latestNew = newOrders[newOrders.length - 1];
+            var badgeInner = _badge.querySelector('span');
+            if (badgeInner && latestNew) {
+              badgeInner.innerHTML =
+                '<i class="fas fa-bolt mr-1" style="font-size:.72rem;"></i>' +
+                (injectedCount > 1
+                  ? injectedCount + ' new orders received — table updated'
+                  : 'New order #' + latestNew.id + ' — Table #' + (latestNew.table_no || '—') +
+                    ' · ' + fmtPeso(latestNew.total_amt) + ' — table updated');
+            }
+            _badge.style.display = 'block';
+            clearTimeout(_badge._bT);
+            _badge._bT = setTimeout(function () { _badge.style.display = 'none'; }, 7000);
+          }
+          /* Show the full new-order toast (same as SSE path) */
+          var latestO = newOrders[newOrders.length - 1];
+          if (latestO) {
+            showNewOrderToast({ latestOrder: latestO });
+          }
+          /* Top banner */
+          showBanner('🛎️ ' + injectedCount + ' new order(s) received', '#e91e8c');
+        }
 
         /* ── New voided orders injected into Voided tab ── */
         var newVoided = d.newVoided || [];
@@ -1190,14 +1445,18 @@ $(function () {
         /* ── Toasts for changes ── */
         if (vc > _snap.voidedCount) {
           showBanner('⚠️ ' + (vc - _snap.voidedCount) + ' order(s) voided', '#e74c3c');
+          if (newVoided.length) {
+            var lv = newVoided[newVoided.length - 1];
+            showVoidRtToast(lv.id, lv.table_no, lv.total_amt);
+          }
         }
         if (rc > _snap.refundedCount) {
           showBanner('↩️ ' + (rc - _snap.refundedCount) + ' order(s) refunded', '#3b82f6');
+          if (newRefunded.length) {
+            var lr = newRefunded[newRefunded.length - 1];
+            showRefundRtToast(lr.id, lr.table_no, lr.refund_total || lr.total_amt);
+          }
         }
-        if (d.latestOrderId > _snap.latestOrderId) {
-          _snap.latestOrderId = d.latestOrderId;
-        }
-
         /* ── Advance voided/refunded cursors ── */
         if (d.latestVoidedId   > _snap.latestVoidedId)   _snap.latestVoidedId   = d.latestVoidedId;
         if (d.latestRefundedId > _snap.latestRefundedId) _snap.latestRefundedId = d.latestRefundedId;
@@ -1213,10 +1472,15 @@ $(function () {
   }
 
   /* ── Start polling after page ready ── */
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () { setInterval(poll, POLL_MS); });
-  } else {
+  function startPolling() {
+    var _utEl = document.getElementById('activeUpdatedTime');
+    if (_utEl) _utEl.textContent = new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
     setInterval(poll, POLL_MS);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startPolling);
+  } else {
+    startPolling();
   }
 
 })();

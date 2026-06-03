@@ -882,7 +882,6 @@ $(function () {
   document.addEventListener('keydown',function(e){if(e.key==='Escape')drpClose();});
 })();
 </script>
-<script src="../dist/js/empress-realtime.js" data-scope="admin"></script>
 
 
 <!-- ══ NEW ORDER REAL-TIME NOTIFICATION ══════════════════════════════ -->
