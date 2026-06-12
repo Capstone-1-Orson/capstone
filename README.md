@@ -1,77 +1,9 @@
-# Empress Café – OOP Refactored Backend
-
-## What changed
-
-The original `Backend/` folder contained seven procedural scripts that mixed
-routing, validation, database calls, and email sending in a single file each.
-This refactor restructures them into a layered OOP architecture with no
-behaviour changes.
-
----
-
-## Directory layout
-
-```
-Backend/
-├── Core/
-│   ├── Database.php      – Singleton MySQLi wrapper
-│   ├── Session.php       – Named-session helper + flash messages
-│   └── Auth.php          – Role guards + CSRF verification
-│
-├── Models/               – Pure DB operations (no HTTP/session logic)
-│   ├── User.php
-│   ├── Ingredient.php
-│   ├── Menu.php
-│   ├── Supplier.php
-│   └── Order.php
-│
-├── Services/             – Business logic that spans multiple models
-│   ├── MailerService.php – All outbound email (OTP + verification)
-│   ├── ImageUploadService.php
-│   └── OrderService.php  – Stock pre-check, place, void/refund
-│
-└── Controllers/          – HTTP entry points (one per original script)
-    ├── LoginController.php      ← login.php
-    ├── StaffController.php      ← process.php
-    ├── InventoryController.php  ← inventory_process.php
-    ├── MenuController.php       ← menu_process.php
-    ├── SupplierController.php   ← supplier_process.php
-    └── PosController.php        ← pos_process.php + pos_void_refund.php
-```
-
----
-
-## OOP principles applied
-
-| Principle | Where |
-|-----------|-------|
-| **Single Responsibility** | Every class owns exactly one concern. `MailerService` only sends email; `User` only talks to the `user` table. |
-| **Encapsulation** | DB credentials live inside `Database`; SMTP credentials inside `MailerService`. No raw globals leak out. |
-| **Singleton** | `Database::getInstance()` ensures one connection per request. |
-| **Dependency Injection** | Controllers accept model/service objects they own, making unit testing straightforward. |
-| **DRY** | Image upload, password/email/contact validation, OTP generation, and redirect helpers are each written once. |
-| **Open/Closed** | Adding a new upload type (e.g. `'logo'`) only requires adding one constant to `ImageUploadService` — existing callers don't change. |
-
----
-
-## Migration: file-by-file mapping
-
-| Old file | New controller | Notes |
-|----------|----------------|-------|
-| `conn.php` | `Core/Database.php` | Singleton; no global `$conn` |
-| `login.php` | `Controllers/LoginController.php` | |
-| `process.php` (staff CRUD) | `Controllers/StaffController.php` | |
-| `inventory_process.php` | `Controllers/InventoryController.php` | |
-| `menu_process.php` | `Controllers/MenuController.php` | |
-| `supplier_process.php` | `Controllers/SupplierController.php` | |
-| `pos_process.php` | `Controllers/PosController.php` | merged |
-| `pos_void_refund.php` | `Controllers/PosController.php` | merged |
-
----
-
-## How to swap in the refactored files
-
-1. Copy the new `Backend/` sub-folders alongside the existing ones.
-2. Update `<form action="...">` in the frontend PHP pages to point to the new
-   controller paths (e.g. `../../Backend/Controllers/StaffController.php`).
-3. The database schema (`empress_cafe.sql`) is **unchanged**.
+Empress Café System — Purpose
+    The purpose of this system is to provide Empress Café with a centralized, web-based platform that digitalizes and streamlines its daily operations. In today's fast-paced food and beverage industry, managing a café manually through paper-based records and disconnected processes is no longer efficient or reliable. To address this challenge, the Empress Café system was developed to integrate all essential café functions into one organized, accessible, and easy-to-use digital solution that benefits both staff and management alike.
+    At its core, the system serves as a Point-of-Sale (POS) tool that allows staff to efficiently process customer orders and payments in real time. Rather than manually writing down orders or computing totals by hand, the POS interface enables faster and more accurate transaction handling, which ultimately leads to better customer service and reduced waiting time. Every order placed through the system is automatically recorded, ensuring that no transaction goes untracked.
+    In addition to order processing, the system plays a critical role in inventory management. It helps the management monitor and control the café's ingredient stock levels at all times. Whenever an order is placed, the corresponding ingredients are automatically deducted based on pre-set recipe requirements, eliminating the need for manual stock counting after every transaction. The system also flags low-stock items to alert the management before supplies run out, logs ingredient waste, and tracks expiry dates to minimize losses and maintain product quality. This level of inventory control helps the café avoid shortages, reduce waste, and manage costs more effectively.
+    Menu management is also made simpler and more flexible through the system. Administrators can easily add, update, or remove menu items at any time, assign prices, categorize products, and link each item to its required ingredients. This direct connection between the menu and the inventory ensures that stock deductions are always accurate and up to date whenever a sale is made.
+    Beyond the day-to-day transactions, the system also supports long-term business decision-making through its sales and revenue reporting features. The admin can view detailed reports on daily, weekly, or monthly sales performance, allowing them to identify trends, track revenue growth, and make informed decisions about pricing, promotions, or restocking. Having access to this data in a structured and visual format gives the management a clearer picture of how the business is performing over time.
+    The system further handles order refunds and voids in a controlled and documented manner, ensuring that any cancellations or errors in transactions are properly recorded and accounted for. Staff account management is also built into the system, allowing the admin to create, update, or deactivate staff accounts and assign appropriate access levels based on roles. This ensures that each user only has access to the features relevant to their responsibilities, maintaining security and accountability within the system.
+    Supplier management is another key feature, where the admin can maintain a record of the café's ingredient suppliers, making it easier to coordinate restocking when inventory runs low. To protect the system from unauthorized access, user authentication with email verification is implemented, ensuring that only verified and authorized personnel can log in and use the system.
+    Overall, the Empress Café system aims to improve operational efficiency, reduce human error, and give the management better visibility and control over every aspect of the business. By bringing together order processing, inventory tracking, menu management, sales reporting, staff management, and supplier records under a single web application, the system empowers Empress Café to operate in a more organized, data-driven, and professional manner — setting a strong foundation for growth and long-term success.
