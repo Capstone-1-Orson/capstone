@@ -1,99 +1,17 @@
-# Frontend OOP Refactor – Migration Guide
+Empress Café System — Purpose
 
-## What changed
+   The purpose of this system is to provide Empress Café with a centralized, web-based platform that digitalizes and streamlines its daily operations. In today's fast-paced food and beverage industry, managing a café manually through paper-based records and disconnected processes is no longer efficient or reliable. To address this challenge, the Empress Café system was developed to integrate all essential café functions into one organized, accessible, and easy-to-use digital solution that benefits both staff and management alike. 
+   
+   At its core, the system serves as a Point-of-Sale (POS) tool that allows staff to efficiently process customer orders and payments in real time. Rather than manually writing down orders or computing totals by hand, the POS interface enables faster and more accurate transaction handling, which ultimately leads to better customer service and reduced waiting time. Every order placed through the system is automatically recorded, ensuring that no transaction goes untracked.
+   
+   In addition to order processing, the system plays a critical role in inventory management. It helps the management monitor and control the café's ingredient stock levels at all times. Whenever an order is placed, the corresponding ingredients are automatically deducted based on pre-set recipe requirements, eliminating the need for manual stock counting after every transaction. The system also flags low-stock items to alert the management before supplies run out, logs ingredient waste, and tracks expiry dates to minimize losses and maintain product quality. This level of inventory control helps the café avoid shortages, reduce waste, and manage costs more effectively.
 
-Every admin page and the POS page previously had a raw PHP block at the top
-that mixed session checks, `require_once conn.php`, and inline DB queries
-directly with HTML. These blocks are now replaced by a single `require_once`
-of a dedicated **View class**, and the HTML body is left 100% intact.
+   Menu management is also made simpler and more flexible through the system. Administrators can easily add, update, or remove menu items at any time, assign prices, categorize products, and link each item to its required ingredients. This direct connection between the menu and the inventory ensures that stock deductions are always accurate and up to date whenever a sale is made.
 
----
+   Beyond the day-to-day transactions, the system also supports long-term business decision-making through its sales and revenue reporting features. The admin can view detailed reports on daily, weekly, or monthly sales performance, allowing them to identify trends, track revenue growth, and make informed decisions about pricing, promotions, or restocking. Having access to this data in a structured and visual format gives the management a clearer picture of how the business is performing over time.
 
-## File-by-file mapping
+   The system further handles order refunds and voids in a controlled and documented manner, ensuring that any cancellations or errors in transactions are properly recorded and accounted for. Staff account management is also built into the system, allowing the admin to create, update, or deactivate staff accounts and assign appropriate access levels based on roles. This ensures that each user only has access to the features relevant to their responsibilities, maintaining security and accountability within the system.
 
-| Original page | PHP header replaced with | View class |
-|---|---|---|
-| `ADMIN/index2.php` | `require_once DashboardView` | `Frontend/Core/DashboardView.php` |
-| `ADMIN/staff-list.php` | `require_once StaffView` | `Frontend/Core/StaffView.php` |
-| `ADMIN/inventory.php` | `require_once InventoryView` | `Frontend/Core/InventoryView.php` |
-| `ADMIN/menu-management.php` | `require_once MenuView` | `Frontend/Core/MenuView.php` |
-| `ADMIN/suppliers.php` | `require_once SupplierView` | `Frontend/Core/SupplierView.php` |
-| `ADMIN/void_refund.php` | `require_once VoidRefundView` | `Frontend/Core/VoidRefundView.php` |
-| `ADMIN/sale_revenue.php` | `require_once SalesRevenueView` | `Frontend/Core/SalesRevenueView.php` |
-| `ADMIN/report.php` | `require_once ReportView` | `Frontend/Core/ReportView.php` |
-| `ADMIN/settings.php` | `require_once SettingsView` | `Frontend/Core/SettingsView.php` |
-| `POS.php` | `require_once PosView` | `Frontend/Core/PosView.php` |
+   Supplier management is another key feature, where the admin can maintain a record of the café's ingredient suppliers, making it easier to coordinate restocking when inventory runs low. To protect the system from unauthorized access, user authentication with email verification is implemented, ensuring that only verified and authorized personnel can log in and use the system.
 
----
-
-## Form action URL changes
-
-All HTML `<form action="...">` attributes and JS `fetch(...)` calls now point
-to the new Controllers instead of the old flat scripts:
-
-| Old path | New path |
-|---|---|
-| `Backend/process.php` | `Backend/Controllers/StaffController.php` |
-| `Backend/inventory_process.php` | `Backend/Controllers/InventoryController.php` |
-| `Backend/menu_process.php` | `Backend/Controllers/MenuController.php` |
-| `Backend/supplier_process.php` | `Backend/Controllers/SupplierController.php` |
-| `Backend/pos_process.php` | `Backend/Controllers/PosController.php` |
-| `Backend/pos_void_refund.php` | `Backend/Controllers/PosController.php` |
-| `Backend/pos_get_order_items.php` | `Backend/Controllers/OrderItemsController.php` |
-
----
-
-## How the View classes work
-
-Each View class:
-
-1. **Calls `Auth::requireAdmin()` or `Auth::requireStaff()`** — replaces the
-   raw `session_name / session_start / if (!isset($_SESSION...))` block.
-2. **Dispatches AJAX / SSE requests early** (before any HTML is sent) if a
-   recognised query-string parameter is present (e.g. `?sse=1`, `?rt=1`,
-   `?ajax=topitems`).
-3. **Runs all DB queries** via the singleton `Database::getInstance()`.
-4. **Exposes named public properties** that the page template reads through
-   thin `$alias = $view->property` assignments at the very top of each page.
-
----
-
-## Variables that map to the HTML
-
-Because the HTML in every page references plain PHP variables
-(e.g. `$items`, `$totalRevenue`, `$chartDataJson`), each refactored page
-keeps short alias assignments immediately after instantiating the View.
-The HTML itself requires **no changes at all**.
-
----
-
-## Complete directory layout after refactor
-
-```
-Frontend/
-├── Core/                   ← NEW  (all data/logic lives here)
-│   ├── View.php            base class (auth, DB, flash messages)
-│   ├── DashboardView.php
-│   ├── InventoryView.php
-│   ├── MenuView.php
-│   ├── PosView.php
-│   ├── ReportView.php
-│   ├── SalesRevenueView.php
-│   ├── SettingsView.php
-│   ├── StaffView.php
-│   ├── SupplierView.php
-│   └── VoidRefundView.php
-│
-├── ADMIN/                  ← PHP header only, HTML unchanged
-│   ├── index2.php
-│   ├── staff-list.php
-│   ├── inventory.php
-│   ├── menu-management.php
-│   ├── suppliers.php
-│   ├── void_refund.php
-│   ├── sale_revenue.php
-│   ├── report.php
-│   └── settings.php
-│
-└── POS.php                 ← PHP header only, HTML unchanged
-```
+   Overall, the Empress Café system aims to improve operational efficiency, reduce human error, and give the management better visibility and control over every aspect of the business. By bringing together order processing, inventory tracking, menu management, sales reporting, staff management, and supplier records under a single web application, the system empowers Empress Café to operate in a more organized, data-driven, and professional manner — setting a strong foundation for growth and long-term success.
