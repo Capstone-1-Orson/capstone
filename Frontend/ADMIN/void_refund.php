@@ -128,9 +128,6 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
     }
 
   </style>
-<style>
-@keyframes rtPulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.55)}70%{box-shadow:0 0 0 7px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
-</style>
 </head>
 <body class="hold-transition dark-mode sidebar-mini layout-fixed layout-navbar-fixed layout-footer-fixed">
 <div class="wrapper">
@@ -215,7 +212,7 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
                   <i class="fas fa-ban"></i>
                 </div>
                 <div>
-                  <div class="stat-num" style="color:#e74c3c;"><?= $voidedCount ?></div>
+                  <div class="stat-num" style="color:#e74c3c;" data-rt-stat="voidedCount"><?= $voidedCount ?></div>
                   <div class="stat-lbl">Total Voided Orders</div>
                 </div>
               </div>
@@ -228,7 +225,7 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
                   <i class="fas fa-money-bill-wave"></i>
                 </div>
                 <div>
-                  <div class="stat-num" style="color:#e74c3c;">&#8369;<?= number_format($totalVoided, 2) ?></div>
+                  <div class="stat-num" style="color:#e74c3c;" data-rt-stat="totalVoided">&#8369;<?= number_format($totalVoided, 2) ?></div>
                   <div class="stat-lbl">Total Amount Voided</div>
                 </div>
               </div>
@@ -238,10 +235,10 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
             <div class="card h-100 m-0">
               <div class="card-body vr-stat">
                 <div class="icon-wrap" style="background:rgba(59,130,246,.12);color:#3b82f6;">
-                  <i class="fas fa-rotate-left"></i>
+                  <i class="fas fa-receipt"></i>
                 </div>
                 <div>
-                  <div class="stat-num" style="color:#3b82f6;"><?= $refundedCount ?></div>
+                  <div class="stat-num" style="color:#3b82f6;" data-rt-stat="refundedCount"><?= $refundedCount ?></div>
                   <div class="stat-lbl">Total Refunded Orders</div>
                 </div>
               </div>
@@ -254,7 +251,7 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
                   <i class="fas fa-coins"></i>
                 </div>
                 <div>
-                  <div class="stat-num" style="color:#3b82f6;">&#8369;<?= number_format($totalRefunded, 2) ?></div>
+                  <div class="stat-num" style="color:#3b82f6;" data-rt-stat="totalRefunded">&#8369;<?= number_format($totalRefunded, 2) ?></div>
                   <div class="stat-lbl">Total Refund Amount</div>
                 </div>
               </div>
@@ -280,7 +277,7 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
               </li>
               <li class="nav-item">
                 <a class="nav-link" id="tab-refunded" data-toggle="tab" href="#pane-refunded" role="tab">
-                  <i class="fas fa-rotate-left mr-1" style="color:#3b82f6"></i> Refunded
+                  <i class="fas fa-rotate-left mr-1" style="color:#3b82f6"></i><i class="fas fa-check-circle mr-1" style="color:#3b82f6;font-size:.7rem;vertical-align:middle;"></i> Refunded
                   <span class="badge badge-primary ml-1"><?= $refundedCount ?></span>
                 </a>
               </li>
@@ -291,20 +288,7 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
 
               <!-- ── Active Orders Tab ───────────────────────── -->
               <div class="tab-pane fade show active" id="pane-active" role="tabpanel">
-                <!-- ── Real-time header bar ── -->
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid rgba(233,30,140,.15);background:rgba(233,30,140,.04);">
-                  <div id="activeRtNewBadge" style="display:none;">
-                    <span style="font-size:.8rem;font-weight:700;color:#e91e8c;">
-                      <i class="fas fa-bolt mr-1" style="font-size:.72rem;"></i>New order received — table updated
-                    </span>
-                  </div>
-                  <div style="flex:1;"></div>
-                  <span id="activeUpdatedAt" style="font-size:.78rem;color:#aaa;font-weight:600;">
-                    Updated <span id="activeUpdatedTime">—</span>
-                  </span>
-                </div>
-
-                <div class="table-responsive">
+                  <div class="table-responsive">
                   <table id="tbl-active" class="table table-bordered table-striped m-0">
                     <thead>
                       <tr>
@@ -421,7 +405,7 @@ $pendingOrdersJson = $view->pendingOrdersJson ?? json_encode($view->pendingOrder
                             <?php if ($o['status'] === 'partial_refund'): ?>
                               <span class="badge-partial"><i class="fas fa-adjust mr-1"></i>Partial</span>
                             <?php else: ?>
-                              <span class="badge-refunded"><i class="fas fa-rotate-left mr-1"></i>Full</span>
+                              <span class="badge-refunded"><i class="fas fa-check-circle mr-1"></i>Full Refund</span>
                             <?php endif; ?>
                           </td>
                           <td title="<?= htmlspecialchars($o['items']) ?>"><?= htmlspecialchars(mb_strimwidth($o['items'], 0, 40, '…')) ?></td>
@@ -600,7 +584,6 @@ async function submitVoid() {
       showToast('Order #' + voidOrderId + ' has been voided.', '#e74c3c');
       // Remove from Active table immediately
       removeActiveRow(voidOrderId);
-      // The next poll will inject the row into the Voided tab and update stats
     } else {
       showToast(data.message || 'Failed to void order.', '#e74c3c');
       btn.disabled = false;
@@ -765,7 +748,6 @@ async function submitRefund() {
       showToast('Refund processed for Order #' + refundOrderId + '.', '#3b82f6');
       // Remove from Active table immediately
       removeActiveRow(refundOrderId);
-      // The next poll will inject the row into the Refunded tab and update stats
     } else {
       showToast(data.message || 'Failed to process refund.', '#e74c3c');
       btn.disabled = false;
@@ -799,11 +781,18 @@ function showToast(msg, color) {
 
 // ── Remove a row from the Active Orders DataTable (global scope) ──
 function removeActiveRow(orderId) {
-  var dt  = $('#tbl-active').DataTable();
-  var str = '#' + orderId;
+  var dt     = $('#tbl-active').DataTable();
+  var needle = '>#' + orderId + '<';
   dt.rows(function(i, data) {
-    return typeof data[0] === 'string' && data[0].indexOf('>' + str + '<') !== -1;
+    return typeof data[0] === 'string' && data[0].indexOf(needle) !== -1;
   }).remove().draw(false);
+
+  // Also update the Active Orders tab badge count
+  var badge = document.querySelector('#tab-active .badge');
+  if (badge) {
+    var cur = parseInt(badge.textContent, 10);
+    if (!isNaN(cur) && cur > 0) badge.textContent = cur - 1;
+  }
 }
 
 // ── Dark Mode ──────────────────────────────────────────────────
@@ -838,12 +827,20 @@ $(function () {
   // Active Orders: no search bar, no length-change dropdown
   if (!$.fn.DataTable.isDataTable('#tbl-active')) {
     $('#tbl-active').DataTable({
-      order:        [[1, 'desc']],
+      order:        [[0, 'desc']],
       searching:    false,
       lengthChange: false,
       pageLength:   10,
       language:     { emptyTable: 'No active orders.' },
       columnDefs: [
+        { targets: 0, type: 'num', render: function(data, type) {
+            if (type === 'sort' || type === 'type') {
+              var m = String(data).match(/\d+/);
+              return m ? parseInt(m[0], 10) : 0;
+            }
+            return data;
+          }
+        },
         { targets: 1, type: 'num', render: dtDateRender },
         { targets: 7, orderable: false, searchable: false },
         { targets: '_all', defaultContent: '' }
@@ -889,86 +886,364 @@ $(function () {
 </script>
 
 
+<script>
+/* ══ empress-realtime: void_refund.php — polling via ?rt=1 ══ */
+(function(){
+  'use strict';
 
+  var POLL_URL      = window.location.pathname + '?rt=1';
+  var POLL_INTERVAL = 10000; // 10 s
 
+  // Seed cursors from PHP so we never show stale flash on first load
+  var _sinceActive   = <?= (int)$view->maxActiveOrderId ?>;
+  var _sinceVoided   = <?= (int)$view->maxVoidedId ?>;
+  var _sinceRefunded = <?= (int)$view->maxRefundedId ?>;
 
-<!-- ══ NEW ORDER REAL-TIME NOTIFICATION (SSE) ══════════════════════ -->
-<div id="newOrderToast" style="
-  display:none;position:fixed;bottom:24px;right:24px;z-index:99999;
-  min-width:300px;max-width:360px;
-  background:linear-gradient(135deg,#e91e8c 0%,#9c27b0 100%);
-  color:#fff;border-radius:14px;
-  box-shadow:0 8px 32px rgba(233,30,140,.45);
-  padding:16px 20px;font-family:'Source Sans Pro',sans-serif;
-  animation:toastSlideIn .35s cubic-bezier(.22,1,.36,1);
-">
-  <div style="display:flex;align-items:flex-start;gap:12px;">
-    <div style="font-size:1.6rem;line-height:1;">🛎️</div>
-    <div style="flex:1;">
-      <div style="font-weight:700;font-size:.95rem;margin-bottom:2px;">New Order Received!</div>
-      <div id="noToastMsg" style="font-size:.82rem;opacity:.9;">A new order just came in.</div>
-    </div>
-    <button onclick="document.getElementById('newOrderToast').style.display='none'"
-      style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;padding:0;line-height:1;opacity:.8;">✕</button>
-  </div>
-  <div style="margin-top:10px;display:flex;gap:8px;">
-    <div id="noToastOrderBadge" style="background:rgba(255,255,255,.2);border-radius:20px;padding:3px 10px;font-size:.78rem;font-weight:600;"></div>
-    <div id="noToastTimeBadge"  style="background:rgba(255,255,255,.15);border-radius:20px;padding:3px 10px;font-size:.78rem;"></div>
-  </div>
-</div>
+  /* ── helpers ── */
+  function esc(s){
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function peso(v){ return '₱'+parseFloat(v||0).toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function fmtDate(ts){
+    if(!ts) return '—';
+    var d=new Date(ts.replace(' ','T'));
+    return isNaN(d)?ts:d.toLocaleDateString('en-PH',{month:'short',day:'2-digit',year:'numeric'})+' '+d.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:true});
+  }
+  function flashRow(tr, colour){
+    tr.style.transition='none';
+    tr.style.backgroundColor=colour||'rgba(233,30,140,.18)';
+    setTimeout(function(){ tr.style.transition='background-color 1.6s ease'; tr.style.backgroundColor=''; },80);
+  }
+  function setDot(ok){
+    document.querySelectorAll('.rt-live-dot').forEach(function(d){
+      d.style.background=ok?'#22c55e':'#ef4444';
+      d.title=ok?'Live — connected':'Live — reconnecting…';
+    });
+  }
 
-<!-- ── Void real-time notification toast ── -->
-<div id="voidRtToast" style="
-  display:none;position:fixed;bottom:24px;right:24px;z-index:99998;
-  min-width:300px;max-width:360px;
-  background:linear-gradient(135deg,#e74c3c 0%,#c0392b 100%);
-  color:#fff;border-radius:14px;
-  box-shadow:0 8px 32px rgba(231,76,60,.45);
-  padding:16px 20px;font-family:'Source Sans Pro',sans-serif;
-  animation:toastSlideIn .35s cubic-bezier(.22,1,.36,1);
-">
-  <div style="display:flex;align-items:flex-start;gap:12px;">
-    <div style="font-size:1.6rem;line-height:1;">🚫</div>
-    <div style="flex:1;">
-      <div style="font-weight:700;font-size:.95rem;margin-bottom:2px;">Order Voided</div>
-      <div id="voidRtMsg" style="font-size:.82rem;opacity:.9;">An order has been voided.</div>
-    </div>
-    <button onclick="document.getElementById('voidRtToast').style.display='none'"
-      style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;padding:0;line-height:1;opacity:.8;">✕</button>
-  </div>
-  <div style="margin-top:10px;display:flex;gap:8px;">
-    <div id="voidRtOrderBadge" style="background:rgba(255,255,255,.2);border-radius:20px;padding:3px 10px;font-size:.78rem;font-weight:600;"></div>
-    <div id="voidRtTimeBadge"  style="background:rgba(255,255,255,.15);border-radius:20px;padding:3px 10px;font-size:.78rem;"></div>
-  </div>
-</div>
+  /* ── stat cards ── */
+  function updateStats(d){
+    var cards={
+      voidedCount:   document.querySelector('[data-rt-stat="voidedCount"]'),
+      totalVoided:   document.querySelector('[data-rt-stat="totalVoided"]'),
+      refundedCount: document.querySelector('[data-rt-stat="refundedCount"]'),
+      totalRefunded: document.querySelector('[data-rt-stat="totalRefunded"]')
+    };
+    if(cards.voidedCount)   cards.voidedCount.textContent   = d.voidedCount;
+    if(cards.totalVoided)   cards.totalVoided.textContent   = peso(d.totalVoided);
+    if(cards.refundedCount) cards.refundedCount.textContent = d.refundedCount;
+    if(cards.totalRefunded) cards.totalRefunded.textContent = peso(d.totalRefunded);
 
-<!-- ── Refund real-time notification toast ── -->
-<div id="refundRtToast" style="
-  display:none;position:fixed;bottom:24px;right:24px;z-index:99997;
-  min-width:300px;max-width:360px;
-  background:linear-gradient(135deg,#3b82f6 0%,#1d4ed8 100%);
-  color:#fff;border-radius:14px;
-  box-shadow:0 8px 32px rgba(59,130,246,.45);
-  padding:16px 20px;font-family:'Source Sans Pro',sans-serif;
-  animation:toastSlideIn .35s cubic-bezier(.22,1,.36,1);
-">
-  <div style="display:flex;align-items:flex-start;gap:12px;">
-    <div style="font-size:1.6rem;line-height:1;">↩️</div>
-    <div style="flex:1;">
-      <div style="font-weight:700;font-size:.95rem;margin-bottom:2px;">Refund Processed</div>
-      <div id="refundRtMsg" style="font-size:.82rem;opacity:.9;">A refund has been processed.</div>
-    </div>
-    <button onclick="document.getElementById('refundRtToast').style.display='none'"
-      style="background:none;border:none;color:#fff;font-size:1.1rem;cursor:pointer;padding:0;line-height:1;opacity:.8;">✕</button>
-  </div>
-  <div style="margin-top:10px;display:flex;gap:8px;">
-    <div id="refundRtOrderBadge" style="background:rgba(255,255,255,.2);border-radius:20px;padding:3px 10px;font-size:.78rem;font-weight:600;"></div>
-    <div id="refundRtTimeBadge"  style="background:rgba(255,255,255,.15);border-radius:20px;padding:3px 10px;font-size:.78rem;"></div>
-  </div>
-</div>
-<style>
-@keyframes toastSlideIn{from{opacity:0;transform:translateY(30px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
-</style>
+    // Tab badges
+    var bVoided   = document.querySelector('#tab-voided .badge');
+    var bRefunded = document.querySelector('#tab-refunded .badge');
+    if(bVoided)   bVoided.textContent   = d.voidedCount;
+    if(bRefunded) bRefunded.textContent = d.refundedCount;
+  }
+
+  /* ── prepend new rows to Active DataTable ── */
+  function applyNewOrders(orders){
+    if(!orders||!orders.length) return;
+    var dt=$.fn.DataTable.isDataTable('#tbl-active')?$('#tbl-active').DataTable():null;
+    if(!dt) return;
+    orders.forEach(function(o){
+      var ts=parseInt(new Date(o.created_at.replace(' ','T')).getTime()/1000,10)||0;
+      var dateHtml='<span data-order="'+ts+'"><small class="text-muted">'+esc(fmtDate(o.created_at))+'</small></span>';
+      var rowNode=dt.row.add([
+        '<strong>#'+o.id+'</strong>',
+        dateHtml,
+        '<span class="badge badge-secondary">#'+esc(o.table_no)+'</span>',
+        esc(o.cashier_name||'N/A'),
+        esc(o.items||'—'),
+        '<span class="badge-done"><i class="fas fa-check mr-1"></i>'+esc(o.status||'active')+'</span>',
+        '<strong>'+peso(o.total_amt)+'</strong>',
+        '<div class="d-flex" style="gap:6px;">'
+          +'<button class="btn-void" onclick="openVoidModal('+o.id+',\''+esc(o.table_no)+'\','+parseFloat(o.total_amt)+',\''+esc(o.items||'')+'\')">'
+          +'<i class="fas fa-ban mr-1"></i>Void</button>'
+          +'<button class="btn-refund" onclick="openRefundModal('+o.id+',\''+esc(o.table_no)+'\','+parseFloat(o.total_amt)+',\''+esc(o.items||'')+'\')">'
+          +'<i class="fas fa-rotate-left mr-1"></i>Refund</button></div>'
+      ]).node();
+      dt.draw(false);
+      flashRow(rowNode,'rgba(40,167,69,.15)');
+    });
+    // update Active tab badge
+    var bActive=document.querySelector('#tab-active .badge');
+    if(bActive) bActive.textContent=parseInt(bActive.textContent||'0',10)+orders.length;
+  }
+
+  /* ── remove voided/refunded orders from Active DataTable ── */
+  function applyRemovedIds(ids){
+    if(!ids||!ids.length) return;
+    var dt=$.fn.DataTable.isDataTable('#tbl-active')?$('#tbl-active').DataTable():null;
+    if(!dt) return;
+    var removed=0;
+    ids.forEach(function(id){
+      var needle='>#'+id+'<';
+      var matched=dt.rows(function(i,data){
+        return typeof data[0]==='string'&&data[0].indexOf(needle)!==-1;
+      });
+      if(matched.count()){ matched.remove(); removed++; }
+    });
+    if(removed){
+      dt.draw(false);
+      var bActive=document.querySelector('#tab-active .badge');
+      if(bActive){
+        var cur=parseInt(bActive.textContent||'0',10)-removed;
+        bActive.textContent=Math.max(0,cur);
+      }
+    }
+  }
+
+  /* ── prepend new voided rows to Voided DataTable ── */
+  function applyNewVoided(rows){
+    if(!rows||!rows.length) return;
+    var dt=$.fn.DataTable.isDataTable('#tbl-voided')?$('#tbl-voided').DataTable():null;
+    if(!dt) return;
+    rows.forEach(function(o){
+      var ts=parseInt(new Date(o.created_at.replace(' ','T')).getTime()/1000,10)||0;
+      var dateHtml='<span data-order="'+ts+'"><small class="text-muted">'+esc(fmtDate(o.created_at))+'</small></span>';
+      // Void date — use created_at as proxy if no voided_at column
+      var voidTs=o.voided_at||o.updated_at||o.created_at;
+      var vts=parseInt(new Date(voidTs.replace(' ','T')).getTime()/1000,10)||0;
+      var voidDateHtml='<span data-order="'+vts+'"><small class="text-muted">'+esc(fmtDate(voidTs))+'</small></span>';
+      var rowNode=dt.row.add([
+        '<strong>#'+o.id+'</strong>',
+        dateHtml,
+        '<span class="badge badge-secondary">#'+esc(o.table_no)+'</span>',
+        esc(o.cashier_name||'N/A'),
+        esc(o.items||'—'),
+        o.total_qty||0,
+        '<span class="text-danger font-weight-bold">'+peso(o.total_amt)+'</span>',
+        voidDateHtml
+      ]).node();
+      dt.draw(false);
+      flashRow(rowNode,'rgba(239,68,68,.15)');
+    });
+  }
+
+  /* ── prepend new refunded rows to Refunded DataTable ── */
+  function applyNewRefunded(rows){
+    if(!rows||!rows.length) return;
+    var dt=$.fn.DataTable.isDataTable('#tbl-refunded')?$('#tbl-refunded').DataTable():null;
+    if(!dt) return;
+    rows.forEach(function(o){
+      var ts=parseInt(new Date(o.created_at.replace(' ','T')).getTime()/1000,10)||0;
+      var dateHtml='<span data-order="'+ts+'"><small class="text-muted">'+esc(fmtDate(o.created_at))+'</small></span>';
+      var rts=parseInt(new Date((o.refund_at||o.created_at).replace(' ','T')).getTime()/1000,10)||0;
+      var refundDateHtml='<span data-order="'+rts+'"><small class="text-muted">'+esc(fmtDate(o.refund_at||o.created_at))+'</small></span>';
+      var typeBadge=o.status==='partial_refund'
+        ?'<span class="badge-partial"><i class="fas fa-adjust mr-1"></i>Partial</span>'
+        :'<span class="badge-refunded"><i class="fas fa-rotate-left mr-1"></i>Full</span>';
+      var rowNode=dt.row.add([
+        '<strong>#'+o.id+'</strong>',
+        dateHtml,
+        '<span class="badge badge-secondary">#'+esc(o.table_no)+'</span>',
+        typeBadge,
+        esc(o.items||'—'),
+        '<s class="text-muted">'+peso(o.total_amt)+'</s>',
+        '<span class="text-primary font-weight-bold">'+peso(o.refund_total||0)+'</span>',
+        esc(o.refund_reason||'—'),
+        esc(o.processed_by||'—'),
+        refundDateHtml
+      ]).node();
+      dt.draw(false);
+      flashRow(rowNode,'rgba(59,130,246,.15)');
+    });
+  }
+
+  /* ── main poll ── */
+  function poll(){
+    var url=POLL_URL
+      +'&since='+_sinceActive
+      +'&sinceVoided='+_sinceVoided
+      +'&sinceRefunded='+_sinceRefunded;
+    fetch(url,{cache:'no-store',credentials:'same-origin'})
+      .then(function(r){
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        return r.json();
+      })
+      .then(function(d){
+        setDot(true);
+
+        // Update cursor positions FIRST so we never re-fetch the same rows
+        if(d.latestOrderId    > _sinceActive)   _sinceActive   = d.latestOrderId;
+        if(d.latestVoidedId   > _sinceVoided)   _sinceVoided   = d.latestVoidedId;
+        if(d.latestRefundedId > _sinceRefunded) _sinceRefunded = d.latestRefundedId;
+
+        updateStats(d);
+        if(d.newOrders   &&d.newOrders.length)   applyNewOrders(d.newOrders);
+        if(d.removedIds  &&d.removedIds.length)   applyRemovedIds(d.removedIds);
+        if(d.newVoided   &&d.newVoided.length)    applyNewVoided(d.newVoided);
+        if(d.newRefunded &&d.newRefunded.length)  applyNewRefunded(d.newRefunded);
+      })
+      .catch(function(){ setDot(false); });
+  }
+
+  $(function(){
+    setInterval(poll, POLL_INTERVAL);
+    // Run one poll shortly after page load to catch anything that arrived
+    // between PHP render and JS boot
+    setTimeout(poll, 2000);
+  });
+})();
+</script>
+<!-- ══ END void_refund realtime polling ══════════════════════════════ -->
+
+<!-- (dead report.php SSE block removed) -->
+
+<!-- ══ TOP SELLING ITEMS — DataTable init + Real-Time Polling ════════ -->
+<script>
+// Initialize DataTable for Top Selling Items
+$(function(){
+  $('#topItemsTable').DataTable({
+    responsive: true, lengthChange: false, autoWidth: false,
+    order: [[4, 'desc']],
+    buttons: ['copy','csv','excel','pdf','print','colvis']
+  }).buttons().container().appendTo('#topItemsTable_wrapper .col-md-6:eq(0)');
+});
+</script>
+<script>
+(function(){
+  'use strict';
+
+  var POLL_INTERVAL = 30000; // refresh every 30 seconds
+
+  function buildUrl() {
+    var params = new URLSearchParams(window.location.search);
+    params.set('ajax', 'topitems');
+    return window.location.pathname + '?' + params.toString();
+  }
+
+  function setDot(ok) {
+    var dot = document.querySelector('.top-items-live-dot');
+    if (!dot) return;
+    dot.style.background = ok ? '#22c55e' : '#ef4444';
+    dot.title = ok ? 'Live — connected' : 'Live — reconnecting…';
+  }
+
+  function fmtNum(n, decimals) {
+    return parseFloat(n || 0).toLocaleString('en', {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
+  }
+
+  function rankBadge(rank) {
+    if (rank === 1) return '<span class="badge" style="background:#f4c542;color:#333;">🥇 1</span>';
+    if (rank === 2) return '<span class="badge" style="background:#b0b8c1;color:#fff;">🥈 2</span>';
+    if (rank === 3) return '<span class="badge" style="background:#cd7f32;color:#fff;">🥉 3</span>';
+    return '<span class="badge badge-secondary">' + rank + '</span>';
+  }
+
+  function flashRow(tr, color) {
+    tr.style.transition = 'none';
+    tr.style.backgroundColor = color;
+    setTimeout(function(){
+      tr.style.transition = 'background-color 1.6s ease';
+      tr.style.backgroundColor = '';
+    }, 80);
+  }
+
+  function flashCell(td, color) {
+    td.style.transition = 'none';
+    td.style.backgroundColor = color;
+    setTimeout(function(){
+      td.style.transition = 'background-color 1.6s ease';
+      td.style.backgroundColor = '';
+    }, 80);
+  }
+
+  function renderRows(items) {
+    var tbody = document.getElementById('topItemsTbody');
+    var tsEl  = document.getElementById('topItemsLastUpdated');
+    if (!tbody) return;
+
+    if (!items || !items.length) {
+      if ($.fn.DataTable.isDataTable('#topItemsTable')) {
+        $('#topItemsTable').DataTable().destroy();
+      }
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No sales data yet.</td></tr>';
+      return;
+    }
+
+    // Snapshot prev state from DOM before destroy
+    var prevQtyMap  = {};
+    var prevRankMap = {};
+    tbody.querySelectorAll('tr[data-item-name]').forEach(function(tr, idx){
+      var name = tr.getAttribute('data-item-name');
+      prevQtyMap[name]  = parseInt(tr.getAttribute('data-item-qty') || '0', 10);
+      prevRankMap[name] = idx;
+    });
+
+    // Destroy DataTables so we can safely rewrite tbody
+    if ($.fn.DataTable.isDataTable('#topItemsTable')) {
+      $('#topItemsTable').DataTable().destroy();
+    }
+
+    // Build new rows
+    var html = items.map(function(it, idx){
+      var qty     = parseInt(it.qty_sold, 10);
+      var escaped = it.name.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return '<tr data-item-name="' + escaped + '" data-item-qty="' + qty + '">'
+        + '<td>' + rankBadge(idx + 1) + '</td>'
+        + '<td>' + escaped + '</td>'
+        + '<td>' + (it.category || '—') + '</td>'
+        + '<td>' + fmtNum(it.price, 2) + '</td>'
+        + '<td class="qty-cell"><strong>' + qty + '</strong></td>'
+        + '<td>₱' + fmtNum(it.revenue, 2) + '</td>'
+        + '</tr>';
+    }).join('');
+
+    tbody.innerHTML = html;
+
+    // Apply highlights after DOM is updated
+    tbody.querySelectorAll('tr[data-item-name]').forEach(function(tr, idx){
+      var name   = tr.getAttribute('data-item-name');
+      var qty    = parseInt(tr.getAttribute('data-item-qty'), 10);
+      var wasNew = !(name in prevQtyMap);
+      var qtyUp  = !wasNew && qty > (prevQtyMap[name] || 0);
+      var rankChg = !wasNew && prevRankMap[name] !== idx;
+
+      if (wasNew) {
+        flashRow(tr, 'rgba(233,30,140,.18)');
+      } else if (qtyUp) {
+        flashRow(tr, 'rgba(40,167,69,.10)');
+        var qtyTd = tr.querySelector('.qty-cell');
+        if (qtyTd) flashCell(qtyTd, 'rgba(40,167,69,.45)');
+      } else if (rankChg) {
+        flashRow(tr, 'rgba(255,193,7,.25)');
+      }
+    });
+
+    // Reinitialize DataTables
+    $('#topItemsTable').DataTable({
+      responsive: true, lengthChange: false, autoWidth: false,
+      order: [[4, 'desc']],
+      buttons: ['copy','csv','excel','pdf','print','colvis']
+    }).buttons().container().appendTo('#topItemsTable_wrapper .col-md-6:eq(0)');
+
+    if (tsEl) {
+      var now = new Date();
+      tsEl.textContent = 'Updated ' + now.toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
+    }
+  }
+
+  function poll() {
+    fetch(buildUrl(), {cache: 'no-store'})
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        setDot(true);
+        renderRows(data.items || []);
+      })
+      .catch(function(){
+        setDot(false);
+      });
+  }
+
+  // Start polling after DOM + DataTables are ready
+  $(function(){
+    setInterval(poll, POLL_INTERVAL);
+  });
+})();
+</script>
+<!-- ══ END top items real-time ════════════════════════════════════════ -->
 <script>
 /* ── empress-realtime-notify: new-order toast on all admin pages ── */
 (function(){
@@ -1001,62 +1276,6 @@ $(function () {
       g.gain.setValueAtTime(0.3, ctx.currentTime);
       g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
       osc.start(); osc.stop(ctx.currentTime + 0.4);
-    } catch(e){}
-  }
-
-  /* ── Show void real-time notification toast ── */
-  function showVoidRtToast(orderId, tableNo, amount) {
-    var toast = document.getElementById('voidRtToast');
-    if (!toast) return;
-    var msg   = document.getElementById('voidRtMsg');
-    var badge = document.getElementById('voidRtOrderBadge');
-    var time  = document.getElementById('voidRtTimeBadge');
-    if (msg)   msg.textContent   = 'Table #' + (tableNo || '—') + ' — ₱' + parseFloat(amount || 0).toLocaleString('en',{minimumFractionDigits:2}) + ' reversed';
-    if (badge) badge.textContent = 'Order #' + (orderId || '');
-    if (time)  time.textContent  = new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:true});
-    toast.style.display   = 'block';
-    toast.style.animation = 'none';
-    void toast.offsetWidth;
-    toast.style.animation = 'toastSlideIn .35s cubic-bezier(.22,1,.36,1)';
-    clearTimeout(toast._t);
-    toast._t = setTimeout(function(){ toast.style.display='none'; }, 7000);
-    /* low warning beep */
-    try {
-      var ctx = new (window.AudioContext || window.webkitAudioContext)();
-      var osc = ctx.createOscillator(); var g = ctx.createGain();
-      osc.connect(g); g.connect(ctx.destination);
-      osc.type = 'sine'; osc.frequency.value = 440;
-      g.gain.setValueAtTime(0.25, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-      osc.start(); osc.stop(ctx.currentTime + 0.5);
-    } catch(e){}
-  }
-
-  /* ── Show refund real-time notification toast ── */
-  function showRefundRtToast(orderId, tableNo, amount) {
-    var toast = document.getElementById('refundRtToast');
-    if (!toast) return;
-    var msg   = document.getElementById('refundRtMsg');
-    var badge = document.getElementById('refundRtOrderBadge');
-    var time  = document.getElementById('refundRtTimeBadge');
-    if (msg)   msg.textContent   = 'Table #' + (tableNo || '—') + ' — ₱' + parseFloat(amount || 0).toLocaleString('en',{minimumFractionDigits:2}) + ' refunded';
-    if (badge) badge.textContent = 'Order #' + (orderId || '');
-    if (time)  time.textContent  = new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',hour12:true});
-    toast.style.display   = 'block';
-    toast.style.animation = 'none';
-    void toast.offsetWidth;
-    toast.style.animation = 'toastSlideIn .35s cubic-bezier(.22,1,.36,1)';
-    clearTimeout(toast._t);
-    toast._t = setTimeout(function(){ toast.style.display='none'; }, 7000);
-    /* info chime */
-    try {
-      var ctx = new (window.AudioContext || window.webkitAudioContext)();
-      var osc = ctx.createOscillator(); var g = ctx.createGain();
-      osc.connect(g); g.connect(ctx.destination);
-      osc.type = 'sine'; osc.frequency.value = 660;
-      g.gain.setValueAtTime(0.25, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
-      osc.start(); osc.stop(ctx.currentTime + 0.45);
     } catch(e){}
   }
 
@@ -1094,398 +1313,52 @@ $(function () {
 </script>
 <!-- ══ END real-time notification ════════════════════════════════════ -->
 
-<!-- ══ REAL-TIME TABLE & STAT UPDATES (polling) ══════════════════════ -->
-<script>
-(function () {
-  'use strict';
+<!-- ── New Order Toast Notification ──────────────────────────── -->
+<div id="newOrderToast" style="
+  display:none; position:fixed; bottom:28px; right:24px; z-index:99998;
+  background: linear-gradient(135deg,#e91e8c,#c2185b);
+  border-radius:14px; padding:0; min-width:280px; max-width:340px;
+  box-shadow:0 12px 36px rgba(233,30,140,.35), 0 4px 12px rgba(0,0,0,.2);
+  overflow:hidden; font-family:inherit;">
 
-  /* ── Config ── */
-  var POLL_MS   = 8000;   // poll every 8 s
-  var POLL_URL  = 'void_refund.php?rt=1'; // self-contained endpoint
+  <!-- Accent bar -->
+  <div style="height:3px; background:rgba(255,255,255,.35);"></div>
 
-  /* ── Snapshot of counts when page loaded ── */
-  var _snap = {
-    voidedCount:      parseInt('<?= $voidedCount ?>',  10)  || 0,
-    refundedCount:    parseInt('<?= $refundedCount ?>', 10) || 0,
-    totalVoided:      parseFloat('<?= $totalVoided ?>') || 0,
-    totalRefunded:    parseFloat('<?= $totalRefunded ?>') || 0,
-    pendingCount:     parseInt('<?= count($pendingOrders) ?>', 10) || 0,
-    latestOrderId:    <?= (int)$view->maxActiveOrderId ?>,
-    latestVoidedId:   <?= (int)$view->maxVoidedId ?>,
-    latestRefundedId: <?= (int)$view->maxRefundedId ?>
-  };
+  <div style="padding:14px 16px;">
+    <!-- Header row -->
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:1.1rem;">🔔</span>
+        <span style="color:#fff; font-weight:700; font-size:.92rem; letter-spacing:.01em;">New Order Received!</span>
+      </div>
+      <button onclick="document.getElementById('newOrderToast').style.display='none'"
+        style="background:rgba(255,255,255,.2); border:none; border-radius:50%; width:22px; height:22px;
+               color:#fff; font-size:.85rem; cursor:pointer; display:flex; align-items:center;
+               justify-content:center; line-height:1; padding:0;">&times;</button>
+    </div>
+    <!-- Message -->
+    <div id="noToastMsg" style="color:rgba(255,255,255,.92); font-size:.85rem; margin-bottom:10px;
+         padding-left:2px;">Table — — ₱0.00</div>
+    <!-- Badges -->
+    <div style="display:flex; gap:8px;">
+      <span id="noToastOrderBadge" style="
+        background:rgba(255,255,255,.22); color:#fff; font-size:.75rem; font-weight:700;
+        padding:2px 10px; border-radius:20px;">#—</span>
+      <span id="noToastTimeBadge" style="
+        background:rgba(255,255,255,.22); color:#fff; font-size:.75rem; font-weight:700;
+        padding:2px 10px; border-radius:20px;">—:—</span>
+    </div>
+  </div>
+</div>
 
-  /* ── Live-dot indicator in page title area ── */
-  var _dot = (function () {
-    var el = document.createElement('span');
-    el.id  = 'vrLiveDot';
-    el.title = 'Live updates active';
-    el.style.cssText = [
-      'display:inline-block','width:8px','height:8px',
-      'border-radius:50%','background:#22c55e',
-      'margin-left:8px','vertical-align:middle',
-      'box-shadow:0 0 0 0 rgba(34,197,94,.55)',
-      'animation:rtPulse 1.8s infinite'
-    ].join(';');
-    /* append after the page <h1> */
-    var h1 = document.querySelector('.content-header h1');
-    if (h1) h1.appendChild(el);
-    return el;
-  }());
+<style>
+@keyframes toastSlideIn {
+  from { opacity:0; transform: translateX(60px) scale(.95); }
+  to   { opacity:1; transform: translateX(0)    scale(1);   }
+}
+</style>
 
-  function setDot(ok) {
-    _dot.style.background = ok ? '#22c55e' : '#ef4444';
-    _dot.title = ok ? 'Live — connected' : 'Live — reconnecting…';
-  }
 
-  /* ── Stat card elements ── */
-  function $stat(idx) {
-    return document.querySelectorAll('.vr-stat .stat-num')[idx];
-  }
-
-  function animateNum(el, newText) {
-    if (!el || el.textContent === newText) return;
-    el.style.transition = 'opacity .25s';
-    el.style.opacity = '0';
-    setTimeout(function () {
-      el.textContent = newText;
-      el.style.opacity = '1';
-    }, 250);
-  }
-
-  /* ── Tab badge elements ── */
-  function tabBadge(tabId) {
-    var a = document.querySelector('[href="#' + tabId + '"]');
-    return a ? a.querySelector('.badge') : null;
-  }
-
-  /* ── Flash a row highlight ── */
-  function flashRow(tr) {
-    tr.style.transition = 'background .1s';
-    tr.style.background = 'rgba(233,30,140,.18)';
-    setTimeout(function () { tr.style.background = ''; }, 1400);
-  }
-
-  /* ── Add a new row to the Active Orders DataTable ── */
-  function injectActiveRow(o) {
-    var dt = $('#tbl-active').DataTable();
-
-    /* Skip duplicates — check if this order ID already exists in the table */
-    var alreadyExists = false;
-    dt.rows().every(function () {
-      var rowData = this.data();
-      if (rowData && rowData[0] && String(rowData[0]).indexOf('>#' + o.id + '<') !== -1) {
-        alreadyExists = true;
-      }
-    });
-    if (alreadyExists) return;
-
-    /* Build status badge */
-    var statusBadge = '<span class="badge-done"><i class="fas fa-check mr-1"></i>' +
-      (o.status.charAt(0).toUpperCase() + o.status.slice(1)) + '</span>';
-
-    /* Build action buttons — safely escape item strings */
-    var safeItems = (o.items || '—')
-      .replace(/\\/g, '\\\\')
-      .replace(/'/g, "\\'")
-      .replace(/"/g, '&quot;');
-    var safeTotal = parseFloat(o.total_amt || 0);
-    var actions =
-      '<div class="d-flex" style="gap:6px;">' +
-        '<button class="btn-void" onclick="openVoidModal(' + o.id + ',\'' +
-          o.table_no + '\',' + safeTotal + ',\'' + safeItems + '\')">' +
-          '<i class="fas fa-ban mr-1"></i>Void</button>' +
-        '<button class="btn-refund" onclick="openRefundModal(' + o.id + ',\'' +
-          o.table_no + '\',' + safeTotal + ',\'' + safeItems + '\')">' +
-          '<i class="fas fa-rotate-left mr-1"></i>Refund</button>' +
-      '</div>';
-
-    var ts = Math.floor(new Date((o.created_at || '').replace(' ', 'T')).getTime() / 1000);
-
-    var rowNode = dt.row.add([
-      '<strong>#' + o.id + '</strong>',
-      '<span data-order="' + ts + '"><small class="text-muted">' + fmtDate(o.created_at) + '</small></span>',
-      '<span class="badge badge-secondary">#' + o.table_no + '</span>',
-      o.cashier_name || '—',
-      '<span title="' + (o.items || '').replace(/"/g, '&quot;') + '">' + trimItems(o.items, 45) + '</span>',
-      statusBadge,
-      '<strong>' + fmtPeso(o.total_amt) + '</strong>',
-      actions
-    ]).draw(false).node();
-
-    /* Style cells */
-    $(rowNode).find('td').css({
-      'white-space': 'nowrap',
-      'overflow': 'hidden',
-      'text-overflow': 'ellipsis',
-      'max-width': '260px'
-    });
-
-    /* Append a pulsing "NEW" badge to the Order # cell */
-    $(rowNode).find('td:first').append(
-      ' <span class="new-order-badge" style="' +
-        'display:inline-block;background:#e91e8c;color:#fff;' +
-        'font-size:.62rem;font-weight:700;padding:1px 6px;' +
-        'border-radius:20px;vertical-align:middle;margin-left:4px;' +
-        'animation:rtPulse 1.4s 3;">' +
-      'NEW</span>'
-    );
-    /* Fade out the NEW badge after 10 s */
-    setTimeout(function () {
-      $(rowNode).find('.new-order-badge').fadeOut(400, function () { $(this).remove(); });
-    }, 10000);
-
-    /* Flash the entire row pink */
-    flashRow(rowNode);
-
-    /* Increment Active Orders tab badge */
-    var ab = tabBadge('pane-active');
-    if (ab) {
-      var cur = parseInt(ab.textContent, 10) || 0;
-      ab.textContent = cur + 1;
-    }
-
-    /* Re-sort by date descending so newest order appears first */
-    dt.order([1, 'desc']).draw(false);
-
-    /* Scroll the Active table into view */
-    var wrapper = document.querySelector('#tbl-active_wrapper');
-    if (wrapper) {
-      wrapper.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }
-
-  /* ── Helpers ── */
-  function fmtDate(str) {
-    var d = new Date((str || '').replace(' ', 'T'));
-    var mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    return mo[d.getMonth()] + ' ' + String(d.getDate()).padStart(2,'0') + ', ' +
-      d.getFullYear() + ' ' + d.toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit',hour12:true});
-  }
-  function fmtPeso(n) { return '₱' + parseFloat(n||0).toLocaleString('en',{minimumFractionDigits:2}); }
-  function trimItems(s,max){ return (s||'—').length > max ? (s||'—').substring(0,max)+'…' : (s||'—'); }
-
-  /* ── Add a new row to the Voided DataTable ── */
-  function injectVoidedRow(o) {
-    var dt = $('#tbl-voided').DataTable();
-    var ts  = Math.floor(new Date((o.created_at || '').replace(' ', 'T')).getTime() / 1000);
-    var voidRaw = o.voided_at || o.updated_at || o.created_at || '';
-    var vts = voidRaw ? Math.floor(new Date(voidRaw.replace(' ', 'T')).getTime() / 1000) : 0;
-    var row = dt.row.add([
-      '<strong>#' + o.id + '</strong>',
-      '<span data-order="' + ts + '"><small class="text-muted">' + fmtDate(o.created_at) + '</small></span>',
-      '<span class="badge badge-secondary">#' + o.table_no + '</span>',
-      o.cashier_name || '—',
-      '<span title="' + (o.items||'') + '">' + trimItems(o.items,45) + '</span>',
-      parseInt(o.total_qty||0,10),
-      '<span class="text-danger font-weight-bold">' + fmtPeso(o.total_amt) + '</span>',
-      '<span data-order="' + vts + '"><small class="text-muted">' + (voidRaw ? fmtDate(voidRaw) : '—') + '</small></span>'
-    ]).draw(false).node();
-    $(row).find('td').css({'white-space':'nowrap','overflow':'hidden','text-overflow':'ellipsis','max-width':'260px'});
-    flashRow(row);
-  }
-
-  /* ── Add a new row to the Refunded DataTable ── */
-  function injectRefundedRow(o) {
-    var dt = $('#tbl-refunded').DataTable();
-    var typeBadge = (o.status === 'partial_refund')
-      ? '<span class="badge-partial"><i class="fas fa-adjust mr-1"></i>Partial</span>'
-      : '<span class="badge-refunded"><i class="fas fa-rotate-left mr-1"></i>Full</span>';
-    var ts  = Math.floor(new Date((o.created_at || '').replace(' ', 'T')).getTime() / 1000);
-    var rts = o.refund_at ? Math.floor(new Date((o.refund_at || '').replace(' ', 'T')).getTime() / 1000) : 0;
-    var row = dt.row.add([
-      '<strong>#' + o.id + '</strong>',
-      '<span data-order="' + ts + '"><small class="text-muted">' + fmtDate(o.created_at) + '</small></span>',
-      '<span class="badge badge-secondary">#' + o.table_no + '</span>',
-      typeBadge,
-      '<span title="' + (o.items||'') + '">' + trimItems(o.items,40) + '</span>',
-      '<s class="text-muted">' + fmtPeso(o.total_amt) + '</s>',
-      '<span class="text-primary font-weight-bold">' + fmtPeso(o.refund_total) + '</span>',
-      o.refund_reason || '—',
-      o.processed_by  || '—',
-      '<span data-order="' + rts + '"><small class="text-muted">' + (o.refund_at ? fmtDate(o.refund_at) : '—') + '</small></span>'
-    ]).draw(false).node();
-    $(row).find('td').css({'white-space':'nowrap','overflow':'hidden','text-overflow':'ellipsis','max-width':'260px'});
-    flashRow(row);
-  }
-
-  /* ── Show a small inline alert banner ── */
-  var _bannerTimer;
-  function showBanner(msg, color) {
-    var el = document.getElementById('vrRtBanner');
-    if (!el) {
-      el = document.createElement('div');
-      el.id = 'vrRtBanner';
-      el.style.cssText = [
-        'position:fixed','top:70px','left:50%','transform:translateX(-50%)',
-        'z-index:99998','border-radius:10px','padding:9px 20px',
-        'font-size:.85rem','font-weight:700','color:#fff',
-        'box-shadow:0 4px 18px rgba(0,0,0,.22)',
-        'opacity:0','transition:opacity .3s','pointer-events:none'
-      ].join(';');
-      document.body.appendChild(el);
-    }
-    el.textContent = msg;
-    el.style.background = color || '#333';
-    el.style.opacity = '1';
-    clearTimeout(_bannerTimer);
-    _bannerTimer = setTimeout(function () { el.style.opacity = '0'; }, 4000);
-  }
-
-  /* ── Main poll ── */
-  function poll() {
-    var url = POLL_URL
-      + '&since='         + _snap.latestOrderId
-      + '&sinceVoided='   + _snap.latestVoidedId
-      + '&sinceRefunded=' + _snap.latestRefundedId;
-
-    fetch(url, { cache: 'no-store' })
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        setDot(true);
-
-        /* ── Stamp "Updated HH:MM:SS" ── */
-        var _utEl = document.getElementById('activeUpdatedTime');
-        if (_utEl) _utEl.textContent = new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
-
-        /* ── Stat cards ── */
-        var vc = parseInt(d.voidedCount,   10) || 0;
-        var rc = parseInt(d.refundedCount, 10) || 0;
-        var tv = parseFloat(d.totalVoided)   || 0;
-        var tr = parseFloat(d.totalRefunded) || 0;
-        var pc = parseInt(d.pendingCount,  10) || 0;
-
-        if (vc !== _snap.voidedCount) {
-          animateNum($stat(0), String(vc));
-          var vb = tabBadge('pane-voided'); if (vb) vb.textContent = vc;
-        }
-        if (tv !== _snap.totalVoided) {
-          animateNum($stat(1), '₱' + tv.toLocaleString('en',{minimumFractionDigits:2}));
-        }
-        if (rc !== _snap.refundedCount) {
-          animateNum($stat(2), String(rc));
-          var rb = tabBadge('pane-refunded'); if (rb) rb.textContent = rc;
-        }
-        if (tr !== _snap.totalRefunded) {
-          animateNum($stat(3), '₱' + tr.toLocaleString('en',{minimumFractionDigits:2}));
-        }
-
-        /* ── Active Orders count badge — only update if no injections happened
-             (injectActiveRow already increments it per new row) ── */
-        if (pc !== _snap.pendingCount && injectedCount === 0) {
-          var ab2 = tabBadge('pane-active'); if (ab2) ab2.textContent = pc;
-        }
-
-        /* ── New active orders injected into table ── */
-        var newOrders = d.newOrders || [];
-        // Sort ascending so oldest-new goes in first; newest ends up on top after DataTable re-sort
-        newOrders.sort(function(a, b) { return a.id - b.id; });
-        var injectedCount = 0;
-        newOrders.forEach(function (o) {
-          if (o.id > _snap.latestOrderId) {
-            injectActiveRow(o);
-            _snap.latestOrderId = Math.max(_snap.latestOrderId, o.id);
-            injectedCount++;
-          }
-        });
-        /* Only advance the cursor from d.latestOrderId if newOrders was empty
-           (meaning there were truly no new orders, not that they were skipped) */
-        if (newOrders.length === 0 && d.latestOrderId > _snap.latestOrderId) {
-          _snap.latestOrderId = d.latestOrderId;
-        }
-        if (injectedCount > 0) {
-          /* Show the inline "New order received" banner above the table */
-          var _badge = document.getElementById('activeRtNewBadge');
-          if (_badge) {
-            var latestNew = newOrders[newOrders.length - 1];
-            var badgeInner = _badge.querySelector('span');
-            if (badgeInner && latestNew) {
-              badgeInner.innerHTML =
-                '<i class="fas fa-bolt mr-1" style="font-size:.72rem;"></i>' +
-                (injectedCount > 1
-                  ? injectedCount + ' new orders received — table updated'
-                  : 'New order #' + latestNew.id + ' — Table #' + (latestNew.table_no || '—') +
-                    ' · ' + fmtPeso(latestNew.total_amt) + ' — table updated');
-            }
-            _badge.style.display = 'block';
-            clearTimeout(_badge._bT);
-            _badge._bT = setTimeout(function () { _badge.style.display = 'none'; }, 7000);
-          }
-          /* Show the full new-order toast (same as SSE path) */
-          var latestO = newOrders[newOrders.length - 1];
-          if (latestO) {
-            showNewOrderToast({ latestOrder: latestO });
-          }
-          /* Top banner */
-          showBanner('🛎️ ' + injectedCount + ' new order(s) received', '#e91e8c');
-        }
-
-        /* ── New voided orders injected into Voided tab ── */
-        var newVoided = d.newVoided || [];
-        newVoided.forEach(function (o) {
-          if (o.id > _snap.latestVoidedId) {
-            injectVoidedRow(o);
-            _snap.latestVoidedId = o.id;
-          }
-        });
-
-        /* ── New refunded orders injected into Refunded tab ── */
-        var newRefunded = d.newRefunded || [];
-        newRefunded.forEach(function (o) {
-          if (o.id > _snap.latestRefundedId) {
-            injectRefundedRow(o);
-            _snap.latestRefundedId = o.id;
-          }
-        });
-
-        /* ── Orders that became voided/refunded — remove from Active tab ── */
-        var removed = d.removedIds || [];
-        removed.forEach(function (id) { removeActiveRow(id); });
-
-        /* ── Toasts for changes ── */
-        if (vc > _snap.voidedCount) {
-          showBanner('⚠️ ' + (vc - _snap.voidedCount) + ' order(s) voided', '#e74c3c');
-          if (newVoided.length) {
-            var lv = newVoided[newVoided.length - 1];
-            showVoidRtToast(lv.id, lv.table_no, lv.total_amt);
-          }
-        }
-        if (rc > _snap.refundedCount) {
-          showBanner('↩️ ' + (rc - _snap.refundedCount) + ' order(s) refunded', '#3b82f6');
-          if (newRefunded.length) {
-            var lr = newRefunded[newRefunded.length - 1];
-            showRefundRtToast(lr.id, lr.table_no, lr.refund_total || lr.total_amt);
-          }
-        }
-        /* ── Advance voided/refunded cursors ── */
-        if (d.latestVoidedId   > _snap.latestVoidedId)   _snap.latestVoidedId   = d.latestVoidedId;
-        if (d.latestRefundedId > _snap.latestRefundedId) _snap.latestRefundedId = d.latestRefundedId;
-
-        /* ── Update snapshot ── */
-        _snap.voidedCount   = vc;
-        _snap.refundedCount = rc;
-        _snap.totalVoided   = tv;
-        _snap.totalRefunded = tr;
-        _snap.pendingCount  = pc;
-      })
-      .catch(function () { setDot(false); });
-  }
-
-  /* ── Start polling after page ready ── */
-  function startPolling() {
-    var _utEl = document.getElementById('activeUpdatedTime');
-    if (_utEl) _utEl.textContent = new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true});
-    setInterval(poll, POLL_MS);
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', startPolling);
-  } else {
-    startPolling();
-  }
-
-})();
-</script>
-<!-- ══ END real-time table updates ═══════════════════════════════════ -->
 
 </body>
 </html>
