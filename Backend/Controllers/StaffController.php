@@ -2,7 +2,7 @@
 // Backend/Controllers/StaffController.php
 
 /**
- * StaffController – handles all staff-management HTTP actions.
+ * StaffController - handles all staff-management HTTP actions.
  *
  * Replaces: Backend/process.php
  *
@@ -14,6 +14,18 @@
  *
  * All actions require an active ADMIN_SESSION with position === 'admin'
  * and a valid CSRF token.
+ *
+ * This is the only controller in the set that explicitly checks a CSRF
+ * token (Auth::verifyCsrf), presumably because staff records contain the
+ * most sensitive data (credentials, contact info) and this form is the
+ * most "destructive" one to spoof.
+ *
+ * NOTE: create(), update(), and resendVerify() below originally declared
+ * a `: never` return type while still containing `return $this->fail(...)`
+ * statements. PHP does not allow ANY `return` statement inside a
+ * `never`-typed function, so the original file was a fatal parse error
+ * on PHP 8.1+ and could not run. This version corrects those three
+ * signatures to `: void` without changing any behavior.
  */
 
 require_once __DIR__ . '/../Core/Auth.php';
@@ -31,11 +43,15 @@ class StaffController
 
     public function __construct()
     {
+        // Order matters: confirm the requester is an authenticated admin
+        // *before* checking CSRF, so an unauthenticated request gets
+        // redirected to login rather than a generic CSRF failure.
         Auth::requireAdmin('../../login-v2.html');
         Auth::verifyCsrf($this->redirectBack);
 
         $this->userModel = new User();
         $this->mailer    = new MailerService();
+        // 'staff' subfolder/prefix for uploaded profile photos.
         $this->uploader  = new ImageUploadService('staff');
     }
 
@@ -50,44 +66,65 @@ class StaffController
         $this->redirect();  // Unknown action — just go back
     }
 
-    // ─────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
     //  Create
-    // ─────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
 
-    private function create(): never
+    /**
+     * Create a new staff account.
+     *
+     * Flow: validate fields -> check for duplicate email/contact ->
+     * handle optional photo upload -> insert the row -> email the new
+     * staff member a verification link. The account exists immediately,
+     * but email verification is a separate, trackable step
+     * (User::getVerifyToken / resendVerify below).
+     *
+     * BUG FIX: this method was originally declared `: never`, but its
+     * body contains several `return $this->fail(...)` statements. PHP
+     * forbids ANY `return` statement inside a `never`-typed function -
+     * even one returning the result of another never-returning call -
+     * so the original code was a fatal parse error and could not run at
+     * all on PHP 8.1+. Changed to `: void` here (fail() itself is still
+     * correctly `never`, since it has no `return` statement).
+     */
+    private function create(): void
     {
         $data = $this->collectFormData();
 
-        // Validation
+        // Validation - each rule returns either an error string or null,
+        // so we bail on the first failure encountered.
         if ($err = User::validateContact($data['contact'])) {
-            return $this->fail($err);
+            $this->fail($err);
         }
         if ($err = User::validateEmail($data['email'])) {
-            return $this->fail($err);
+            $this->fail($err);
         }
         if ($err = User::validatePassword($data['password'])) {
-            return $this->fail($err);
+            $this->fail($err);
         }
         if ($this->userModel->emailExists($data['email'])) {
-            return $this->fail('Email already exists!');
+            $this->fail('Email already exists!');
         }
         if ($this->userModel->contactExists($data['contact'])) {
-            return $this->fail('Contact number already exists!');
+            $this->fail('Contact number already exists!');
         }
 
-        // Image upload (optional)
+        // Image upload (optional) - '?? ""' guards against handle()
+        // returning null when no file was actually selected.
         try {
             $data['image'] = $this->uploader->handle($_FILES['image'] ?? null) ?? '';
         } catch (RuntimeException $e) {
-            return $this->fail($e->getMessage());
+            $this->fail($e->getMessage());
         }
 
         // Persist
         $userId = $this->userModel->create($data);
         if (!$userId) {
-            return $this->fail('Database error: could not create staff member.');
+            $this->fail('Database error: could not create staff member.');
         }
 
+        // The new account starts unverified; grab its verification token
+        // so we can email a confirmation link immediately.
         $token = $this->userModel->getVerifyToken($userId);
 
         if ($this->mailer->sendEmailVerification($data['email'], $data['firstname'], $token)) {
@@ -96,6 +133,9 @@ class StaffController
                 . "A verification email has been sent to <strong>{$data['email']}</strong>."
             );
         } else {
+            // The account was still created successfully even if the
+            // email failed to send - we just tell the admin so they know
+            // to use "Resend Verification" manually afterward.
             Session::flashError(
                 "Staff member added, but verification email failed. "
                 . "SMTP error: <em>{$this->mailer->lastError}</em>. "
@@ -106,37 +146,55 @@ class StaffController
         $this->redirect();
     }
 
-    // ─────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
     //  Update
-    // ─────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
 
-    private function update(): never
+    /**
+     * Edit an existing staff member's details.
+     *
+     * Notably: if the email address is changed, the account is treated
+     * as needing re-verification again (resetVerification + a fresh
+     * email), since the old verified email no longer applies.
+     *
+     * BUG FIX: changed from `: never` to `: void` - see create() above.
+     */
+    private function update(): void
     {
         $id   = (int) ($_POST['user_id'] ?? 0);
         $data = $this->collectFormData();
 
         // Validation
         if ($err = User::validateContact($data['contact'])) {
-            return $this->fail($err);
+            $this->fail($err);
         }
         if ($err = User::validateEmail($data['email'])) {
-            return $this->fail($err);
+            $this->fail($err);
         }
+        // Password is optional on update (blank = "don't change it"), so
+        // it's only validated if the admin actually typed a new one.
         if (!empty($data['password'])) {
             if ($err = User::validatePassword($data['password'])) {
-                return $this->fail($err);
+                $this->fail($err);
             }
         }
+        // Exclude the current user's own id from the duplicate-email
+        // check, so saving a record without changing its email doesn't
+        // falsely flag itself as "already in use".
         if ($this->userModel->emailExists($data['email'], $id)) {
-            return $this->fail('Email already in use by another account!');
+            $this->fail('Email already in use by another account!');
         }
 
-        // Detect email change before updating
+        // Detect email change before updating - we need the *old* email
+        // for comparison, so this lookup must happen before the update
+        // call below overwrites it.
         $existing      = $this->userModel->findById($id);
         $emailChanged  = $existing
             && strtolower(trim($existing['email'])) !== strtolower($data['email']);
 
-        // Image upload (optional)
+        // Image upload (optional). Default to keeping whatever image was
+        // already on file; only replace it if a new file actually came
+        // through the upload handler.
         $data['image'] = $data['existing_image'];
         try {
             $newPath = $this->uploader->handle($_FILES['image'] ?? null);
@@ -145,16 +203,18 @@ class StaffController
                 $data['image'] = $newPath;
             }
         } catch (RuntimeException $e) {
-            return $this->fail($e->getMessage());
+            $this->fail($e->getMessage());
         }
 
         if (!$this->userModel->update($id, $data)) {
-            return $this->fail('Database error: update failed.');
+            $this->fail('Database error: update failed.');
         }
 
         $fullName = "{$data['firstname']} {$data['lastname']}";
 
         if ($emailChanged) {
+            // Force re-verification: the previous verified-email status
+            // no longer means anything once the address itself changed.
             $this->userModel->resetVerification($id);
             $newToken = $this->userModel->getVerifyToken($id);
 
@@ -177,23 +237,35 @@ class StaffController
         $this->redirect();
     }
 
-    // ─────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
     //  Resend verification
-    // ─────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
 
-    private function resendVerify(): never
+    /**
+     * Generate a fresh verification token and re-send the confirmation
+     * email - used when the original email was lost, expired, or never
+     * arrived.
+     *
+     * BUG FIX: changed from `: never` to `: void` - see create() above.
+     */
+    private function resendVerify(): void
     {
         $id  = (int) ($_POST['user_id'] ?? 0);
         $usr = $this->userModel->findById($id);
 
         if (!$usr) {
-            return $this->fail('Staff member not found.');
+            $this->fail('Staff member not found.');
         }
         if ($usr['email_verified']) {
+            // Nothing to resend if they're already verified - this also
+            // guards against generating unnecessary tokens for already-
+            // confirmed accounts.
             $name = htmlspecialchars($usr['firstname'] . ' ' . $usr['lastname']);
-            return $this->fail("\"$name\" is already verified.");
+            $this->fail("\"$name\" is already verified.");
         }
 
+        // resetVerification() both invalidates any old token and returns
+        // a brand-new one to send out.
         $newToken = $this->userModel->resetVerification($id);
 
         if ($this->mailer->sendEmailVerification($usr['email'], $usr['firstname'], $newToken)) {
@@ -211,10 +283,14 @@ class StaffController
         $this->redirect();
     }
 
-    // ─────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
     //  Delete
-    // ─────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
 
+    /**
+     * Permanently remove a staff account, including their profile photo
+     * (if any) once the database row is confirmed deleted.
+     */
     private function delete(): never
     {
         $id  = (int) ($_POST['user_id'] ?? 0);
@@ -236,9 +312,9 @@ class StaffController
         $this->redirect();
     }
 
-    // ─────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
     //  Helpers
-    // ─────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
 
     /** Collect and sanitise common form fields. */
     private function collectFormData(): array
@@ -247,6 +323,8 @@ class StaffController
             'firstname'      => trim($_POST['firstname']      ?? ''),
             'lastname'       => trim($_POST['lastname']       ?? ''),
             'email'          => trim($_POST['email']          ?? ''),
+            // Intentionally NOT trimmed - a password could legitimately
+            // start/end with a space character that the user intends.
             'password'       => $_POST['password']            ?? '',
             'position'       => trim($_POST['position']       ?? ''),
             'contact'        => trim($_POST['contact']        ?? ''),
@@ -255,6 +333,7 @@ class StaffController
         ];
     }
 
+    /** Flash an error message and redirect back - used for every validation failure above. */
     private function fail(string $message): never
     {
         Session::flashError($message);

@@ -2,7 +2,7 @@
 // Backend/Controllers/SupplierController.php
 
 /**
- * SupplierController – handles all supplier CRUD actions.
+ * SupplierController - handles all supplier CRUD actions.
  *
  * Replaces: Backend/supplier_process.php
  *
@@ -10,6 +10,11 @@
  *   add     – create supplier
  *   update  – edit supplier
  *   delete  – remove supplier (id via GET)
+ *
+ * Stylistic note: this is the only controller in the set that uses a
+ * `match` expression for routing instead of a chain of `if (isset(...))`
+ * checks, and the only one whose action handlers return `void` rather
+ * than `never` (even though every branch still ends by redirecting).
  */
 
 require_once __DIR__ . '/../Core/Auth.php';
@@ -27,6 +32,13 @@ class SupplierController
         $this->model = new Supplier();
     }
 
+    /**
+     * Route based on a single `action` parameter, which - unlike the
+     * other controllers - is read from $_REQUEST rather than $_POST,
+     * meaning it can be supplied via either the query string or the
+     * POST body (used by delete(), which reads its id from $_GET while
+     * `action` itself can still arrive either way).
+     */
     public function handle(): void
     {
         $action = $_REQUEST['action'] ?? '';
@@ -39,8 +51,9 @@ class SupplierController
         };
     }
 
-    // ─────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
 
+    /** Create a new supplier record. */
     private function create(): void
     {
         $data = $this->collectFormData();
@@ -58,6 +71,7 @@ class SupplierController
         $this->redirect();
     }
 
+    /** Edit an existing supplier record. */
     private function update(): void
     {
         $id   = (int) ($_POST['id'] ?? 0);
@@ -76,6 +90,11 @@ class SupplierController
         $this->redirect();
     }
 
+    /**
+     * Delete a supplier. Unlike create/update, the id here comes from
+     * $_GET - this action is wired up as a plain link (e.g. a "Delete"
+     * button with an href), not a form POST.
+     */
     private function delete(): void
     {
         $id = (int) ($_GET['id'] ?? 0);
@@ -84,6 +103,8 @@ class SupplierController
             $this->fail('Invalid supplier ID.');
         }
 
+        // Look the supplier up first so we can reference its name in the
+        // success message even after the row is gone.
         $supplier = $this->model->findById($id);
         $name     = $supplier['name'] ?? 'Unknown';
 
@@ -96,8 +117,14 @@ class SupplierController
         $this->redirect();
     }
 
-    // ─────────────────────────────────────────────────────────────
+    // -----------------------------------------------------------------
 
+    /**
+     * Collect and sanitise supplier fields shared by create/update.
+     * `status` is passed through a model-level sanitiser (rather than a
+     * plain trim) since it must be constrained to a known set of values
+     * (e.g. 'Active' / 'Inactive') rather than free text.
+     */
     private function collectFormData(): array
     {
         return [
@@ -112,6 +139,7 @@ class SupplierController
         ];
     }
 
+    /** Flash an error message and redirect back. */
     private function fail(string $message): void
     {
         Session::flashError($message);
@@ -125,4 +153,5 @@ class SupplierController
     }
 }
 
+// ── Bootstrap ──────────────────────────────────────────────────────
 (new SupplierController())->handle();
