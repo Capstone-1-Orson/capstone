@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 // Frontend/ADMIN/staff-list.php  (OOP refactored)
 require_once '../../Frontend/Core/StaffView.php';
 $view = new StaffView();   // dispatches ?rt_staff and ?rt_add_staff AJAX early
@@ -305,15 +305,6 @@ $_SESSION['csrf_token'] = $csrf_token;
 
                 <div class="card-header d-flex align-items-center flex-wrap" style="gap:8px;">
                   <h3 class="card-title mb-0 mr-2">Staff Directory</h3>
-                  <!-- Live indicator -->
-                  <span style="display:inline-flex;align-items:center;gap:5px;font-size:.78rem;opacity:.85;">
-                    <span class="rt-staff-dot" style="
-                      display:inline-block;width:9px;height:9px;border-radius:50%;
-                      background:#6b7280;animation:rtPulse 1.8s infinite;transition:background .4s;
-                    " title="Connecting..."></span>
-                    <span class="rt-staff-label" style="color:#6b7280;">connecting...</span>
-                  </span>
-                  <small class="rt-staff-updated text-muted ml-1" style="font-size:.75rem;"></small>
                   <button type="button" class="btn btn-success ml-auto" data-toggle="modal" data-target="#addUserModal">
                     + Add User
                   </button>
