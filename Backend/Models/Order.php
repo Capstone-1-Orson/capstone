@@ -87,7 +87,7 @@ class Order
             (float) ($data['discount_amt']  ?? 0),
             $data['discount_type'] ?? '',
         ];
-        $types = 'ssddss'; // table_no, status, total_amt, discount_amt, discount_type + NOW() literal
+        $types = 'ssdds'; // table_no, status, total_amt, discount_amt, discount_type + NOW() literal
 
         // Remove 'created_at' from $cols since we use NOW() literal (not a param)
         $cols = array_filter($cols, fn($c) => $c !== 'created_at');
