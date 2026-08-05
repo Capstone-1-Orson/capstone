@@ -21,7 +21,7 @@ class MailerService
     private const SMTP_HOST     = 'smtp.gmail.com';
     private const SMTP_PORT     = 587;
     private const SMTP_USER     = 'dummyacctest099@gmail.com';
-    private const SMTP_PASSWORD = 'dzsmxafqhxqgarto';       // Gmail App Password (no spaces)
+    private const SMTP_PASSWORD = 'dzsmxafqhxqgarto';
     private const FROM_NAME     = 'OPERLYTICS';
 
     // ── DB columns required by User::getVerifyToken() ────────────
