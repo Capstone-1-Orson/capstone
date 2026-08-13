@@ -11,9 +11,23 @@ require_once __DIR__ . '/Session.php';
  */
 class Auth
 {
+    /**
+     * Tell the browser never to cache this page from disk/back-forward
+     * cache. Without this, hitting the browser's Back button after
+     * logout can re-show a stale, already-rendered copy of a protected
+     * page instead of re-requesting it (and re-running the auth check).
+     */
+    private static function noCache(): void
+    {
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+    }
+
     /** Abort with a 403 and redirect if the session is not an admin session. */
     public static function requireAdmin(string $redirectTo = '../../login-v2.html'): void
     {
+        self::noCache();
         Session::start(Session::ADMIN);
 
         if (
@@ -29,6 +43,7 @@ class Auth
     /** Abort with a 403 and redirect if the session is not a staff session. */
     public static function requireStaff(string $redirectTo = '../../login-v2.html'): void
     {
+        self::noCache();
         Session::start(Session::STAFF);
 
         if (!Session::get('user')) {

@@ -71,12 +71,18 @@ class DashboardView extends View
     {
         parent::__construct();
 
-        // SSE must fire before session is written, but after auth
-        Session::start(Session::ADMIN);
-        if (!Session::get('user') || Session::get('position') !== 'admin') {
-            if (isset($_GET['sse'])) { http_response_code(403); exit; }
-            header('Location: ../../lockscreen.html');
-            exit();
+        // SSE must fire before session is written, but after auth.
+        // requireAdmin() also sets Cache-Control/Pragma/Expires headers so
+        // this page (and its stats) can never be re-shown from the
+        // browser's back-forward cache after logout.
+        if (isset($_GET['sse'])) {
+            Session::start(Session::ADMIN);
+            if (!Session::get('user') || Session::get('position') !== 'admin') {
+                http_response_code(403);
+                exit;
+            }
+        } else {
+            $this->requireAdmin();
         }
 
         if (isset($_GET['sse']))    { $this->streamSse();    /* exits */ }

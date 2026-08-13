@@ -51,12 +51,17 @@ class ReportView extends View
     {
         parent::__construct();
 
-        // SSE needs auth but no session write
-        Session::start(Session::ADMIN);
-        if (!Session::get('user') || Session::get('position') !== 'admin') {
-            if (isset($_GET['sse'])) { http_response_code(403); exit; }
-            header('Location: ../../lockscreen.html');
-            exit();
+        // SSE needs auth but no session write. requireAdmin() also sets
+        // Cache-Control/Pragma/Expires headers so this page can never be
+        // re-shown from the browser's back-forward cache after logout.
+        if (isset($_GET['sse'])) {
+            Session::start(Session::ADMIN);
+            if (!Session::get('user') || Session::get('position') !== 'admin') {
+                http_response_code(403);
+                exit;
+            }
+        } else {
+            $this->requireAdmin();
         }
 
         $this->hasOrderItems = $this->tableExists('order_items');

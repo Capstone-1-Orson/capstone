@@ -27,7 +27,7 @@ class View
 
     protected function requireAdmin(): void
     {
-        Auth::requireAdmin('../../lockscreen.html');
+        Auth::requireAdmin('../../index.html');
     }
 
     protected function requireStaff(): void

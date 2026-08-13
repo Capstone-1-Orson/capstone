@@ -88,11 +88,29 @@ class Session
         unset($_SESSION[$key]);
     }
 
-    /** Destroy the current session entirely. */
+    /** Destroy the current session entirely, including its browser cookie. */
     public static function destroy(): void
     {
+        $name = session_name();
+        $cookieName = self::COOKIE_NAMES[$name] ?? $name;
+
         session_unset();
         session_destroy();
+
+        // session_destroy() removes the server-side session data, but the
+        // browser will still send back the old cookie until it expires.
+        // Explicitly expire it now so a stale cookie can't resurrect (or
+        // be reused to fixate) a session.
+        if (isset($_COOKIE[$cookieName])) {
+            setcookie($cookieName, '', [
+                'expires'  => time() - 42000,
+                'path'     => '/',
+                'secure'   => false,
+                'httponly' => true,
+                'samesite' => 'Lax',
+            ]);
+            unset($_COOKIE[$cookieName]);
+        }
     }
 
     // ── Flash messages ───────────────────────────────────────────

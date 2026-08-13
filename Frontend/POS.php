@@ -9,6 +9,13 @@ ob_start();
 require_once '../Backend/Core/Session.php';
 Session::start(Session::STAFF);
 
+// Prevent the browser from serving a cached copy of this page from the
+// back-forward cache after logout (this was causing "logout then hit
+// Back = still logged in" until a manual refresh).
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+
 // ── API requests: return JSON errors instead of redirecting ──
 $_isApiRequest = (
     isset($_GET['proc']) || isset($_GET['vr']) || isset($_GET['oi']) ||

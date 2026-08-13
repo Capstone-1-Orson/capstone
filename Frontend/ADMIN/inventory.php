@@ -9,7 +9,7 @@ if (isset($_GET['live_stock'])) {
     require_once '../../Backend/Core/Database.php';
     require_once '../../Backend/Core/Session.php';
     require_once '../../Backend/Core/Auth.php';
-    Auth::requireAdmin('../../lockscreen.html');
+    Auth::requireAdmin('../../index.html');
     header('Content-Type: application/json');
     header('Cache-Control: no-store');
     $db   = Database::getInstance()->getConnection();
