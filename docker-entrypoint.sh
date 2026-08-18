@@ -1,11 +1,21 @@
 #!/bin/bash
 set -e
 
-# Railway assigns PORT dynamically at container start, not at build time.
-# Default to 8080 if it's not set (e.g. running locally).
-: "${PORT:=8080}"
+# --- Railway MPM workaround ---
+# Railway's environment has a known issue where more than one Apache MPM
+# (mpm_event / mpm_prefork) ends up loaded at container start, even when
+# the image builds correctly. Force-clean it here, at runtime, right
+# before Apache starts.
+a2dismod mpm_event mpm_worker >/dev/null 2>&1 || true
+rm -f /etc/apache2/mods-enabled/mpm_event.load \
+      /etc/apache2/mods-enabled/mpm_event.conf \
+      /etc/apache2/mods-enabled/mpm_worker.load \
+      /etc/apache2/mods-enabled/mpm_worker.conf
+a2enmod mpm_prefork >/dev/null 2>&1 || true
 
-# Replace the placeholder __PORT__ with the real runtime port value.
+# --- Runtime port binding ---
+# Railway assigns PORT dynamically at container start, not at build time.
+: "${PORT:=8080}"
 sed -i "s/__PORT__/${PORT}/g" /etc/apache2/ports.conf /etc/apache2/sites-available/000-default.conf
 
 exec apache2-foreground
