@@ -18,15 +18,25 @@ class Database
     private string $user     = 'root';
     private string $password = '';
     private string $dbName   = 'empress_cafe';
+    private int $port        = 3306;
 
     /** Private constructor – use getInstance(). */
     private function __construct()
     {
+        // Railway (and most hosts) inject DB credentials as env vars.
+        // Fall back to local XAMPP defaults when they aren't set.
+        $this->host     = getenv('MYSQLHOST') ?: $this->host;
+        $this->user     = getenv('MYSQLUSER') ?: $this->user;
+        $this->password = getenv('MYSQLPASSWORD') ?: $this->password;
+        $this->dbName   = getenv('MYSQLDATABASE') ?: $this->dbName;
+        $this->port     = (int) (getenv('MYSQLPORT') ?: $this->port);
+
         $this->conn = new mysqli(
             $this->host,
             $this->user,
             $this->password,
-            $this->dbName
+            $this->dbName,
+            $this->port
         );
 
         if ($this->conn->connect_error) {
