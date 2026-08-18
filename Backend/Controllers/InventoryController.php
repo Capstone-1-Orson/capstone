@@ -38,7 +38,7 @@ class InventoryController
 
     public function __construct()
     {
-        Auth::requireAdmin('../../lockscreen.html');
+        Auth::requireAdmin('../../index.php'); // redirect non-admins to the main page
         $this->model = new Ingredient();
     }
 
