@@ -1,38 +1,28 @@
 <?php
 // Backend/Services/MailerService.php
 
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception as MailerException;
+
+require_once __DIR__ . '/../PHPMailer/src/Exception.php';
+require_once __DIR__ . '/../PHPMailer/src/PHPMailer.php';
+require_once __DIR__ . '/../PHPMailer/src/SMTP.php';
+
 /**
  * MailerService – all outbound email in one place.
  *
- * Sends via the Resend HTTP API (https://resend.com) instead of raw SMTP.
- *
- * WHY: Railway (and most PaaS hosts) block outbound SMTP ports
- * (25/465/587) at the network level, so PHPMailer/SMTP will always time
- * out in production ("SMTP code: 110, Connection timed out") even with
- * correct credentials. Resend just talks plain HTTPS on port 443, which
- * is never blocked, so it works from any host.
- *
- * SETUP:
- *   1. Sign up at https://resend.com (free tier is plenty for OTP volume).
- *   2. Verify a sending domain (or use their shared onboarding domain for
- *      testing only — real deployments should verify their own domain).
- *   3. Create an API key, then set these env vars on Railway
- *      (Project -> Variables), same place MYSQLHOST etc. live:
- *        RESEND_API_KEY   = re_xxxxxxxxxxxx
- *        MAIL_FROM_EMAIL  = otp@yourdomain.com   (must be on a verified domain)
- *        MAIL_FROM_NAME   = OPERLYTICS            (optional, has a default below)
- *   4. Locally (XAMPP), set the same vars in your php.ini, an .env loader,
- *      or just export them before starting Apache — getenv() reads from
- *      whatever mechanism populates PHP's environment.
- *
- * Two templates:
+ * Centralises SMTP credentials and two mail templates:
  *   - sendOtp()                 one-time login code
  *   - sendEmailVerification()   new-account activation link
  */
 class MailerService
 {
-    private const RESEND_API_URL = 'https://api.resend.com/emails';
-    private const DEFAULT_FROM_NAME = 'OPERLYTICS';
+    // ── SMTP credentials ─────────────────────────────────────────
+    private const SMTP_HOST     = 'smtp.gmail.com';
+    private const SMTP_PORT     = 587;
+    private const SMTP_USER     = 'dummyacctest099@gmail.com';
+    private const SMTP_PASSWORD = 'dzsmxafqhxqgarto';
+    private const FROM_NAME     = 'OPERLYTICS';
 
     // ── DB columns required by User::getVerifyToken() ────────────
     // If you dropped verify_token / token_expiry, run this once:
@@ -40,7 +30,7 @@ class MailerService
     //     ADD COLUMN verify_token VARCHAR(64) NULL,
     //     ADD COLUMN token_expiry DATETIME    NULL;
 
-    /** Last send error message — readable after a failed send. */
+    /** Last SMTP error message — readable after a failed send. */
     public string $lastError = '';
 
     // ─────────────────────────────────────────────────────────────
@@ -87,7 +77,7 @@ class MailerService
     //  Private helpers
     // ─────────────────────────────────────────────────────────────
 
-    /** Core send method — POSTs to the Resend HTTP API over HTTPS (port 443, never blocked). */
+    /** Core send method — configures PHPMailer and dispatches the message. */
     private function send(
         string $toEmail,
         string $toName,
@@ -95,55 +85,40 @@ class MailerService
         string $html,
         string $plain
     ): bool {
-        $apiKey    = getenv('RESEND_API_KEY') ?: '';
-        $fromEmail = getenv('MAIL_FROM_EMAIL') ?: '';
-        $fromName  = getenv('MAIL_FROM_NAME') ?: self::DEFAULT_FROM_NAME;
+        $mail = new PHPMailer(true);
 
-        if ($apiKey === '' || $fromEmail === '') {
-            $this->lastError = 'Mailer not configured: missing RESEND_API_KEY or MAIL_FROM_EMAIL env var.';
+        try {
+            $mail->isSMTP();
+            $mail->Host       = self::SMTP_HOST;
+            $mail->SMTPAuth   = true;
+            $mail->Username   = self::SMTP_USER;
+            $mail->Password   = self::SMTP_PASSWORD;
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            $mail->Port       = self::SMTP_PORT;
+            $mail->Timeout    = 15;
+            $mail->SMTPOptions = [
+                'ssl' => [
+                    'verify_peer'       => false,
+                    'verify_peer_name'  => false,
+                    'allow_self_signed' => true,
+                ],
+            ];
+
+            $mail->setFrom(self::SMTP_USER, self::FROM_NAME);
+            $mail->addAddress($toEmail, $toName);
+            $mail->isHTML(true);
+            $mail->Subject = $subject;
+            $mail->Body    = $html;
+            $mail->AltBody = $plain;
+
+            $mail->send();
+            return true;
+
+        } catch (MailerException $e) {
+            $this->lastError = $mail->ErrorInfo ?: $e->getMessage();
             error_log("MailerService error: {$this->lastError}");
             return false;
         }
-
-        $payload = [
-            'from'    => "{$fromName} <{$fromEmail}>",
-            'to'      => [$toEmail],
-            'subject' => $subject,
-            'html'    => $html,
-            'text'    => $plain,
-        ];
-
-        $ch = curl_init(self::RESEND_API_URL);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => json_encode($payload),
-            CURLOPT_HTTPHEADER     => [
-                'Authorization: Bearer ' . $apiKey,
-                'Content-Type: application/json',
-            ],
-            CURLOPT_TIMEOUT        => 15,
-            CURLOPT_CONNECTTIMEOUT => 10,
-        ]);
-
-        $response  = curl_exec($ch);
-        $curlErr   = curl_error($ch);
-        $httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        if ($response === false) {
-            $this->lastError = "cURL error: {$curlErr}";
-            error_log("MailerService error: {$this->lastError}");
-            return false;
-        }
-
-        if ($httpCode < 200 || $httpCode >= 300) {
-            $this->lastError = "Resend API error (HTTP {$httpCode}): {$response}";
-            error_log("MailerService error: {$this->lastError}");
-            return false;
-        }
-
-        return true;
     }
 
     /** Build the OTP email HTML body. */
