@@ -282,7 +282,7 @@
 
   document.getElementById('roleInput').value = role;
   document.getElementById('backLink').href =
-    role === 'admin' ? 'lockscreen.html' : 'login-v2.html';
+    role === 'admin' ? 'index.html' : 'login-v2.html';
 
   // ── Error messages ─────────────────────────────────────────────
   if (error) {
@@ -402,11 +402,11 @@
 
   resendBtn.addEventListener('click', () => {
     // Redirect back to the login page so login.php re-sends the OTP
-    window.location.href = role === 'admin' ? 'lockscreen.html' : 'login-v2.html';
+    window.location.href = role === 'admin' ? 'index.html' : 'login-v2.html';
   });
 
   // Focus first box on load
-  boxes[0].focus();
+  boxes[0].focus(); 
 })();
 </script>
 </body>
