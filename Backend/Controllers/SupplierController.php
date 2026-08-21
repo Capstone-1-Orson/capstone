@@ -28,7 +28,7 @@ class SupplierController
 
     public function __construct()
     {
-        Auth::requireAdmin('../../index.php');
+        Auth::requireAdmin('../../index.html');
         $this->model = new Supplier();
     }
 

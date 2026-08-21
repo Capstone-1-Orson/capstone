@@ -40,7 +40,7 @@ class MenuController
     {
         // Bounce to the lockscreen immediately if there's no valid admin
         // session - nothing below this line runs for unauthenticated users.
-        Auth::requireAdmin('../../index.php');
+        Auth::requireAdmin('../../index.html');
         $this->model    = new Menu();
         // 'menu' tells the uploader which subfolder/prefix to store images
         // under (as opposed to e.g. 'staff' photos in StaffController).

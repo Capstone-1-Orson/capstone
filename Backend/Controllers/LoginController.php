@@ -73,7 +73,7 @@ class LoginController
         $pass = trim($_POST['pass'] ?? '');
 
         if (empty($pass)) {
-            $this->redirect('../../index.php?error=invalid');
+            $this->redirect('../../index.html?error=invalid');
         }
 
         // Start (or resume) the dedicated ADMIN_SESSION cookie/scope so the
@@ -95,7 +95,7 @@ class LoginController
             // If the email can't actually be sent, there's no point sending
             // the admin to a verify screen they can never pass - bail out.
             if (!$this->mailer->sendOtp($user['notify_email'], 'Admin', $otp)) {
-                $this->redirect('../../index.php?error=mail');
+                $this->redirect('../../index.html?error=mail');
             }
 
             $this->redirect('../../verify.html?role=admin');
@@ -104,7 +104,7 @@ class LoginController
         // Wrong password, account not found, or not actually an admin -
         // always show the same generic "invalid" error (don't leak which
         // part failed).
-        $this->redirect('../../index.php?error=invalid');
+        $this->redirect('../../index.html?error=invalid');
     }
 
     // -----------------------------------------------------------------
