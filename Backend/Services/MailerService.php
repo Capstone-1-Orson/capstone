@@ -187,6 +187,6 @@ class MailerService
     {
         $scheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
         $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        return "{$scheme}://{$host}/Backend/email-verify.php?token=" . urlencode($token);
+        return "{$scheme}://{$host}/Backend/email-verify.html?token=" . urlencode($token);
     }
 }
