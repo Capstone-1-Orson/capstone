@@ -18,11 +18,23 @@ require_once __DIR__ . '/../PHPMailer/src/SMTP.php';
 class MailerService
 {
     // ── SMTP credentials ─────────────────────────────────────────
-    private const SMTP_HOST     = 'smtp.gmail.com';
-    private const SMTP_PORT     = 587;
-    private const SMTP_USER     = 'dummyacctest099@gmail.com';
-    private const SMTP_PASSWORD = 'dzsmxafqhxqgarto';
-    private const FROM_NAME     = 'OPERLYTICS';
+    // SMTP_USER / SMTP_PASSWORD are read from environment variables
+    // (constructor below) — set them in Railway's Variables tab. Never
+    // hardcode real credentials here; if they're unset, sending fails
+    // loudly with an auth error instead of silently working with a
+    // secret that's sitting in source control.
+    private const SMTP_HOST = 'smtp.gmail.com';
+    private const SMTP_PORT = 587;
+    private const FROM_NAME = 'OPERLYTICS';
+
+    private string $smtpUser;
+    private string $smtpPassword;
+
+    public function __construct()
+    {
+        $this->smtpUser     = getenv('SMTP_USER') ?: '';
+        $this->smtpPassword = getenv('SMTP_PASSWORD') ?: '';
+    }
 
     // ── DB columns required by User::getVerifyToken() ────────────
     // If you dropped verify_token / token_expiry, run this once:
@@ -88,11 +100,17 @@ class MailerService
         $mail = new PHPMailer(true);
 
         try {
+            if ($this->smtpUser === '' || $this->smtpPassword === '') {
+                throw new MailerException(
+                    'SMTP_USER / SMTP_PASSWORD environment variables are not set.'
+                );
+            }
+
             $mail->isSMTP();
             $mail->Host       = self::SMTP_HOST;
             $mail->SMTPAuth   = true;
-            $mail->Username   = self::SMTP_USER;
-            $mail->Password   = self::SMTP_PASSWORD;
+            $mail->Username   = $this->smtpUser;
+            $mail->Password   = $this->smtpPassword;
             $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
             $mail->Port       = self::SMTP_PORT;
             $mail->Timeout    = 15;
@@ -104,7 +122,7 @@ class MailerService
                 ],
             ];
 
-            $mail->setFrom(self::SMTP_USER, self::FROM_NAME);
+            $mail->setFrom($this->smtpUser, self::FROM_NAME);
             $mail->addAddress($toEmail, $toName);
             $mail->isHTML(true);
             $mail->Subject = $subject;
@@ -187,6 +205,6 @@ class MailerService
     {
         $scheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
         $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        return "{$scheme}://{$host}/Backend/email-verify.html?token=" . urlencode($token);
+        return "{$scheme}://{$host}/Backend/email-verify.php?token=" . urlencode($token);
     }
 }
