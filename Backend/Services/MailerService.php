@@ -19,7 +19,7 @@ class MailerService
 {
     // ── SMTP credentials ─────────────────────────────────────────
     private const SMTP_HOST     = 'smtp.gmail.com';
-    private const SMTP_PORT     = 587;
+    private const SMTP_PORT     = 465;
     private const SMTP_USER     = 'dummyacctest099@gmail.com';
     private const SMTP_PASSWORD = 'dzsmxafqhxqgarto';
     private const FROM_NAME     = 'OPERLYTICS';
