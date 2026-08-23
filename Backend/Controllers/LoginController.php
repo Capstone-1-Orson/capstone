@@ -10,30 +10,24 @@
  *   pass   -> lockscreen re-auth (admin)
  *   email  -> main login form (staff / admin)
  *
- * NOTE ON FLOW: Neither branch logs the user straight in. Both branches
- * verify the password, then generate a one-time-passcode (OTP), email it,
- * and redirect to verify.html. The actual session "login" (writing
- * user/position/etc into $_SESSION) only happens later, in
- * VerifyController, once the correct OTP is submitted. This file is only
- * responsible for: "is this password correct, and if so, send an OTP".
+ * NOTE ON FLOW: OTP/email verification has been removed. Once the
+ * password checks out, the user is logged straight in - $_SESSION is
+ * populated here and the browser is redirected directly to the
+ * dashboard. (Previously this generated an OTP, emailed it, and sent
+ * the user to verify.html; VerifyController is no longer used.)
  */
 
 require_once __DIR__ . '/../Core/Session.php';
 require_once __DIR__ . '/../Models/User.php';
-require_once __DIR__ . '/../Services/MailerService.php';
 
 class LoginController
 {
     // Data-access layer for the `user` table (find by email, find admin, etc).
-    private User          $userModel;
-
-    // Wraps PHPMailer/SMTP so this controller doesn't need to know mail internals.
-    private MailerService $mailer;
+    private User $userModel;
 
     public function __construct()
     {
         $this->userModel = new User();
-        $this->mailer    = new MailerService();
     }
 
     /**
@@ -76,8 +70,7 @@ class LoginController
             $this->redirect('../../index.html?error=invalid');
         }
 
-        // Start (or resume) the dedicated ADMIN_SESSION cookie/scope so the
-        // OTP we are about to generate gets stored in the right session.
+        // Start (or resume) the dedicated ADMIN_SESSION cookie/scope.
         Session::start(Session::ADMIN);
 
         // There is only ever one "admin" account, so we look it up by
@@ -89,16 +82,9 @@ class LoginController
             $user['position'] === 'admin' &&
             password_verify($pass, $user['password']) // bcrypt/argon2 hash comparison, never plain-text
         ) {
-            $otp = $this->generateOtp();
-            $this->storeOtp($otp, 'admin', 'admin', $user['notify_email']);
-
-            // If the email can't actually be sent, there's no point sending
-            // the admin to a verify screen they can never pass - bail out.
-            if (!$this->mailer->sendOtp($user['notify_email'], 'Admin', $otp)) {
-                $this->redirect('../../index.html?error=mail');
-            }
-
-            $this->redirect('../../verify.html?role=admin');
+            $this->hydrateAdmin($user);
+            $this->redirect('../../Frontend/ADMIN/index2.php');
+            return;
         }
 
         // Wrong password, account not found, or not actually an admin -
@@ -125,8 +111,7 @@ class LoginController
             $this->redirect('../../login-v2.html?error=invalid');
         }
 
-        // Start the STAFF named session scope before we touch anything
-        // that needs to persist (the OTP) across this request/redirect.
+        // Start the STAFF named session scope.
         Session::start(Session::STAFF);
 
         $user = $this->userModel->findByEmail($email);
@@ -137,16 +122,9 @@ class LoginController
                 $this->redirect('../../login-v2.html?error=unauthorized');
             }
 
-            $otp = $this->generateOtp();
-            // For staff, the "identity" stored alongside the OTP and the
-            // "notify email" are the same value (their own email address).
-            $this->storeOtp($otp, 'staff', $email, $email);
-
-            if (!$this->mailer->sendOtp($email, $email, $otp)) {
-                $this->redirect('../../login-v2.html?error=mail');
-            }
-
-            $this->redirect('../../verify.html?role=staff');
+            $this->hydrateStaff($user);
+            $this->redirect('../../Frontend/POS.php');
+            return;
         }
 
         // Generic failure message - intentionally identical whether the
@@ -156,43 +134,32 @@ class LoginController
     }
 
     // -----------------------------------------------------------------
-    //  Helpers
+    //  Session hydration
     // -----------------------------------------------------------------
 
-    /**
-     * Generate a zero-padded 6-digit OTP string, e.g. "004821".
-     * Uses random_int() (cryptographically secure) rather than rand()/mt_rand().
-     */
-    private function generateOtp(): string
+    /** Populate $_SESSION with the admin's profile fields. */
+    private function hydrateAdmin(array $user): void
     {
-        return str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        Session::set('user',      $user['email']);
+        Session::set('position',  'admin');
+        Session::set('firstname', $user['firstname'] ?? '');
+        Session::set('lastname',  $user['lastname']  ?? '');
+        Session::set('image',     $user['image']     ?? '');
     }
 
-    /**
-     * Store the OTP (hashed, never in plain text) plus the metadata
-     * VerifyController will need to finish the login once the user submits
-     * the correct code.
-     *
-     * @param string $otp          The plain 6-digit code (only used to hash it; not stored raw).
-     * @param string $role         'admin' or 'staff' - tells VerifyController which session to resume.
-     * @param string $identity     Who is logging in (email for staff, literal 'admin' for admin).
-     * @param string $notifyEmail  Address the OTP was actually emailed to (kept for reference/debug).
-     */
-    private function storeOtp(
-        string $otp,
-        string $role,
-        string $identity,
-        string $notifyEmail
-    ): void {
-        // Hash the OTP the same way passwords are hashed, so even if the
-        // session storage were somehow exposed, the raw code isn't sitting
-        // in plain text.
-        Session::set('otp',          password_hash($otp, PASSWORD_DEFAULT));
-        Session::set('otp_expires',  time() + 300);   // valid for 5 minutes
-        Session::set('otp_role',     $role);
-        Session::set('otp_identity', $identity);
-        Session::set('otp_email',    $notifyEmail);
+    /** Populate $_SESSION with the staff member's profile fields. */
+    private function hydrateStaff(array $user): void
+    {
+        Session::set('user',      $user['email']);
+        Session::set('position',  $user['position'] ?? 'staff');
+        Session::set('firstname', $user['firstname'] ?? '');
+        Session::set('lastname',  $user['lastname']  ?? '');
+        Session::set('image',     $user['image']     ?? '');
     }
+
+    // -----------------------------------------------------------------
+    //  Helpers
+    // -----------------------------------------------------------------
 
     /**
      * Send a Location header and immediately stop script execution.
