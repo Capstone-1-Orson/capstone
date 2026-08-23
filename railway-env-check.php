@@ -13,3 +13,7 @@ echo "MYSQLHOST via \$_ENV: " . var_export($_ENV['MYSQLHOST'] ?? 'NOT SET', true
 
 echo "\n--- \$_SERVER check ---\n";
 echo "MYSQLHOST via \$_SERVER: " . var_export($_SERVER['MYSQLHOST'] ?? 'NOT SET', true) . "\n";
+
+echo "\n--- Mail env check ---\n";
+echo "RESEND_API_KEY: " . (getenv('RESEND_API_KEY') ? '[set, hidden]' : 'NOT SET') . "\n";
+echo "MAIL_FROM: "      . var_export(getenv('MAIL_FROM'), true) . "\n";
