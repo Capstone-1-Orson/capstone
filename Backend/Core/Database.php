@@ -23,6 +23,16 @@ class Database
     /** Private constructor – use getInstance(). */
     private function __construct()
     {
+        // IMPORTANT: since PHP 8.1, mysqli defaults to throwing a
+        // mysqli_sql_exception on any failed query instead of returning
+        // false. This codebase (POS.php, etc.) is written the old way —
+        // `if ($result) { ... }` checks everywhere — so we restore the
+        // pre-8.1 behavior here. Without this, a single query that
+        // doesn't quite match the live schema (a missing column, etc.)
+        // throws an uncaught exception and the whole page 500s, instead
+        // of the code's own defensive checks handling it gracefully.
+        mysqli_report(MYSQLI_REPORT_OFF);
+
         // Railway (and most hosts) inject DB credentials as env vars.
         // Fall back to local XAMPP defaults when they aren't set.
         $this->host     = getenv('MYSQLHOST') ?: $this->host;
