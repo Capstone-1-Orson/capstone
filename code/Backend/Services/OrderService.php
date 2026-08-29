@@ -60,7 +60,7 @@ class OrderService
             $orderId = $this->orderModel->create([
                 'table_no'      => $payload['table_no']      ?? '01',
                 'user_id'       => $payload['user_id']       ?? null,
-                'cashier_id'    => $payload['user_id']       ?? null,  // alias in case schema uses cashier_id
+                'cashier_id'    => $payload['user_id']       ?? null, 
                 'total_amt'     => $payload['total_amt']      ?? 0,
                 'discount_amt'  => $payload['discount_amt']   ?? 0,
                 'discount_type' => $payload['discount_type']  ?? '',

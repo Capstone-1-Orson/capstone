@@ -1,28 +1,32 @@
 <?php
 // Backend/Services/MailerService.php
 
-use PHPMailer\PHPMailer\PHPMailer;
-use PHPMailer\PHPMailer\Exception as MailerException;
-
-require_once __DIR__ . '/../PHPMailer/src/Exception.php';
-require_once __DIR__ . '/../PHPMailer/src/PHPMailer.php';
-require_once __DIR__ . '/../PHPMailer/src/SMTP.php';
-
 /**
  * MailerService – all outbound email in one place.
  *
- * Centralises SMTP credentials and two mail templates:
+ * Sends via the Resend HTTP API (https://resend.com) instead of raw SMTP,
+ * because Railway (and most PaaS hosts) block outbound SMTP ports like
+ * 587/465 to prevent spam — HTTPS (443) is never blocked, so this works
+ * reliably in production. Two mail templates:
  *   - sendOtp()                 one-time login code
  *   - sendEmailVerification()   new-account activation link
+ *
+ * ── Setup ───────────────────────────────────────────────────────
+ * 1. Sign up free at https://resend.com and grab an API key.
+ * 2. In Railway → your app service → Variables, add:
+ *      RESEND_API_KEY = re_xxxxxxxxxxxx
+ *      MAIL_FROM      = onboarding@resend.dev   (or your verified domain address)
+ *    (Locally, set the same as real environment variables or in a .env
+ *    loader — never hardcode the key in this file.)
+ * 3. Note: Resend's shared onboarding@resend.dev address can only send
+ *    to the email address you signed up with, until you verify your own
+ *    sending domain in the Resend dashboard. For a real multi-user app,
+ *    verify a domain (Resend walks you through the DNS records) and set
+ *    MAIL_FROM to an address on it, e.g. otp@yourdomain.com.
  */
 class MailerService
 {
-    // ── SMTP credentials ─────────────────────────────────────────
-    private const SMTP_HOST     = 'smtp.gmail.com';
-    private const SMTP_PORT     = 587;
-    private const SMTP_USER     = 'dummyacctest099@gmail.com';
-    private const SMTP_PASSWORD = 'dzsmxafqhxqgarto';
-    private const FROM_NAME     = 'OPERLYTICS';
+    private const FROM_NAME = 'OPERLYTICS';
 
     // ── DB columns required by User::getVerifyToken() ────────────
     // If you dropped verify_token / token_expiry, run this once:
@@ -30,7 +34,7 @@ class MailerService
     //     ADD COLUMN verify_token VARCHAR(64) NULL,
     //     ADD COLUMN token_expiry DATETIME    NULL;
 
-    /** Last SMTP error message — readable after a failed send. */
+    /** Last send error message — readable after a failed send. */
     public string $lastError = '';
 
     // ─────────────────────────────────────────────────────────────
@@ -77,7 +81,7 @@ class MailerService
     //  Private helpers
     // ─────────────────────────────────────────────────────────────
 
-    /** Core send method — configures PHPMailer and dispatches the message. */
+    /** Core send method — posts to the Resend HTTP API over HTTPS. */
     private function send(
         string $toEmail,
         string $toName,
@@ -85,40 +89,47 @@ class MailerService
         string $html,
         string $plain
     ): bool {
-        $mail = new PHPMailer(true);
+        $apiKey = getenv('RESEND_API_KEY') ?: '';
+        $from   = getenv('MAIL_FROM') ?: 'onboarding@resend.dev';
 
-        try {
-            $mail->isSMTP();
-            $mail->Host       = self::SMTP_HOST;
-            $mail->SMTPAuth   = true;
-            $mail->Username   = self::SMTP_USER;
-            $mail->Password   = self::SMTP_PASSWORD;
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-            $mail->Port       = self::SMTP_PORT;
-            $mail->Timeout    = 15;
-            $mail->SMTPOptions = [
-                'ssl' => [
-                    'verify_peer'       => false,
-                    'verify_peer_name'  => false,
-                    'allow_self_signed' => true,
-                ],
-            ];
-
-            $mail->setFrom(self::SMTP_USER, self::FROM_NAME);
-            $mail->addAddress($toEmail, $toName);
-            $mail->isHTML(true);
-            $mail->Subject = $subject;
-            $mail->Body    = $html;
-            $mail->AltBody = $plain;
-
-            $mail->send();
-            return true;
-
-        } catch (MailerException $e) {
-            $this->lastError = $mail->ErrorInfo ?: $e->getMessage();
+        if ($apiKey === '') {
+            $this->lastError = 'RESEND_API_KEY environment variable is not set.';
             error_log("MailerService error: {$this->lastError}");
             return false;
         }
+
+        $payload = json_encode([
+            'from'    => self::FROM_NAME . " <{$from}>",
+            'to'      => [$toEmail],
+            'subject' => $subject,
+            'html'    => $html,
+            'text'    => $plain,
+        ]);
+
+        $context = stream_context_create([
+            'http' => [
+                'method'        => 'POST',
+                'header'        => "Content-Type: application/json\r\n"
+                                  . "Authorization: Bearer {$apiKey}\r\n",
+                'content'       => $payload,
+                'timeout'       => 15,
+                'ignore_errors' => true, // so we can read the response body on non-2xx
+            ],
+        ]);
+
+        $result = @file_get_contents('https://api.resend.com/emails', false, $context);
+
+        // $http_response_header is set automatically by file_get_contents()
+        $statusLine = $http_response_header[0] ?? '';
+        $ok = (bool) preg_match('#HTTP/\S+\s+2\d\d#', $statusLine);
+
+        if ($result === false || !$ok) {
+            $this->lastError = $statusLine . ' ' . ($result ?: 'no response body');
+            error_log("MailerService error: {$this->lastError}");
+            return false;
+        }
+
+        return true;
     }
 
     /** Build the OTP email HTML body. */
