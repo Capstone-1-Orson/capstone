@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // Frontend/ADMIN/staff-list.php  (OOP refactored)
 require_once '../../Frontend/Core/StaffView.php';
 $view = new StaffView();   // dispatches ?rt_staff and ?rt_add_staff AJAX early
@@ -867,6 +867,7 @@ $_SESSION['csrf_token'] = $csrf_token;
 
           // Update CSRF token in page
           if (resp.new_csrf) {
+            window.CSRF_TOKEN = resp.new_csrf;
             document.getElementById('addUserCsrf').value = resp.new_csrf;
             // Also update all other CSRF hidden inputs & data-csrf buttons
             document.querySelectorAll('input[name="csrf_token"]').forEach(function(el){ el.value = resp.new_csrf; });
@@ -1014,7 +1015,11 @@ $_SESSION['csrf_token'] = $csrf_token;
   'use strict';
 
   var POLL_MS   = 10000; // poll every 10 s
-  var CSRF      = <?= json_encode($_SESSION['csrf_token']) ?>;
+  // Shared with the rest of the page via window.CSRF_TOKEN so that when
+  // another AJAX action (e.g. add-staff) rotates the session's CSRF token,
+  // this poller picks up the new value too instead of re-stamping stale
+  // tokens onto rebuilt rows every refresh cycle.
+  window.CSRF_TOKEN = window.CSRF_TOKEN || <?= json_encode($_SESSION['csrf_token']) ?>;
   var _snapshot = null;  // JSON string of last staff array for diff
   var _timer    = null;
   window._staffPollTimer = null;
@@ -1062,7 +1067,7 @@ $_SESSION['csrf_token'] = $csrf_token;
       ? '<button type="button" class="btn btn-sm btn-warning text-dark resend-trigger"' +
           ' data-email="' + escHtml(s.email) + '"' +
           ' data-userid="' + s.id + '"' +
-          ' data-csrf="' + escHtml(CSRF) + '">' +
+          ' data-csrf="' + escHtml(window.CSRF_TOKEN) + '">' +
           '<i class="fas fa-envelope mr-1"></i>Resend</button>'
       : '';
 

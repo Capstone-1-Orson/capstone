@@ -187,6 +187,41 @@ class MailerService
     {
         $scheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
         $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        return "{$scheme}://{$host}/Backend/email-verify.html?token=" . urlencode($token);
+        $base   = $this->detectBasePath();
+        return "{$scheme}://{$host}{$base}/Backend/email-verify.php?token=" . urlencode($token);
+    }
+
+    /**
+     * Figure out the project's base path under the web root, without
+     * hardcoding any folder names and without depending on which script
+     * triggered the email (Backend controller, Frontend/ADMIN AJAX
+     * endpoint, etc — this file's own on-disk location is the anchor).
+     *
+     * This file lives at:  <projectRoot>/Backend/Services/MailerService.php
+     * so two levels up from __DIR__ is always <projectRoot>. Comparing
+     * that real filesystem path against DOCUMENT_ROOT gives the URL
+     * base path, however deeply the project is nested
+     * (e.g. '/CAPSSTONE/capstone/code').
+     */
+    private function detectBasePath(): string
+    {
+        $docRoot = realpath($_SERVER['DOCUMENT_ROOT'] ?? '');
+        $projectRoot = realpath(dirname(__DIR__, 2)); // .../Backend/Services -> up 2
+
+        if ($docRoot === false || $projectRoot === false) {
+            return '';
+        }
+
+        // Normalise Windows backslashes to forward slashes for URL use.
+        $docRoot     = str_replace('\\', '/', $docRoot);
+        $projectRoot = str_replace('\\', '/', $projectRoot);
+
+        if (strpos($projectRoot, $docRoot) !== 0) {
+            // Project root isn't under the document root (unusual setup) — bail safely.
+            return '';
+        }
+
+        $base = substr($projectRoot, strlen($docRoot));
+        return rtrim($base, '/');
     }
 }
